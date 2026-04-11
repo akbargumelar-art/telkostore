@@ -6,6 +6,8 @@ import { eq, and } from "drizzle-orm";
 import midtransClient from "midtrans-client";
 import { nanoid } from "nanoid";
 
+import { isValidIndonesianNumber } from "@/lib/utils";
+
 // WAHA WhatsApp notification helper
 async function sendWhatsAppNotification(phone, message) {
   const wahaUrl = process.env.WAHA_API_URL;
@@ -57,12 +59,10 @@ export async function POST(request) {
       );
     }
 
-    // Validate Telkomsel prefix
-    const telkomselPrefixes = ["0811", "0812", "0813", "0821", "0822", "0823", "0851", "0852", "0853"];
-    const isValidTelkomsel = telkomselPrefixes.some((p) => phoneNumber.startsWith(p));
-    if (!isValidTelkomsel || phoneNumber.length < 10 || phoneNumber.length > 13) {
+    // Validate Phone Number
+    if (!isValidIndonesianNumber(phoneNumber)) {
       return NextResponse.json(
-        { success: false, error: "Nomor HP harus nomor Telkomsel yang valid (10-13 digit)" },
+        { success: false, error: "Nomor HP harus nomor Indonesia yang valid (10-13 digit)" },
         { status: 400 }
       );
     }
