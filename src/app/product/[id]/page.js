@@ -23,7 +23,8 @@ import {
   Lock,
 } from "lucide-react";
 
-const PHONE_READY_LENGTH = 10;
+const MOBILE_SCROLL_OFFSET = 88;
+const PHONE_READY_LENGTH = 12;
 
 export default function ProductPage({ params }) {
   const { id } = use(params);
@@ -46,7 +47,14 @@ export default function ProductPage({ params }) {
   const scrollToRef = useCallback((ref) => {
     if (ref.current && window.innerWidth < 768) {
       setTimeout(() => {
-        ref.current.scrollIntoView({ behavior: "smooth", block: "start" });
+        const targetTop =
+          ref.current.getBoundingClientRect().top +
+          window.scrollY -
+          MOBILE_SCROLL_OFFSET;
+        window.scrollTo({
+          top: Math.max(targetTop, 0),
+          behavior: "smooth",
+        });
       }, 200);
     }
   }, []);
