@@ -1,19 +1,62 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import {
-  getPromoProducts,
-  getFlashSaleProducts,
-  categories,
-} from "@/data/products";
+import { useState, useEffect, useMemo } from "react";
 import ProductCard from "@/components/ProductCard";
 import FlashSaleBanner from "@/components/FlashSaleBanner";
 import { Sparkles, Zap } from "lucide-react";
 
 export default function PromoPage() {
   const [filter, setFilter] = useState("all");
-  const promoProducts = useMemo(() => getPromoProducts(), []);
-  const flashSaleProducts = useMemo(() => getFlashSaleProducts(), []);
+  const [promoProducts, setPromoProducts] = useState([]);
+  const [flashSaleProducts, setFlashSaleProducts] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        const [promoRes, flashRes, catRes] = await Promise.all([
+          fetch("/api/products?promo=true"),
+          fetch("/api/products?flash_sale=true"),
+          fetch("/api/categories"),
+        ]);
+
+        const [promoData, flashData, catData] = await Promise.all([
+          promoRes.json(),
+          flashRes.json(),
+          catRes.json(),
+        ]);
+
+        if (promoData.success) setPromoProducts(promoData.data);
+        if (flashData.success) setFlashSaleProducts(flashData.data);
+        if (catData.success) setCategories(catData.data);
+      } catch (err) {
+        console.error("Failed to fetch promo data:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchData();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 md:px-6 py-4 md:py-6">
+        <div className="h-8 bg-gray-200 rounded-xl w-48 mb-6 animate-pulse"></div>
+        <div className="h-24 bg-gray-200 rounded-2xl mb-6 animate-pulse"></div>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
+          {[...Array(8)].map((_, i) => (
+            <div key={i} className="bg-white rounded-2xl p-4 animate-pulse">
+              <div className="h-4 bg-gray-100 rounded mb-3"></div>
+              <div className="h-6 bg-gray-100 rounded mb-2 w-1/2"></div>
+              <div className="h-3 bg-gray-100 rounded w-3/4"></div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-7xl mx-auto px-4 md:px-6 py-4 md:py-6">

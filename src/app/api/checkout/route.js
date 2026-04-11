@@ -3,48 +3,11 @@ import { NextResponse } from "next/server";
 import db from "@/db/index.js";
 import { products, orders } from "@/db/schema.js";
 import { eq, and } from "drizzle-orm";
-import midtransClient from "midtrans-client";
 import { nanoid } from "nanoid";
 
 import { isValidIndonesianNumber } from "@/lib/utils";
-
-// WAHA WhatsApp notification helper
-async function sendWhatsAppNotification(phone, message) {
-  const wahaUrl = process.env.WAHA_API_URL;
-  const wahaSession = process.env.WAHA_SESSION || "default";
-  const wahaApiKey = process.env.WAHA_API_KEY;
-
-  if (!wahaUrl) return;
-
-  try {
-    // Format phone: 08xxx → 628xxx
-    const chatId = phone.replace(/^0/, "62") + "@c.us";
-
-    await fetch(`${wahaUrl}/api/sendText`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(wahaApiKey ? { "X-Api-Key": wahaApiKey } : {}),
-      },
-      body: JSON.stringify({
-        session: wahaSession,
-        chatId,
-        text: message,
-      }),
-    });
-    console.log(`✅ WhatsApp sent to ${phone}`);
-  } catch (err) {
-    console.error("❌ WhatsApp notification failed:", err.message);
-  }
-}
-
-function formatRupiah(n) {
-  return new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency: "IDR",
-    minimumFractionDigits: 0,
-  }).format(n);
-}
+import { sendWhatsAppNotification, formatRupiahServer } from "@/lib/whatsapp";
+import { createSnapClient } from "@/lib/midtrans";
 
 export async function POST(request) {
   try {
@@ -99,11 +62,7 @@ export async function POST(request) {
     const midtransOrderId = `TELKO-${orderId}`;
 
     // Create Midtrans Snap transaction
-    const snap = new midtransClient.Snap({
-      isProduction: process.env.MIDTRANS_IS_PRODUCTION === "true",
-      serverKey: process.env.MIDTRANS_SERVER_KEY,
-      clientKey: process.env.MIDTRANS_CLIENT_KEY,
-    });
+    const snap = createSnapClient();
 
     const snapTransaction = await snap.createTransaction({
       transaction_details: {
@@ -157,7 +116,7 @@ export async function POST(request) {
       `🛒 *Pesanan Dibuat — Telko.Store*\n\n` +
       `📦 Produk: ${product.name}\n` +
       `📱 No. Tujuan: ${phoneNumber}\n` +
-      `💰 Total: ${formatRupiah(product.price)}\n\n` +
+      `💰 Total: ${formatRupiahServer(product.price)}\n\n` +
       `🔗 Bayar sekarang:\n${snapTransaction.redirect_url}\n\n` +
       `📋 Invoice: ${orderId}\n` +
       `🔑 Lacak pesanan:\n${process.env.NEXT_PUBLIC_BASE_URL}/order/${orderId}?token=${guestToken}`

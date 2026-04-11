@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, use } from "react";
+import { useState, useEffect, use, useRef } from "react";
 import Link from "next/link";
 import {
   CheckCircle2,
@@ -8,9 +8,9 @@ import {
   Package,
   AlertCircle,
   ChevronLeft,
-  Phone,
   Copy,
   ExternalLink,
+  RefreshCw,
 } from "lucide-react";
 
 const statusConfig = {
@@ -79,6 +79,46 @@ export default function OrderPage({ params, searchParams }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [copied, setCopied] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const hasCheckedMidtrans = useRef(false);
+
+  // Fetch order data
+  const fetchOrder = async () => {
+    try {
+      const res = await fetch(`/api/orders/${id}?token=${token}`);
+      const data = await res.json();
+      if (data.success) {
+        setOrder(data.data);
+        return data.data;
+      } else {
+        setError(data.error || "Pesanan tidak ditemukan.");
+        return null;
+      }
+    } catch (err) {
+      setError("Gagal memuat data pesanan.");
+      return null;
+    }
+  };
+
+  // Check Midtrans status directly (for when webhook can't reach localhost)
+  const checkMidtransStatus = async () => {
+    setChecking(true);
+    try {
+      const res = await fetch(`/api/orders/${id}/check`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token }),
+      });
+      const data = await res.json();
+      if (data.success && data.data) {
+        setOrder(data.data);
+      }
+    } catch (err) {
+      console.error("Status check failed:", err);
+    } finally {
+      setChecking(false);
+    }
+  };
 
   useEffect(() => {
     if (!token) {
@@ -87,25 +127,31 @@ export default function OrderPage({ params, searchParams }) {
       return;
     }
 
-    async function fetchOrder() {
-      try {
-        const res = await fetch(`/api/orders/${id}?token=${token}`);
-        const data = await res.json();
-        if (data.success) {
-          setOrder(data.data);
-        } else {
-          setError(data.error || "Pesanan tidak ditemukan.");
-        }
-      } catch (err) {
-        setError("Gagal memuat data pesanan.");
-      } finally {
-        setLoading(false);
+    async function initLoad() {
+      const orderData = await fetchOrder();
+      setLoading(false);
+
+      // Auto-check Midtrans status if order is pending (user likely just returned from payment)
+      if (orderData && orderData.status === "pending" && !hasCheckedMidtrans.current) {
+        hasCheckedMidtrans.current = true;
+        // Small delay to let Midtrans process the payment
+        setTimeout(() => {
+          checkMidtransStatus();
+        }, 2000);
       }
     }
 
-    fetchOrder();
-    // Poll every 10s for status updates (when pending)
-    const interval = setInterval(fetchOrder, 10000);
+    initLoad();
+
+    // Poll every 10s for status updates (only when pending)
+    const interval = setInterval(async () => {
+      const data = await fetchOrder();
+      // Stop polling if status is no longer pending
+      if (data && data.status !== "pending") {
+        clearInterval(interval);
+      }
+    }, 10000);
+
     return () => clearInterval(interval);
   }, [id, token]);
 
@@ -163,15 +209,34 @@ export default function OrderPage({ params, searchParams }) {
 
       {/* Pay button for pending orders */}
       {order.status === "pending" && order.snapRedirectUrl && (
-        <a
-          href={order.snapRedirectUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="block w-full gradient-red text-white font-bold text-center py-3.5 rounded-xl shadow-lg shadow-tred/20 mb-4 hover:opacity-95 transition-opacity"
-        >
-          <ExternalLink size={16} className="inline mr-2" />
-          Bayar Sekarang
-        </a>
+        <div className="mb-4 space-y-2">
+          <a
+            href={order.snapRedirectUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="block w-full gradient-red text-white font-bold text-center py-3.5 rounded-xl shadow-lg shadow-tred/20 hover:opacity-95 transition-opacity"
+          >
+            <ExternalLink size={16} className="inline mr-2" />
+            Bayar Sekarang
+          </a>
+          <button
+            onClick={checkMidtransStatus}
+            disabled={checking}
+            className="w-full flex items-center justify-center gap-2 py-2.5 border-2 border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-all disabled:opacity-50"
+          >
+            {checking ? (
+              <>
+                <div className="w-4 h-4 rounded-full border-2 border-gray-300 border-t-navy animate-spin"></div>
+                Mengecek status...
+              </>
+            ) : (
+              <>
+                <RefreshCw size={14} />
+                Sudah Bayar? Cek Status
+              </>
+            )}
+          </button>
+        </div>
       )}
 
       {/* Progress tracker */}
@@ -224,6 +289,18 @@ export default function OrderPage({ params, searchParams }) {
           <span className="text-gray-500">Tanggal</span>
           <span className="font-medium text-gray-800">{formatDate(order.createdAt)}</span>
         </div>
+        {order.paidAt && (
+          <div className="flex justify-between text-sm">
+            <span className="text-gray-500">Dibayar</span>
+            <span className="font-medium text-green-700">{formatDate(order.paidAt)}</span>
+          </div>
+        )}
+        {order.completedAt && (
+          <div className="flex justify-between text-sm">
+            <span className="text-gray-500">Selesai</span>
+            <span className="font-medium text-green-700">{formatDate(order.completedAt)}</span>
+          </div>
+        )}
         <div className="border-t border-gray-100 pt-3">
           <div className="flex justify-between items-center">
             <span className="text-sm font-bold text-navy">Total</span>

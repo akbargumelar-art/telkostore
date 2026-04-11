@@ -1,16 +1,9 @@
 "use client";
 
-import { useState, useMemo, use, useCallback, useRef } from "react";
+import { useState, useEffect, useMemo, use, useCallback, useRef } from "react";
 import Link from "next/link";
-import {
-  getProductById,
-  getProductsByCategory,
-  getCategoryById,
-  paymentMethods,
-} from "@/data/products";
 import { formatRupiah, calculateDiscount, isValidIndonesianNumber, getOperatorName } from "@/lib/utils";
 import ProductCard from "@/components/ProductCard";
-import { PaymentLogo } from "@/components/PaymentLogos";
 import {
   ChevronLeft,
   Check,
@@ -29,17 +22,19 @@ const PHONE_READY_LENGTH = 12;
 export default function ProductPage({ params }) {
   const { id } = use(params);
 
-  const product = getProductById(id);
+  const [product, setProduct] = useState(null);
+  const [relatedProducts, setRelatedProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
   const [selectedVariant, setSelectedVariant] = useState(id);
   const [phoneNumber, setPhoneNumber] = useState("");
-  const [selectedPayment, setSelectedPayment] = useState("");
   const [currentStep, setCurrentStep] = useState(1);
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [checkoutError, setCheckoutError] = useState("");
 
   // Refs for auto-scroll
   const phoneRef = useRef(null);
-  const paymentRef = useRef(null);
   const summaryRef = useRef(null);
   const phoneAutoScrolledRef = useRef(false);
 
@@ -59,7 +54,79 @@ export default function ProductPage({ params }) {
     }
   }, []);
 
-  if (!product) {
+  // Fetch product data from API
+  useEffect(() => {
+    async function fetchProduct() {
+      try {
+        const res = await fetch(`/api/products/${id}`);
+        const data = await res.json();
+
+        if (!data.success) {
+          setError("Produk tidak ditemukan");
+          setLoading(false);
+          return;
+        }
+
+        setProduct(data.data);
+
+        // Fetch related products
+        const relRes = await fetch(`/api/products?category=${data.data.categoryId}`);
+        const relData = await relRes.json();
+        if (relData.success) {
+          setRelatedProducts(relData.data.filter((p) => p.id !== id));
+        }
+      } catch (err) {
+        setError("Gagal memuat produk");
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchProduct();
+  }, [id]);
+
+  // 3-step checkout: Produk → No. HP → Konfirmasi
+  const steps = [
+    { num: 1, label: "Produk" },
+    { num: 2, label: "No. HP" },
+    { num: 3, label: "Konfirmasi" },
+  ];
+
+  // Loading state
+  if (loading) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 md:px-6 py-4 md:py-6">
+        <div className="flex flex-col md:flex-row gap-6">
+          <div className="flex-1">
+            <div className="bg-white rounded-2xl p-5 mb-4 animate-pulse">
+              <div className="flex gap-4">
+                <div className="w-16 h-16 bg-gray-100 rounded-2xl"></div>
+                <div className="flex-1">
+                  <div className="h-5 bg-gray-100 rounded w-1/3 mb-2"></div>
+                  <div className="h-4 bg-gray-100 rounded w-2/3"></div>
+                </div>
+              </div>
+            </div>
+            <div className="bg-white rounded-2xl p-5 animate-pulse">
+              <div className="grid grid-cols-2 gap-3">
+                {[...Array(4)].map((_, i) => (
+                  <div key={i} className="h-20 bg-gray-100 rounded-xl"></div>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="md:w-[380px]">
+            <div className="bg-white rounded-2xl p-5 animate-pulse">
+              <div className="h-12 bg-gray-100 rounded-xl mb-4"></div>
+              <div className="h-40 bg-gray-100 rounded-xl"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !product) {
     return (
       <div className="max-w-7xl mx-auto px-4 md:px-6 py-20 text-center">
         <div className="text-6xl mb-4">😕</div>
@@ -79,11 +146,22 @@ export default function ProductPage({ params }) {
     );
   }
 
-  const category = getCategoryById(product.categoryId);
-  const relatedProducts = getProductsByCategory(product.categoryId).filter(
-    (p) => p.id !== product.id
-  );
-  const selectedProduct = getProductById(selectedVariant) || product;
+  // Compute category info from product
+  const categoryName = product.categoryId === "pulsa" ? "Pulsa"
+    : product.categoryId === "paket-data" ? "Paket Data"
+    : product.categoryId === "voucher-internet" ? "Voucher Internet"
+    : product.categoryId === "voucher-game" ? "Voucher Game"
+    : product.categoryId;
+
+  const categoryIcon = product.categoryId === "pulsa" ? "📱"
+    : product.categoryId === "paket-data" ? "📶"
+    : product.categoryId === "voucher-internet" ? "🌐"
+    : product.categoryId === "voucher-game" ? "🎮"
+    : "📦";
+
+  // Find selected product from related + current
+  const allVariants = [product, ...relatedProducts];
+  const selectedProduct = allVariants.find((p) => p.id === selectedVariant) || product;
   const discount = calculateDiscount(
     selectedProduct.originalPrice,
     selectedProduct.price
@@ -105,15 +183,14 @@ export default function ProductPage({ params }) {
 
     if (!nextPhoneReady) {
       phoneAutoScrolledRef.current = false;
-      setSelectedPayment("");
       setCurrentStep((step) => (step > 2 ? 2 : step));
       return;
     }
 
     if (!phoneAutoScrolledRef.current) {
       phoneAutoScrolledRef.current = true;
-      setCurrentStep((step) => Math.max(step, 3));
-      scrollToRef(paymentRef);
+      setCurrentStep(3);
+      scrollToRef(summaryRef);
     }
   };
 
@@ -123,21 +200,9 @@ export default function ProductPage({ params }) {
     scrollToRef(phoneRef);
   };
 
-  const handleSelectPayment = (paymentId) => {
-    setSelectedPayment(paymentId);
-    setCurrentStep(4);
-    scrollToRef(summaryRef);
-  };
+  const handleCheckout = async () => {
+    if (isCheckingOut || !phoneReadyForPayment) return;
 
-  const handleCheckout = useCallback(async () => {
-    if (
-      isCheckingOut ||
-      currentStep < 4 ||
-      !phoneReadyForPayment ||
-      !selectedPayment
-    ) {
-      return;
-    }
     setIsCheckingOut(true);
     setCheckoutError("");
 
@@ -148,7 +213,6 @@ export default function ProductPage({ params }) {
         body: JSON.stringify({
           productId: selectedVariant,
           phoneNumber,
-          paymentMethod: selectedPayment,
         }),
       });
 
@@ -168,30 +232,7 @@ export default function ProductPage({ params }) {
     } finally {
       setIsCheckingOut(false);
     }
-  }, [
-    isCheckingOut,
-    currentStep,
-    phoneReadyForPayment,
-    selectedVariant,
-    phoneNumber,
-    selectedPayment,
-  ]);
-
-  const groupedPayments = useMemo(() => {
-    const groups = {};
-    paymentMethods.forEach((pm) => {
-      if (!groups[pm.category]) groups[pm.category] = [];
-      groups[pm.category].push(pm);
-    });
-    return groups;
-  }, []);
-
-  const steps = [
-    { num: 1, label: "Produk" },
-    { num: 2, label: "No. HP" },
-    { num: 3, label: "Bayar" },
-    { num: 4, label: "Konfirmasi" },
-  ];
+  };
 
   return (
     <div className="max-w-7xl mx-auto px-4 md:px-6 py-4 md:py-6">
@@ -205,7 +246,7 @@ export default function ProductPage({ params }) {
           href={`/?category=${product.categoryId}`}
           className="hover:text-tred transition-colors"
         >
-          {category?.name}
+          {categoryName}
         </Link>
         <ChevronRight size={14} />
         <span className="text-gray-700 font-medium">{product.name}</span>
@@ -213,7 +254,7 @@ export default function ProductPage({ params }) {
 
       {/* Progress Steps (Mobile) */}
       <div className="md:hidden mb-5">
-        <div className="flex items-center justify-between px-2">
+        <div className="flex items-center justify-between px-4">
           {steps.map((step, i) => (
             <div key={step.num} className="flex items-center">
               <div className="flex flex-col items-center">
@@ -236,7 +277,7 @@ export default function ProductPage({ params }) {
               </div>
               {i < steps.length - 1 && (
                 <div
-                  className={`w-8 sm:w-12 h-0.5 mx-1 rounded-full transition-colors ${
+                  className={`w-12 sm:w-16 h-0.5 mx-1 rounded-full transition-colors ${
                     currentStep > step.num ? "bg-tred" : "bg-gray-200"
                   }`}
                 ></div>
@@ -254,13 +295,13 @@ export default function ProductPage({ params }) {
           <div className="bg-white rounded-2xl border border-gray-100 p-5 md:p-6 mb-4">
             <div className="flex items-start gap-4">
               <div className="w-16 h-16 md:w-20 md:h-20 rounded-2xl bg-gray-50 flex items-center justify-center text-3xl md:text-4xl shrink-0 border border-gray-100">
-                {product.gameIcon || category?.icon}
+                {product.gameIcon || categoryIcon}
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <h1 className="text-navy font-extrabold text-lg md:text-xl leading-tight">
-                      {category?.name}
+                      {categoryName}
                     </h1>
                     {product.gameName && (
                       <p className="text-gray-500 text-sm">{product.gameName}</p>
@@ -286,12 +327,12 @@ export default function ProductPage({ params }) {
                 1
               </div>
               <h2 className="font-bold text-sm text-navy">
-                Pilih {category?.name === "Pulsa" ? "Nominal" : "Paket"}
+                Pilih {categoryName === "Pulsa" ? "Nominal" : "Paket"}
               </h2>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
-              {[product, ...relatedProducts].map((variant) => {
+              {allVariants.map((variant) => {
                 const isSelected = selectedVariant === variant.id;
                 const varDiscount = calculateDiscount(
                   variant.originalPrice,
@@ -350,16 +391,18 @@ export default function ProductPage({ params }) {
           </div>
 
           {/* Related Products (Desktop) */}
-          <div className="hidden md:block mt-6">
-            <h3 className="font-bold text-navy text-base mb-3">
-              Produk {category?.name} Lainnya
-            </h3>
-            <div className="grid grid-cols-3 lg:grid-cols-4 gap-3">
-              {relatedProducts.slice(0, 4).map((p, i) => (
-                <ProductCard key={p.id} product={p} index={i} />
-              ))}
+          {relatedProducts.length > 0 && (
+            <div className="hidden md:block mt-6">
+              <h3 className="font-bold text-navy text-base mb-3">
+                Produk {categoryName} Lainnya
+              </h3>
+              <div className="grid grid-cols-3 lg:grid-cols-4 gap-3">
+                {relatedProducts.slice(0, 4).map((p, i) => (
+                  <ProductCard key={p.id} product={p} index={i} />
+                ))}
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Right Column: Checkout Form */}
@@ -372,7 +415,7 @@ export default function ProductPage({ params }) {
                   <ShieldCheck size={18} /> Express Checkout
                 </h2>
                 <p className="text-white/60 text-xs mt-0.5">
-                  Beli langsung tanpa perlu daftar akun
+                  Beli langsung — pilih metode bayar di halaman pembayaran
                 </p>
               </div>
 
@@ -438,9 +481,9 @@ export default function ProductPage({ params }) {
                   )}
                 </div>
 
-                {/* Step 3: Payment Method */}
+                {/* Step 3: Summary & Checkout */}
                 <div
-                  ref={paymentRef}
+                  ref={summaryRef}
                   className={`transition-opacity duration-300 ${
                     currentStep >= 3 && phoneReadyForPayment
                       ? "opacity-100"
@@ -455,62 +498,13 @@ export default function ProductPage({ params }) {
                           : "bg-gray-100 text-gray-400"
                       }`}
                     >
-                      {currentStep > 3 ? <Check size={12} /> : "3"}
+                      3
                     </div>
                     <h3 className="font-bold text-sm text-navy">
-                      Metode Pembayaran
+                      Konfirmasi & Bayar
                     </h3>
                   </div>
 
-                  {Object.entries(groupedPayments).map(
-                    ([catName, methods]) => (
-                      <div key={catName} className="mb-3">
-                        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">
-                          {catName}
-                        </p>
-                        <div className="space-y-1.5">
-                          {methods.map((pm) => (
-                            <button
-                              key={pm.id}
-                              onClick={() => handleSelectPayment(pm.id)}
-                              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl border-2 text-left transition-all ${
-                                selectedPayment === pm.id
-                                  ? "border-tred bg-tred-50"
-                                  : "border-gray-100 hover:border-gray-200 hover:bg-gray-50"
-                              }`}
-                            >
-                              <PaymentLogo paymentId={pm.id} size={28} />
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm font-semibold text-gray-800">
-                                  {pm.name}
-                                </p>
-                                <p className="text-[10px] text-gray-400 truncate">
-                                  {pm.description}
-                                </p>
-                              </div>
-                              {selectedPayment === pm.id && (
-                                <CheckCircle2
-                                  size={18}
-                                  className="text-tred shrink-0"
-                                />
-                              )}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )
-                  )}
-                </div>
-
-                {/* Step 4: Summary */}
-                <div
-                  ref={summaryRef}
-                  className={`transition-opacity duration-300 ${
-                    currentStep >= 4 && phoneReadyForPayment
-                      ? "opacity-100"
-                      : "opacity-40 pointer-events-none"
-                  }`}
-                >
                   <div className="bg-gray-50 rounded-xl p-4 space-y-2.5 border border-gray-100">
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-500">Produk</span>
@@ -532,13 +526,6 @@ export default function ProductPage({ params }) {
                         </span>
                       </div>
                     )}
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-500">Pembayaran</span>
-                      <span className="font-semibold text-gray-800">
-                        {paymentMethods.find((p) => p.id === selectedPayment)
-                          ?.name || "—"}
-                      </span>
-                    </div>
                     <div className="border-t border-gray-200 pt-2.5">
                       <div className="flex justify-between items-center">
                         <span className="text-sm font-bold text-navy">
@@ -551,8 +538,12 @@ export default function ProductPage({ params }) {
                     </div>
                   </div>
 
+                  <p className="text-gray-400 text-[10px] mt-2 text-center">
+                    Kamu akan memilih metode pembayaran di halaman berikutnya
+                  </p>
+
                   {checkoutError && (
-                    <div className="bg-tred-50 border border-tred/20 rounded-xl p-3 flex items-start gap-2 mb-3">
+                    <div className="bg-tred-50 border border-tred/20 rounded-xl p-3 flex items-start gap-2 mt-3">
                       <AlertCircle size={16} className="text-tred shrink-0 mt-0.5" />
                       <p className="text-tred text-xs">{checkoutError}</p>
                     </div>
@@ -561,9 +552,8 @@ export default function ProductPage({ params }) {
                   <button
                     onClick={handleCheckout}
                     disabled={
-                      currentStep < 4 ||
+                      currentStep < 3 ||
                       !phoneReadyForPayment ||
-                      !selectedPayment ||
                       isCheckingOut
                     }
                     className="w-full mt-4 gradient-red text-white font-bold text-base py-3.5 rounded-xl shadow-lg shadow-tred/20 hover:opacity-95 transition-opacity btn-ripple disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
@@ -576,7 +566,7 @@ export default function ProductPage({ params }) {
                     ) : (
                       <>
                         <Lock size={16} />
-                        Beli Sekarang
+                        Bayar Sekarang
                       </>
                     )}
                   </button>
@@ -584,7 +574,7 @@ export default function ProductPage({ params }) {
                   <div className="flex items-center justify-center gap-2 mt-3 text-gray-400">
                     <ShieldCheck size={14} />
                     <span className="text-[10px]">
-                      Transaksi aman & terenkripsi
+                      Transaksi aman & terenkripsi via Midtrans
                     </span>
                   </div>
                 </div>

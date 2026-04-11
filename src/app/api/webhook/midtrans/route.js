@@ -3,48 +3,10 @@ import { NextResponse } from "next/server";
 import db from "@/db/index.js";
 import { orders, payments } from "@/db/schema.js";
 import { eq } from "drizzle-orm";
-import crypto from "crypto";
 import { nanoid } from "nanoid";
 
-function formatRupiah(n) {
-  return new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency: "IDR",
-    minimumFractionDigits: 0,
-  }).format(n);
-}
-
-async function sendWhatsAppNotification(phone, message) {
-  const wahaUrl = process.env.WAHA_API_URL;
-  const wahaSession = process.env.WAHA_SESSION || "default";
-  const wahaApiKey = process.env.WAHA_API_KEY;
-
-  if (!wahaUrl) return;
-
-  try {
-    const chatId = phone.replace(/^0/, "62") + "@c.us";
-    await fetch(`${wahaUrl}/api/sendText`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(wahaApiKey ? { "X-Api-Key": wahaApiKey } : {}),
-      },
-      body: JSON.stringify({
-        session: wahaSession,
-        chatId,
-        text: message,
-      }),
-    });
-  } catch (err) {
-    console.error("❌ WhatsApp notification failed:", err.message);
-  }
-}
-
-// Verify Midtrans signature
-function verifySignature(orderId, statusCode, grossAmount, serverKey) {
-  const payload = orderId + statusCode + grossAmount + serverKey;
-  return crypto.createHash("sha512").update(payload).digest("hex");
-}
+import { sendWhatsAppNotification, formatRupiahServer } from "@/lib/whatsapp";
+import { verifySignature } from "@/lib/midtrans";
 
 export async function POST(request) {
   try {
@@ -63,10 +25,7 @@ export async function POST(request) {
     console.log(`📬 Midtrans webhook: ${order_id} → ${transaction_status}`);
 
     // Verify signature
-    const serverKey = process.env.MIDTRANS_SERVER_KEY;
-    const expectedSignature = verifySignature(order_id, status_code, gross_amount, serverKey);
-
-    if (signature_key !== expectedSignature) {
+    if (!verifySignature(order_id, status_code, gross_amount, signature_key)) {
       console.error("❌ Invalid Midtrans signature");
       return NextResponse.json(
         { success: false, error: "Invalid signature" },
@@ -144,7 +103,7 @@ export async function POST(request) {
         `✅ *Pembayaran Berhasil — Telko.Store*\n\n` +
         `📦 Produk: ${order.productName}\n` +
         `📱 No. Tujuan: ${order.targetData}\n` +
-        `💰 Total: ${formatRupiah(order.productPrice)}\n` +
+        `💰 Total: ${formatRupiahServer(order.productPrice)}\n` +
         `💳 Pembayaran: ${payment_type}\n\n` +
         `✨ Produk sedang diproses dan akan segera masuk ke nomor tujuan.\n\n` +
         `📋 Invoice: ${order.id}\n` +

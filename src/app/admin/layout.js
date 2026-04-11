@@ -1,0 +1,150 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
+import {
+  LayoutDashboard,
+  Package,
+  ShoppingCart,
+  Settings,
+  LogOut,
+  Menu,
+  X,
+  Store,
+  ChevronRight,
+} from "lucide-react";
+import { useState } from "react";
+
+const navItems = [
+  { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/admin/produk", label: "Produk", icon: Package },
+  { href: "/admin/pesanan", label: "Pesanan", icon: ShoppingCart },
+  { href: "/admin/pengaturan", label: "Pengaturan", icon: Settings },
+];
+
+function SidebarContent({ pathname, onLogout }) {
+  return (
+    <>
+      {/* Logo */}
+      <div className="px-5 py-5 border-b border-gray-100">
+        <Link href="/admin" className="flex items-center gap-2.5">
+          <div className="w-9 h-9 rounded-xl gradient-navy flex items-center justify-center">
+            <Store size={18} className="text-white" />
+          </div>
+          <div>
+            <h1 className="font-extrabold text-sm text-navy leading-tight">
+              Telko<span className="text-tred">.Store</span>
+            </h1>
+            <p className="text-[10px] text-gray-400 font-medium">Admin Panel</p>
+          </div>
+        </Link>
+      </div>
+
+      {/* Nav Links */}
+      <nav className="flex-1 px-3 py-4 space-y-1">
+        {navItems.map((item) => {
+          const isActive = pathname === item.href ||
+            (item.href !== "/admin" && pathname.startsWith(item.href));
+          const Icon = item.icon;
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                isActive
+                  ? "gradient-navy text-white shadow-md"
+                  : "text-gray-600 hover:bg-gray-100 hover:text-navy"
+              }`}
+            >
+              <Icon size={18} />
+              {item.label}
+              {isActive && <ChevronRight size={14} className="ml-auto" />}
+            </Link>
+          );
+        })}
+      </nav>
+
+      {/* Footer */}
+      <div className="px-3 py-4 border-t border-gray-100 space-y-2">
+        <Link
+          href="/"
+          className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-100 transition-all"
+        >
+          <Store size={18} />
+          Lihat Toko
+        </Link>
+        <button
+          onClick={onLogout}
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-red-600 hover:bg-red-50 transition-all"
+        >
+          <LogOut size={18} />
+          Logout
+        </button>
+      </div>
+    </>
+  );
+}
+
+export default function AdminLayout({ children }) {
+  const pathname = usePathname();
+  const router = useRouter();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Skip layout for login page
+  if (pathname === "/admin/login") {
+    return children;
+  }
+
+  const handleLogout = () => {
+    document.cookie = "admin_token=; path=/; max-age=0";
+    router.push("/admin/login");
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex">
+      {/* Desktop Sidebar */}
+      <aside className="hidden md:flex w-60 bg-white border-r border-gray-100 flex-col fixed inset-y-0 left-0 z-30">
+        <SidebarContent pathname={pathname} onLogout={handleLogout} />
+      </aside>
+
+      {/* Mobile Sidebar Overlay */}
+      {sidebarOpen && (
+        <div className="md:hidden fixed inset-0 z-50">
+          <div
+            className="absolute inset-0 bg-black/40"
+            onClick={() => setSidebarOpen(false)}
+          />
+          <aside className="absolute left-0 inset-y-0 w-64 bg-white flex flex-col animate-slide-right shadow-2xl">
+            <button
+              onClick={() => setSidebarOpen(false)}
+              className="absolute top-4 right-4 w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center"
+            >
+              <X size={16} />
+            </button>
+            <SidebarContent pathname={pathname} onLogout={handleLogout} />
+          </aside>
+        </div>
+      )}
+
+      {/* Main Content */}
+      <div className="flex-1 md:ml-60">
+        {/* Mobile Header */}
+        <header className="md:hidden sticky top-0 z-20 bg-white border-b border-gray-100 px-4 py-3 flex items-center gap-3">
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="w-9 h-9 rounded-xl bg-gray-100 flex items-center justify-center"
+          >
+            <Menu size={18} />
+          </button>
+          <h1 className="font-bold text-sm text-navy">
+            Telko<span className="text-tred">.Store</span> Admin
+          </h1>
+        </header>
+
+        <main className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto">
+          {children}
+        </main>
+      </div>
+    </div>
+  );
+}

@@ -1,31 +1,88 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import BannerSlider from "@/components/BannerSlider";
 import CategoryTabs from "@/components/CategoryTabs";
 import Sidebar from "@/components/Sidebar";
 import ProductCard from "@/components/ProductCard";
 import FlashSaleBanner from "@/components/FlashSaleBanner";
-import {
-  products,
-  categories,
-  getProductsByCategory,
-  getFlashSaleProducts,
-} from "@/data/products";
 import { ArrowRight, Sparkles, TrendingUp } from "lucide-react";
 import Link from "next/link";
 
 export default function HomePage() {
   const [activeCategory, setActiveCategory] = useState("all");
+  const [products, setProducts] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [flashSaleProducts, setFlashSaleProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  // Fetch products and categories from API
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        const [prodRes, catRes, flashRes] = await Promise.all([
+          fetch("/api/products"),
+          fetch("/api/categories"),
+          fetch("/api/products?flash_sale=true"),
+        ]);
+
+        const [prodData, catData, flashData] = await Promise.all([
+          prodRes.json(),
+          catRes.json(),
+          flashRes.json(),
+        ]);
+
+        if (prodData.success) setProducts(prodData.data);
+        if (catData.success) setCategories(catData.data);
+        if (flashData.success) setFlashSaleProducts(flashData.data);
+      } catch (err) {
+        console.error("Failed to fetch data:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchData();
+  }, []);
 
   const filteredProducts = useMemo(() => {
     if (activeCategory === "all") return products;
-    return getProductsByCategory(activeCategory);
-  }, [activeCategory]);
+    return products.filter((p) => p.categoryId === activeCategory);
+  }, [activeCategory, products]);
 
-  const flashSaleProducts = useMemo(() => getFlashSaleProducts(), []);
+  const getProductsByCategory = (catId) =>
+    products.filter((p) => p.categoryId === catId);
 
   const activeCategoryData = categories.find((c) => c.id === activeCategory);
+
+  // Loading skeleton
+  if (loading) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 md:px-6 pt-4 md:pt-6">
+        <div className="flex gap-6">
+          <div className="hidden md:block w-56 shrink-0">
+            <div className="bg-white rounded-2xl p-4 animate-pulse">
+              {[...Array(5)].map((_, i) => (
+                <div key={i} className="h-10 bg-gray-100 rounded-xl mb-2"></div>
+              ))}
+            </div>
+          </div>
+          <div className="flex-1">
+            <div className="h-40 md:h-56 bg-gray-200 rounded-2xl mb-6 animate-pulse"></div>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
+              {[...Array(8)].map((_, i) => (
+                <div key={i} className="bg-white rounded-2xl p-4 animate-pulse">
+                  <div className="h-4 bg-gray-100 rounded mb-3"></div>
+                  <div className="h-6 bg-gray-100 rounded mb-2 w-1/2"></div>
+                  <div className="h-3 bg-gray-100 rounded w-3/4"></div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-7xl mx-auto px-4 md:px-6 pt-4 md:pt-6">
@@ -132,6 +189,7 @@ export default function HomePage() {
               <div className="space-y-8">
                 {categories.map((cat) => {
                   const catProducts = getProductsByCategory(cat.id);
+                  if (catProducts.length === 0) return null;
                   return (
                     <div key={cat.id}>
                       <div className="flex items-center justify-between mb-3">
