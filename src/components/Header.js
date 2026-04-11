@@ -1,15 +1,51 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
-import { Search, Bell, ChevronLeft } from "lucide-react";
+import { Search, Bell, ChevronLeft, X, Zap, Sparkles, Tag, Gift } from "lucide-react";
 import { usePathname } from "next/navigation";
+
+const promoNotifications = [
+  { id: 1, icon: "⚡", title: "Flash Sale Aktif!", desc: "Harga spesial terbatas untuk produk pilihan.", time: "Sekarang", isNew: true },
+  { id: 2, icon: "💸", title: "Diskon hingga 20%", desc: "Promo spesial bulan ini untuk semua operator.", time: "Hari ini", isNew: true },
+  { id: 3, icon: "🎮", title: "Voucher Game Murah", desc: "Top up game favoritmu dengan harga terjangkau.", time: "2 hari lalu", isNew: false },
+  { id: 4, icon: "📶", title: "Paket Data Hemat", desc: "Paket internet mulai dari Rp 10.000.", time: "3 hari lalu", isNew: false },
+];
 
 export default function Header() {
   const [searchOpen, setSearchOpen] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [notifSeen, setNotifSeen] = useState(false);
+  const notifRef = useRef(null);
   const pathname = usePathname();
   const isHome = pathname === "/";
   const isProductPage = pathname.startsWith("/product/");
+
+  // Close notif on click outside
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (notifRef.current && !notifRef.current.contains(e.target)) {
+        setNotifOpen(false);
+      }
+    }
+    if (notifOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [notifOpen]);
+
+  // Close on route change
+  useEffect(() => {
+    setNotifOpen(false);
+    setSearchOpen(false);
+  }, [pathname]);
+
+  const handleBellClick = () => {
+    setNotifOpen(!notifOpen);
+    if (!notifSeen) setNotifSeen(true);
+  };
+
+  const newCount = notifSeen ? 0 : promoNotifications.filter((n) => n.isNew).length;
 
   return (
     <>
@@ -43,13 +79,63 @@ export default function Header() {
             >
               <Search size={20} className="text-gray-500" />
             </button>
-            <button
-              className="p-2 rounded-full hover:bg-gray-100 transition-colors relative"
-              aria-label="Notifications"
-            >
-              <Bell size={20} className="text-gray-500" />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-tred rounded-full"></span>
-            </button>
+            <div className="relative" ref={notifRef}>
+              <button
+                onClick={handleBellClick}
+                className="p-2 rounded-full hover:bg-gray-100 transition-colors relative"
+                aria-label="Notifications"
+              >
+                <Bell size={20} className="text-gray-500" />
+                {newCount > 0 && (
+                  <span className="absolute top-1 right-1 w-4 h-4 bg-tred rounded-full text-white text-[8px] font-bold flex items-center justify-center">
+                    {newCount}
+                  </span>
+                )}
+              </button>
+
+              {/* Notification Dropdown (Mobile) */}
+              {notifOpen && (
+                <div className="absolute right-0 top-12 w-80 max-w-[calc(100vw-2rem)] bg-white rounded-2xl border border-gray-100 shadow-xl overflow-hidden z-50 animate-slide-down">
+                  <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+                    <h3 className="font-bold text-sm text-navy">Notifikasi</h3>
+                    <button onClick={() => setNotifOpen(false)} className="p-1 hover:bg-gray-100 rounded-full">
+                      <X size={14} className="text-gray-400" />
+                    </button>
+                  </div>
+                  <div className="max-h-72 overflow-y-auto divide-y divide-gray-50">
+                    {promoNotifications.map((notif) => (
+                      <div
+                        key={notif.id}
+                        className={`px-4 py-3 flex items-start gap-3 hover:bg-gray-50 transition-colors ${
+                          notif.isNew ? "bg-tred-50/30" : ""
+                        }`}
+                      >
+                        <div className="w-9 h-9 rounded-xl bg-gray-100 flex items-center justify-center text-lg shrink-0">
+                          {notif.icon}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-gray-800">{notif.title}</p>
+                          <p className="text-[11px] text-gray-400 mt-0.5 line-clamp-1">{notif.desc}</p>
+                        </div>
+                        <div className="flex flex-col items-end shrink-0">
+                          <span className="text-[9px] text-gray-400">{notif.time}</span>
+                          {notif.isNew && (
+                            <span className="w-2 h-2 bg-tred rounded-full mt-1"></span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <Link
+                    href="/promo"
+                    onClick={() => setNotifOpen(false)}
+                    className="block text-center py-3 text-xs font-semibold text-tred border-t border-gray-100 hover:bg-gray-50 transition-colors"
+                  >
+                    Lihat Semua Promo →
+                  </Link>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -135,6 +221,22 @@ export default function Header() {
                 {link.label}
               </Link>
             ))}
+
+            {/* Desktop Bell */}
+            <div className="relative" ref={notifOpen ? undefined : null}>
+              <button
+                onClick={handleBellClick}
+                className="p-2 rounded-lg hover:bg-gray-100 transition-colors relative ml-1"
+              >
+                <Bell size={18} className="text-gray-500" />
+                {newCount > 0 && (
+                  <span className="absolute top-1 right-1 w-3.5 h-3.5 bg-tred rounded-full text-white text-[7px] font-bold flex items-center justify-center">
+                    {newCount}
+                  </span>
+                )}
+              </button>
+            </div>
+
             <Link
               href="/account"
               className="ml-2 px-5 py-2 gradient-red text-white rounded-lg text-sm font-semibold hover:opacity-90 transition-opacity shadow-md shadow-tred/20"
@@ -144,6 +246,49 @@ export default function Header() {
           </nav>
         </div>
       </header>
+
+      {/* Desktop Notification Dropdown */}
+      {notifOpen && (
+        <div className="hidden md:block fixed top-[6.5rem] right-8 z-[60] w-96 bg-white rounded-2xl border border-gray-100 shadow-xl overflow-hidden animate-slide-down">
+          <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
+            <h3 className="font-bold text-sm text-navy">Notifikasi</h3>
+            <button onClick={() => setNotifOpen(false)} className="p-1 hover:bg-gray-100 rounded-full">
+              <X size={14} className="text-gray-400" />
+            </button>
+          </div>
+          <div className="max-h-80 overflow-y-auto divide-y divide-gray-50">
+            {promoNotifications.map((notif) => (
+              <div
+                key={notif.id}
+                className={`px-5 py-3 flex items-start gap-3 hover:bg-gray-50 transition-colors ${
+                  notif.isNew ? "bg-tred-50/30" : ""
+                }`}
+              >
+                <div className="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center text-xl shrink-0">
+                  {notif.icon}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-gray-800">{notif.title}</p>
+                  <p className="text-xs text-gray-400 mt-0.5">{notif.desc}</p>
+                </div>
+                <div className="flex flex-col items-end shrink-0">
+                  <span className="text-[10px] text-gray-400">{notif.time}</span>
+                  {notif.isNew && (
+                    <span className="w-2 h-2 bg-tred rounded-full mt-1"></span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+          <Link
+            href="/promo"
+            onClick={() => setNotifOpen(false)}
+            className="block text-center py-3 text-xs font-semibold text-tred border-t border-gray-100 hover:bg-gray-50 transition-colors"
+          >
+            Lihat Semua Promo →
+          </Link>
+        </div>
+      )}
     </>
   );
 }

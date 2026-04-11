@@ -68,3 +68,56 @@ export async function GET(request) {
     );
   }
 }
+
+// PUT /api/admin/orders — Bulk update order statuses
+export async function PUT(request) {
+  try {
+    const { orderIds, status } = await request.json();
+
+    if (!orderIds || !Array.isArray(orderIds) || orderIds.length === 0 || !status) {
+      return NextResponse.json(
+        { success: false, error: "orderIds (array) dan status wajib diisi" },
+        { status: 400 }
+      );
+    }
+
+    const validStatuses = ["pending", "paid", "processing", "completed", "failed"];
+    if (!validStatuses.includes(status)) {
+      return NextResponse.json(
+        { success: false, error: "Status tidak valid" },
+        { status: 400 }
+      );
+    }
+
+    const now = new Date().toISOString();
+    let updated = 0;
+
+    for (const orderId of orderIds) {
+      const updates = { status, updatedAt: now };
+      if (status === "completed") {
+        updates.completedAt = now;
+      }
+      if (status === "paid" || status === "completed") {
+        updates.paidAt = now;
+      }
+
+      await db
+        .update(orders)
+        .set(updates)
+        .where(eq(orders.id, orderId));
+
+      updated++;
+    }
+
+    return NextResponse.json({
+      success: true,
+      data: { updated, status },
+    });
+  } catch (error) {
+    console.error("PUT /api/admin/orders error:", error);
+    return NextResponse.json(
+      { success: false, error: "Bulk update failed" },
+      { status: 500 }
+    );
+  }
+}

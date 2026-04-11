@@ -11,7 +11,9 @@ import {
   ChevronRight,
   RefreshCw,
   Phone,
-  MessageCircle,
+  CheckSquare,
+  Square,
+  MinusSquare,
 } from "lucide-react";
 
 function formatRupiah(n) {
@@ -54,6 +56,11 @@ export default function AdminPesananPage() {
   const [updating, setUpdating] = useState(false);
   const [success, setSuccess] = useState("");
   const [pagination, setPagination] = useState(null);
+
+  // Bulk selection
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [bulkStatus, setBulkStatus] = useState("completed");
+  const [bulkUpdating, setBulkUpdating] = useState(false);
 
   const fetchOrders = async () => {
     try {
@@ -105,6 +112,51 @@ export default function AdminPesananPage() {
     }
   };
 
+  // Bulk selection handlers
+  const toggleSelect = (id) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === orders.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(orders.map((o) => o.id)));
+    }
+  };
+
+  const handleBulkUpdate = async () => {
+    if (selectedIds.size === 0) return;
+    setBulkUpdating(true);
+    try {
+      const res = await fetch("/api/admin/orders", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderIds: [...selectedIds], status: bulkStatus }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSuccess(`${data.data.updated} pesanan → ${bulkStatus}`);
+        setTimeout(() => setSuccess(""), 3000);
+        setSelectedIds(new Set());
+        setLoading(true);
+        fetchOrders();
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setBulkUpdating(false);
+    }
+  };
+
+  const isAllSelected = orders.length > 0 && selectedIds.size === orders.length;
+  const isSomeSelected = selectedIds.size > 0 && selectedIds.size < orders.length;
+
   return (
     <div>
       {/* Header */}
@@ -133,6 +185,50 @@ export default function AdminPesananPage() {
         </div>
       )}
 
+      {/* Bulk Action Toolbar */}
+      {selectedIds.size > 0 && (
+        <div className="mb-4 bg-navy/5 border border-navy/20 rounded-2xl p-4 flex flex-col md:flex-row items-start md:items-center gap-3 animate-fade-in">
+          <div className="flex items-center gap-2">
+            <CheckSquare size={18} className="text-navy" />
+            <span className="text-sm font-bold text-navy">{selectedIds.size} pesanan dipilih</span>
+          </div>
+          <div className="flex items-center gap-2 flex-1">
+            <span className="text-xs text-gray-500">Ubah status ke:</span>
+            <select
+              value={bulkStatus}
+              onChange={(e) => setBulkStatus(e.target.value)}
+              className="px-3 py-2 border border-gray-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-navy/20"
+            >
+              <option value="pending">Menunggu Bayar</option>
+              <option value="paid">Dibayar</option>
+              <option value="processing">Diproses</option>
+              <option value="completed">Selesai</option>
+              <option value="failed">Gagal</option>
+            </select>
+            <button
+              onClick={handleBulkUpdate}
+              disabled={bulkUpdating}
+              className="px-4 py-2 gradient-navy text-white rounded-xl text-sm font-semibold hover:opacity-90 disabled:opacity-50 flex items-center gap-1.5"
+            >
+              {bulkUpdating ? (
+                <>
+                  <div className="w-3.5 h-3.5 rounded-full border-2 border-white/30 border-t-white animate-spin"></div>
+                  Proses...
+                </>
+              ) : (
+                "Terapkan"
+              )}
+            </button>
+          </div>
+          <button
+            onClick={() => setSelectedIds(new Set())}
+            className="text-xs text-gray-500 hover:text-gray-700 font-medium"
+          >
+            Batal
+          </button>
+        </div>
+      )}
+
       {/* Filters */}
       <div className="bg-white rounded-2xl border border-gray-100 p-4 mb-4 flex flex-col md:flex-row gap-3">
         <form onSubmit={handleSearch} className="flex-1 flex gap-2">
@@ -150,7 +246,7 @@ export default function AdminPesananPage() {
           {statusOptions.map((opt) => (
             <button
               key={opt.value}
-              onClick={() => { setFilterStatus(opt.value); setLoading(true); }}
+              onClick={() => { setFilterStatus(opt.value); setLoading(true); setSelectedIds(new Set()); }}
               className={`shrink-0 px-3 py-2 rounded-xl text-xs font-semibold transition-all ${
                 filterStatus === opt.value
                   ? "gradient-navy text-white"
@@ -175,126 +271,156 @@ export default function AdminPesananPage() {
             <p className="text-gray-400 text-sm">Tidak ada pesanan ditemukan</p>
           </div>
         ) : (
-          <div className="divide-y divide-gray-50">
-            {orders.map((order) => {
-              const config = statusConfig[order.status] || statusConfig.pending;
-              const StatusIcon = config.icon;
-              const isExpanded = selectedOrder === order.id;
+          <>
+            {/* Select All Header */}
+            <div className="px-4 md:px-5 py-2.5 border-b border-gray-100 bg-gray-50 flex items-center gap-3">
+              <button onClick={toggleSelectAll} className="text-gray-400 hover:text-navy transition-colors">
+                {isAllSelected ? <CheckSquare size={18} className="text-navy" /> :
+                 isSomeSelected ? <MinusSquare size={18} className="text-navy" /> :
+                 <Square size={18} />}
+              </button>
+              <span className="text-xs text-gray-500 font-medium">
+                {isAllSelected ? "Batal pilih semua" : "Pilih semua"}
+              </span>
+            </div>
 
-              return (
-                <div key={order.id}>
-                  <button
-                    onClick={() => setSelectedOrder(isExpanded ? null : order.id)}
-                    className="w-full text-left px-4 md:px-5 py-3 md:py-4 flex items-center gap-3 md:gap-4 hover:bg-gray-50 transition-colors"
-                  >
-                    <div className={`w-9 h-9 md:w-10 md:h-10 rounded-full ${config.bg} ${config.text} flex items-center justify-center shrink-0`}>
-                      <StatusIcon size={16} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="font-bold text-sm text-gray-800 truncate">{order.productName}</p>
-                        <span className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full ${config.bg} ${config.text}`}>
-                          {config.label}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                        <span className="text-[11px] text-gray-400">{order.id}</span>
-                        <span className="text-gray-300 hidden md:inline">•</span>
-                        <span className="text-[11px] text-gray-400 hidden md:inline">{order.guestPhone}</span>
-                        <span className="text-gray-300">•</span>
-                        <span className="text-[11px] text-gray-400">{formatDate(order.createdAt)}</span>
-                      </div>
-                    </div>
-                    <div className="text-right shrink-0 hidden md:block">
-                      <p className="text-sm font-bold text-navy">{formatRupiah(order.productPrice)}</p>
-                    </div>
-                    <ChevronRight
-                      size={16}
-                      className={`text-gray-300 shrink-0 transition-transform ${isExpanded ? "rotate-90" : ""}`}
-                    />
-                  </button>
+            <div className="divide-y divide-gray-50">
+              {orders.map((order) => {
+                const config = statusConfig[order.status] || statusConfig.pending;
+                const StatusIcon = config.icon;
+                const isExpanded = selectedOrder === order.id;
+                const isChecked = selectedIds.has(order.id);
 
-                  {/* Expanded Detail */}
-                  {isExpanded && (
-                    <div className="px-4 md:px-5 pb-4 border-t border-gray-50 animate-slide-down">
-                      <div className="pt-3 space-y-2.5">
-                        <div className="grid grid-cols-2 gap-2 text-sm">
-                          <div>
-                            <span className="text-gray-500 text-xs">Invoice</span>
-                            <p className="font-medium text-gray-800">{order.id}</p>
-                          </div>
-                          <div>
-                            <span className="text-gray-500 text-xs">HP Pembeli</span>
-                            <p className="font-medium text-gray-800 flex items-center gap-1">
-                              <Phone size={12} /> {order.guestPhone}
-                            </p>
-                          </div>
-                          <div>
-                            <span className="text-gray-500 text-xs">No. Tujuan</span>
-                            <p className="font-medium text-gray-800">{order.targetData}</p>
-                          </div>
-                          <div>
-                            <span className="text-gray-500 text-xs">Total</span>
-                            <p className="font-bold text-tred">{formatRupiah(order.productPrice)}</p>
-                          </div>
-                          <div>
-                            <span className="text-gray-500 text-xs">Pembayaran</span>
-                            <p className="font-medium text-gray-800">{order.paymentMethod || "—"}</p>
-                          </div>
-                          <div>
-                            <span className="text-gray-500 text-xs">WA Notif</span>
-                            <p className="font-medium text-gray-800">{order.whatsappSent ? "✅ Terkirim" : "❌ Belum"}</p>
-                          </div>
-                          {order.paidAt && (
-                            <div>
-                              <span className="text-gray-500 text-xs">Dibayar</span>
-                              <p className="font-medium text-gray-800">{formatDate(order.paidAt)}</p>
-                            </div>
-                          )}
-                          {order.completedAt && (
-                            <div>
-                              <span className="text-gray-500 text-xs">Selesai</span>
-                              <p className="font-medium text-gray-800">{formatDate(order.completedAt)}</p>
-                            </div>
-                          )}
-                        </div>
-
-                        {order.notes && (
-                          <div className="bg-gray-50 rounded-xl p-3">
-                            <span className="text-gray-500 text-xs">Catatan</span>
-                            <p className="text-sm text-gray-700 mt-0.5">{order.notes}</p>
-                          </div>
+                return (
+                  <div key={order.id}>
+                    <div className="flex items-center">
+                      {/* Checkbox */}
+                      <button
+                        onClick={() => toggleSelect(order.id)}
+                        className="pl-4 md:pl-5 pr-1 py-3 md:py-4 text-gray-400 hover:text-navy transition-colors"
+                      >
+                        {isChecked ? (
+                          <CheckSquare size={18} className="text-navy" />
+                        ) : (
+                          <Square size={18} />
                         )}
+                      </button>
 
-                        {/* Status Update Buttons */}
-                        <div className="pt-2 flex flex-wrap gap-2 border-t border-gray-100">
-                          <span className="text-xs text-gray-400 font-medium self-center mr-1">Ubah status:</span>
-                          {["pending", "paid", "processing", "completed", "failed"].map((s) => {
-                            const sc = statusConfig[s];
-                            const isCurrent = order.status === s;
-                            return (
-                              <button
-                                key={s}
-                                onClick={() => !isCurrent && handleUpdateStatus(order.id, s)}
-                                disabled={isCurrent || updating}
-                                className={`text-[11px] font-bold px-3 py-1.5 rounded-lg transition-all ${
-                                  isCurrent
-                                    ? `${sc.bg} ${sc.text} ring-2 ring-current/30`
-                                    : "bg-gray-100 text-gray-500 hover:bg-gray-200"
-                                } disabled:opacity-50`}
-                              >
-                                {sc.label}
-                              </button>
-                            );
-                          })}
+                      {/* Order Row */}
+                      <button
+                        onClick={() => setSelectedOrder(isExpanded ? null : order.id)}
+                        className="flex-1 text-left px-2 md:px-3 py-3 md:py-4 flex items-center gap-3 md:gap-4 hover:bg-gray-50 transition-colors"
+                      >
+                        <div className={`w-9 h-9 md:w-10 md:h-10 rounded-full ${config.bg} ${config.text} flex items-center justify-center shrink-0`}>
+                          <StatusIcon size={16} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="font-bold text-sm text-gray-800 truncate">{order.productName}</p>
+                            <span className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full ${config.bg} ${config.text}`}>
+                              {config.label}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                            <span className="text-[11px] text-gray-400">{order.id}</span>
+                            <span className="text-gray-300 hidden md:inline">•</span>
+                            <span className="text-[11px] text-gray-400 hidden md:inline">{order.guestPhone}</span>
+                            <span className="text-gray-300">•</span>
+                            <span className="text-[11px] text-gray-400">{formatDate(order.createdAt)}</span>
+                          </div>
+                        </div>
+                        <div className="text-right shrink-0 hidden md:block">
+                          <p className="text-sm font-bold text-navy">{formatRupiah(order.productPrice)}</p>
+                        </div>
+                        <ChevronRight
+                          size={16}
+                          className={`text-gray-300 shrink-0 transition-transform ${isExpanded ? "rotate-90" : ""}`}
+                        />
+                      </button>
+                    </div>
+
+                    {/* Expanded Detail */}
+                    {isExpanded && (
+                      <div className="px-4 md:px-5 pb-4 border-t border-gray-50 animate-slide-down">
+                        <div className="pt-3 space-y-2.5">
+                          <div className="grid grid-cols-2 gap-2 text-sm">
+                            <div>
+                              <span className="text-gray-500 text-xs">Invoice</span>
+                              <p className="font-medium text-gray-800">{order.id}</p>
+                            </div>
+                            <div>
+                              <span className="text-gray-500 text-xs">HP Pembeli</span>
+                              <p className="font-medium text-gray-800 flex items-center gap-1">
+                                <Phone size={12} /> {order.guestPhone}
+                              </p>
+                            </div>
+                            <div>
+                              <span className="text-gray-500 text-xs">No. Tujuan</span>
+                              <p className="font-medium text-gray-800">{order.targetData}</p>
+                            </div>
+                            <div>
+                              <span className="text-gray-500 text-xs">Total</span>
+                              <p className="font-bold text-tred">{formatRupiah(order.productPrice)}</p>
+                            </div>
+                            <div>
+                              <span className="text-gray-500 text-xs">Pembayaran</span>
+                              <p className="font-medium text-gray-800">{order.paymentMethod || "—"}</p>
+                            </div>
+                            <div>
+                              <span className="text-gray-500 text-xs">WA Notif</span>
+                              <p className="font-medium text-gray-800">{order.whatsappSent ? "✅ Terkirim" : "❌ Belum"}</p>
+                            </div>
+                            {order.paidAt && (
+                              <div>
+                                <span className="text-gray-500 text-xs">Dibayar</span>
+                                <p className="font-medium text-gray-800">{formatDate(order.paidAt)}</p>
+                              </div>
+                            )}
+                            {order.completedAt && (
+                              <div>
+                                <span className="text-gray-500 text-xs">Selesai</span>
+                                <p className="font-medium text-gray-800">{formatDate(order.completedAt)}</p>
+                              </div>
+                            )}
+                          </div>
+
+                          {order.notes && (
+                            <div className="bg-gray-50 rounded-xl p-3">
+                              <span className="text-gray-500 text-xs">Catatan</span>
+                              <p className="text-sm text-gray-700 mt-0.5">{order.notes}</p>
+                            </div>
+                          )}
+
+                          {/* Status Update Buttons */}
+                          <div className="pt-2 flex flex-wrap gap-2 border-t border-gray-100">
+                            <span className="text-xs text-gray-400 font-medium self-center mr-1">Ubah status:</span>
+                            {["pending", "paid", "processing", "completed", "failed"].map((s) => {
+                              const sc = statusConfig[s];
+                              const isCurrent = order.status === s;
+                              return (
+                                <button
+                                  key={s}
+                                  onClick={() => !isCurrent && handleUpdateStatus(order.id, s)}
+                                  disabled={isCurrent || updating}
+                                  className={`text-[11px] font-bold px-3 py-1.5 rounded-lg transition-all ${
+                                    isCurrent
+                                      ? `${sc.bg} ${sc.text} ring-2 ring-current/30`
+                                      : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                                  } disabled:opacity-50`}
+                                >
+                                  {sc.label}
+                                </button>
+                              );
+                            })}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </>
         )}
       </div>
     </div>

@@ -2,6 +2,7 @@ import "./globals.css";
 import Header from "@/components/Header";
 import BottomNav from "@/components/BottomNav";
 import AuthProvider from "@/components/AuthProvider";
+import ScrollToTop from "@/components/ScrollToTop";
 
 export const metadata = {
   title: "Telko.Store — Beli Pulsa & Paket Data Semua Operator Murah",
@@ -40,6 +41,7 @@ export default function RootLayout({ children }) {
       </head>
       <body className="min-h-screen bg-gray-50 font-sans antialiased overflow-x-hidden">
         <AuthProvider>
+          <ScrollToTop />
           <Header />
           <main className="safe-bottom">{children}</main>
           <BottomNav />

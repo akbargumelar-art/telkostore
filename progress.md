@@ -85,6 +85,15 @@
 - **Database**: Tabel `users` baru (id, name, email, image, phone, provider, provider_id, created_at).
 - **Env Vars Baru**: `AUTH_SECRET`, `AUTH_TRUST_HOST`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `FACEBOOK_CLIENT_ID`, `FACEBOOK_CLIENT_SECRET`.
 
+### 11. Fitur Lanjutan — UX & Admin (12 April 2026) ✨
+- **Scroll-to-Top**: Komponen global `ScrollToTop.js` — otomatis scroll ke atas setiap halaman baru. Auto-scroll checkout (pilih produk → isi nomor → bayar) tetap berjalan normal.
+- **Sticky Category Tabs**: Tab kategori sekarang floating sticky di bawah header mobile (`top-14 z-40 backdrop-blur`), selalu terlihat saat scroll.
+- **Bell Notification**: Icon lonceng di header sekarang fungsional — klik menampilkan dropdown notifikasi (promo aktif, info produk). Badge counter hilang setelah dibuka. Tersedia di mobile dan desktop.
+- **Filter Masa Aktif (Subkategori)**: Saat memilih kategori yang memiliki produk dengan `validity` (Paket Data, Voucher Internet), chip filter "Masa Aktif" muncul otomatis (3 Hari, 7 Hari, 14 Hari, dst). Auto-detect dari data produk. Tersedia di mobile (di bawah category tabs) dan desktop (di atas produk grid).
+- **Bulk Action Pesanan**: Di admin `/admin/pesanan`, tersedia checkbox per row dan "Select All". Toolbar bulk action muncul saat ada pesanan dipilih — pilih status target → "Terapkan" untuk update massal.
+- **Profil Admin**: Halaman `/admin/profil` — form ubah kunci admin (validasi old key, min 8 karakter, konfirmasi). Perubahan disimpan di database + `process.env` sehingga berlaku tanpa restart.
+- **Manajemen User**: Halaman `/admin/users` — tabel user OAuth (Google/Facebook) dengan search. Expandable detail menampilkan info user + daftar pesanan. Tombol hapus user dengan konfirmasi modal.
+
 ---
 
 ## 🛠️ Langkah Lanjutan
@@ -95,7 +104,7 @@
    - Isi Client ID & Secret di `.env.local` dan `.env.local` di VPS.
 
 2. **Webhook Midtrans Production**:
-   Pastikan webhook URL production (`https://telko.store/api/webhook/midtrans`) terdaftar di Midtrans Dashboard agar status pesanan berubah otomatis tanpa perlu manual check.
+   Pastikan webhook URL production (`https://telko.store/api/webhook/midtrans`) terdaftar di Midtrans Dashboard.
 
 3. **Perluasan Katalog Produk**:
    Melengkapi data produk tambahan (paket spesifik Telkomsel, Indosat, XL, dll) melalui admin dashboard.
