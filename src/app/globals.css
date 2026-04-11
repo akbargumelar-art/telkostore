@@ -1,0 +1,177 @@
+@import "tailwindcss";
+
+/* ==============================
+   TELKO.STORE Design System
+   Telkomsel Color Identity
+   ============================== */
+
+@theme {
+  /* Primary Colors */
+  --color-tred: #ED0226;
+  --color-tred-dark: #B8001F;
+  --color-tred-light: #FF4D6A;
+  --color-tred-50: #FFF0F3;
+
+  /* Navy */
+  --color-navy: #1A1A4E;
+  --color-navy-light: #2D2D6B;
+  --color-navy-dark: #0F0F30;
+
+  /* Accent */
+  --color-success: #28A745;
+  --color-success-light: #D4EDDA;
+  --color-gold: #FFB800;
+  --color-gold-light: #FFF3CD;
+  --color-info: #007BFF;
+
+  /* Fonts */
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+
+  /* Animations */
+  --animate-fade-in: fade-in 0.3s ease-out;
+  --animate-slide-up: slide-up 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+  --animate-slide-down: slide-down 0.3s ease-out;
+  --animate-scale-in: scale-in 0.2s ease-out;
+}
+
+/* ==============================
+   Keyframes
+   ============================== */
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slide-down {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* ==============================
+   Base Styles
+   ============================== */
+
+html {
+  scroll-behavior: smooth;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+/* ==============================
+   Scrollbar Customization
+   ============================== */
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #DEE2E6;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #ADB5BD;
+}
+
+/* ==============================
+   Utility Classes
+   ============================== */
+
+.glass-effect {
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.glass-bottom {
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.gradient-red {
+  background: linear-gradient(135deg, #ED0226 0%, #B8001F 100%);
+}
+
+.gradient-navy {
+  background: linear-gradient(135deg, #1A1A4E 0%, #0F0F30 100%);
+}
+
+/* Hide scrollbar for horizontal scroll */
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Card hover lift effect */
+.card-hover {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.08);
+}
+
+/* Ripple animation for buttons */
+.btn-ripple {
+  position: relative;
+  overflow: hidden;
+}
+.btn-ripple::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle, rgba(255,255,255,0.3) 0%, transparent 70%);
+  transform: scale(0);
+  opacity: 0;
+  transition: transform 0.5s, opacity 0.3s;
+}
+.btn-ripple:active::after {
+  transform: scale(2.5);
+  opacity: 1;
+  transition: 0s;
+}
+
+/* Safe area for mobile bottom nav */
+.safe-bottom {
+  padding-bottom: 96px; /* 64px nav + 32px spacing */
+}
+
+@media (min-width: 768px) {
+  .safe-bottom {
+    padding-bottom: 2rem;
+  }
+}
