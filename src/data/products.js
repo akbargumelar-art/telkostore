@@ -1,6 +1,6 @@
 // ==============================
 // TELKO.STORE — Mock Product Data
-// Data produk Telkomsel (Pulsa, Paket Data, Voucher Internet, Voucher Game)
+// Data produk semua operator Indonesia (Pulsa, Paket Data, Voucher Internet, Voucher Game)
 // ==============================
 
 export const categories = [
@@ -8,14 +8,14 @@ export const categories = [
     id: "pulsa",
     name: "Pulsa",
     icon: "📱",
-    description: "Isi pulsa Telkomsel reguler",
+    description: "Isi pulsa semua operator",
     color: "#ED0226",
   },
   {
     id: "paket-data",
     name: "Paket Data",
     icon: "📶",
-    description: "Paket internet Telkomsel terbaik",
+    description: "Paket internet semua operator",
     color: "#007BFF",
   },
   {
@@ -44,7 +44,7 @@ export const products = [
     price: 6500,
     originalPrice: 7000,
     type: "virtual",
-    description: "Pulsa Telkomsel Rp5.000",
+    description: "Pulsa All Operator Rp5.000",
     isPromo: false,
     isFlashSale: false,
     stock: 999,
@@ -57,7 +57,7 @@ export const products = [
     price: 11500,
     originalPrice: 12000,
     type: "virtual",
-    description: "Pulsa Telkomsel Rp10.000",
+    description: "Pulsa All Operator Rp10.000",
     isPromo: false,
     isFlashSale: false,
     stock: 999,
@@ -70,7 +70,7 @@ export const products = [
     price: 16000,
     originalPrice: 17000,
     type: "virtual",
-    description: "Pulsa Telkomsel Rp15.000",
+    description: "Pulsa All Operator Rp15.000",
     isPromo: false,
     isFlashSale: false,
     stock: 999,
@@ -83,7 +83,7 @@ export const products = [
     price: 21000,
     originalPrice: 22000,
     type: "virtual",
-    description: "Pulsa Telkomsel Rp20.000",
+    description: "Pulsa All Operator Rp20.000",
     isPromo: true,
     isFlashSale: false,
     stock: 999,
@@ -96,7 +96,7 @@ export const products = [
     price: 26000,
     originalPrice: 27500,
     type: "virtual",
-    description: "Pulsa Telkomsel Rp25.000",
+    description: "Pulsa All Operator Rp25.000",
     isPromo: false,
     isFlashSale: false,
     stock: 999,
@@ -109,7 +109,7 @@ export const products = [
     price: 50500,
     originalPrice: 52000,
     type: "virtual",
-    description: "Pulsa Telkomsel Rp50.000",
+    description: "Pulsa All Operator Rp50.000",
     isPromo: true,
     isFlashSale: true,
     stock: 50,
@@ -122,7 +122,7 @@ export const products = [
     price: 99000,
     originalPrice: 102000,
     type: "virtual",
-    description: "Pulsa Telkomsel Rp100.000",
+    description: "Pulsa All Operator Rp100.000",
     isPromo: true,
     isFlashSale: true,
     stock: 25,
@@ -476,7 +476,7 @@ export const banners = [
   },
   {
     id: 2,
-    title: "Pulsa Murah Telkomsel",
+    title: "Pulsa Murah All Operator",
     subtitle: "Mulai dari Rp6.500 — Proses instan!",
     bgGradient: "from-navy to-navy-light",
     ctaText: "Isi Pulsa",

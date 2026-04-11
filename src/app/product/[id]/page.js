@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, useMemo, use, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useMemo, use, useCallback, useRef } from "react";
 import Link from "next/link";
 import {
   getProductById,
@@ -9,8 +8,9 @@ import {
   getCategoryById,
   paymentMethods,
 } from "@/data/products";
-import { formatRupiah, calculateDiscount, isValidTelkomselNumber } from "@/lib/utils";
+import { formatRupiah, calculateDiscount, isValidIndonesianNumber, getOperatorName } from "@/lib/utils";
 import ProductCard from "@/components/ProductCard";
+import { PaymentLogo } from "@/components/PaymentLogos";
 import {
   ChevronLeft,
   Check,
@@ -26,7 +26,6 @@ import {
 export default function ProductPage({ params }) {
   const { id } = use(params);
 
-  const router = useRouter();
   const product = getProductById(id);
   const [selectedVariant, setSelectedVariant] = useState(id);
   const [phoneNumber, setPhoneNumber] = useState("");
@@ -34,6 +33,20 @@ export default function ProductPage({ params }) {
   const [currentStep, setCurrentStep] = useState(1);
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [checkoutError, setCheckoutError] = useState("");
+
+  // Refs for auto-scroll
+  const phoneRef = useRef(null);
+  const paymentRef = useRef(null);
+  const summaryRef = useRef(null);
+
+  // Auto-scroll helper (only on mobile)
+  const scrollToRef = useCallback((ref) => {
+    if (ref.current && window.innerWidth < 768) {
+      setTimeout(() => {
+        ref.current.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 200);
+    }
+  }, []);
 
   if (!product) {
     return (
@@ -65,24 +78,28 @@ export default function ProductPage({ params }) {
     selectedProduct.price
   );
 
-  const phoneValid = isValidTelkomselNumber(phoneNumber);
+  const phoneValid = isValidIndonesianNumber(phoneNumber);
+  const detectedOperator = phoneValid ? getOperatorName(phoneNumber) : null;
 
   const handlePhoneChange = (e) => {
     const value = e.target.value.replace(/\D/g, "");
     setPhoneNumber(value);
-    if (value.length >= 10 && isValidTelkomselNumber(value)) {
+    if (value.length >= 10 && isValidIndonesianNumber(value)) {
       setCurrentStep(3);
+      scrollToRef(paymentRef);
     }
   };
 
   const handleSelectVariant = (variantId) => {
     setSelectedVariant(variantId);
     if (currentStep < 2) setCurrentStep(2);
+    scrollToRef(phoneRef);
   };
 
   const handleSelectPayment = (paymentId) => {
     setSelectedPayment(paymentId);
     setCurrentStep(4);
+    scrollToRef(summaryRef);
   };
 
   const handleCheckout = useCallback(async () => {
@@ -320,7 +337,7 @@ export default function ProductPage({ params }) {
 
               <div className="p-5 space-y-5">
                 {/* Step 2: Phone Number */}
-                <div>
+                <div ref={phoneRef}>
                   <div className="flex items-center gap-2 mb-3">
                     <div
                       className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${
@@ -345,7 +362,7 @@ export default function ProductPage({ params }) {
                       type="tel"
                       value={phoneNumber}
                       onChange={handlePhoneChange}
-                      placeholder="0812xxxxxxxx"
+                      placeholder="08xxxxxxxxxx"
                       maxLength={13}
                       className={`w-full pl-10 pr-10 py-3 border-2 rounded-xl text-sm font-medium transition-all focus:outline-none ${
                         phoneNumber.length === 0
@@ -369,19 +386,20 @@ export default function ProductPage({ params }) {
                   {phoneNumber.length > 0 && !phoneValid && (
                     <p className="text-tred text-[11px] mt-1.5 flex items-center gap-1">
                       <AlertCircle size={12} />
-                      Masukkan nomor Telkomsel yang valid
+                      Masukkan nomor HP Indonesia yang valid
                     </p>
                   )}
-                  {phoneValid && (
+                  {phoneValid && detectedOperator && (
                     <p className="text-success text-[11px] mt-1.5 flex items-center gap-1">
                       <CheckCircle2 size={12} />
-                      Nomor Telkomsel terverifikasi ✓
+                      Nomor {detectedOperator} terverifikasi ✓
                     </p>
                   )}
                 </div>
 
                 {/* Step 3: Payment Method */}
                 <div
+                  ref={paymentRef}
                   className={`transition-opacity duration-300 ${
                     currentStep >= 3
                       ? "opacity-100"
@@ -420,7 +438,7 @@ export default function ProductPage({ params }) {
                                   : "border-gray-100 hover:border-gray-200 hover:bg-gray-50"
                               }`}
                             >
-                              <span className="text-lg">{pm.icon}</span>
+                              <PaymentLogo paymentId={pm.id} size={28} />
                               <div className="flex-1 min-w-0">
                                 <p className="text-sm font-semibold text-gray-800">
                                   {pm.name}
@@ -445,6 +463,7 @@ export default function ProductPage({ params }) {
 
                 {/* Step 4: Summary */}
                 <div
+                  ref={summaryRef}
                   className={`transition-opacity duration-300 ${
                     currentStep >= 4
                       ? "opacity-100"
@@ -464,6 +483,14 @@ export default function ProductPage({ params }) {
                         {phoneNumber || "—"}
                       </span>
                     </div>
+                    {detectedOperator && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-500">Operator</span>
+                        <span className="font-semibold text-gray-800">
+                          {detectedOperator}
+                        </span>
+                      </div>
+                    )}
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-500">Pembayaran</span>
                       <span className="font-semibold text-gray-800">

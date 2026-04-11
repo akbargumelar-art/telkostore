@@ -3,13 +3,20 @@ import Header from "@/components/Header";
 import BottomNav from "@/components/BottomNav";
 
 export const metadata = {
-  title: "Telko.Store — Beli Pulsa & Paket Data Telkomsel Murah",
+  title: "Telko.Store — Beli Pulsa & Paket Data Semua Operator Murah",
   description:
-    "Marketplace pulsa, paket data, voucher internet & voucher game Telkomsel. Proses instan, harga murah, tanpa perlu daftar akun!",
-  keywords: "pulsa telkomsel, paket data, voucher internet, voucher game, top up game",
+    "Marketplace pulsa, paket data, voucher internet & voucher game semua operator Indonesia. Proses instan, harga murah, tanpa perlu daftar akun!",
+  keywords: "pulsa murah, paket data, voucher internet, voucher game, top up game, telkomsel, indosat, xl, tri, smartfren",
+  icons: {
+    icon: [
+      { url: "/favicon/favicon.svg", type: "image/svg+xml" },
+    ],
+    apple: "/favicon/favicon.svg",
+  },
+  manifest: "/favicon/site.webmanifest",
   openGraph: {
-    title: "Telko.Store — Produk Virtual Telkomsel",
-    description: "Beli pulsa & paket data Telkomsel murah. Express checkout, tanpa ribet!",
+    title: "Telko.Store — Pulsa & Paket Data Semua Operator",
+    description: "Beli pulsa & paket data semua operator murah. Express checkout, tanpa ribet!",
     type: "website",
   },
 };
@@ -28,6 +35,7 @@ export default function RootLayout({ children }) {
           href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
           rel="stylesheet"
         />
+        <meta name="theme-color" content="#ED0226" />
       </head>
       <body className="min-h-screen bg-gray-50 font-sans antialiased overflow-x-hidden">
         <Header />

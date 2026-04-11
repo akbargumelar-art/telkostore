@@ -18,21 +18,52 @@ export function calculateDiscount(original, discounted) {
   return Math.round(((original - discounted) / original) * 100);
 }
 
-export function isValidTelkomselNumber(phone) {
-  const cleaned = phone.replace(/\D/g, "");
-  const prefixes = [
+// All Indonesian mobile operator prefixes
+const operatorPrefixes = {
+  Telkomsel: [
     "0811", "0812", "0813", "0821", "0822", "0823",
     "0851", "0852", "0853",
-  ];
+  ],
+  Indosat: [
+    "0814", "0815", "0816", "0855", "0856", "0857", "0858",
+  ],
+  XL: [
+    "0817", "0818", "0819", "0859", "0877", "0878",
+  ],
+  Axis: [
+    "0831", "0832", "0833", "0838",
+  ],
+  Tri: [
+    "0895", "0896", "0897", "0898", "0899",
+  ],
+  Smartfren: [
+    "0881", "0882", "0883", "0884", "0885", "0886", "0887", "0888", "0889",
+  ],
+};
+
+const allPrefixes = Object.values(operatorPrefixes).flat();
+
+export function isValidIndonesianNumber(phone) {
+  const cleaned = phone.replace(/\D/g, "");
   if (cleaned.length < 10 || cleaned.length > 13) return false;
-  return prefixes.some((p) => cleaned.startsWith(p));
+  return allPrefixes.some((p) => cleaned.startsWith(p));
 }
 
-export function getTelkomselPrefix(phone) {
+// Keep backward compat alias
+export const isValidTelkomselNumber = isValidIndonesianNumber;
+
+export function getOperatorName(phone) {
   const cleaned = phone.replace(/\D/g, "");
-  const prefixes = [
-    "0811", "0812", "0813", "0821", "0822", "0823",
-    "0851", "0852", "0853",
-  ];
-  return prefixes.find((p) => cleaned.startsWith(p)) || null;
+  for (const [operator, prefixes] of Object.entries(operatorPrefixes)) {
+    if (prefixes.some((p) => cleaned.startsWith(p))) return operator;
+  }
+  return null;
 }
+
+export function getOperatorPrefix(phone) {
+  const cleaned = phone.replace(/\D/g, "");
+  return allPrefixes.find((p) => cleaned.startsWith(p)) || null;
+}
+
+// Backward compat alias
+export const getTelkomselPrefix = getOperatorPrefix;
