@@ -23,7 +23,7 @@ import {
   Lock,
 } from "lucide-react";
 
-const PHONE_READY_LENGTH = 12;
+const PHONE_READY_LENGTH = 10;
 
 export default function ProductPage({ params }) {
   const { id } = use(params);
@@ -92,15 +92,17 @@ export default function ProductPage({ params }) {
     const value = e.target.value.replace(/\D/g, "");
     setPhoneNumber(value);
 
-    if (value.length < PHONE_READY_LENGTH) {
+    const nextPhoneReady =
+      value.length >= PHONE_READY_LENGTH && isValidIndonesianNumber(value);
+
+    if (!nextPhoneReady) {
       phoneAutoScrolledRef.current = false;
+      setSelectedPayment("");
+      setCurrentStep((step) => (step > 2 ? 2 : step));
       return;
     }
 
-    if (
-      isValidIndonesianNumber(value) &&
-      !phoneAutoScrolledRef.current
-    ) {
+    if (!phoneAutoScrolledRef.current) {
       phoneAutoScrolledRef.current = true;
       setCurrentStep((step) => Math.max(step, 3));
       scrollToRef(paymentRef);
@@ -120,7 +122,14 @@ export default function ProductPage({ params }) {
   };
 
   const handleCheckout = useCallback(async () => {
-    if (isCheckingOut || currentStep < 4) return;
+    if (
+      isCheckingOut ||
+      currentStep < 4 ||
+      !phoneReadyForPayment ||
+      !selectedPayment
+    ) {
+      return;
+    }
     setIsCheckingOut(true);
     setCheckoutError("");
 
@@ -151,7 +160,14 @@ export default function ProductPage({ params }) {
     } finally {
       setIsCheckingOut(false);
     }
-  }, [isCheckingOut, currentStep, selectedVariant, phoneNumber, selectedPayment]);
+  }, [
+    isCheckingOut,
+    currentStep,
+    phoneReadyForPayment,
+    selectedVariant,
+    phoneNumber,
+    selectedPayment,
+  ]);
 
   const groupedPayments = useMemo(() => {
     const groups = {};
@@ -418,7 +434,7 @@ export default function ProductPage({ params }) {
                 <div
                   ref={paymentRef}
                   className={`transition-opacity duration-300 ${
-                    currentStep >= 3
+                    currentStep >= 3 && phoneReadyForPayment
                       ? "opacity-100"
                       : "opacity-40 pointer-events-none"
                   }`}
@@ -482,7 +498,7 @@ export default function ProductPage({ params }) {
                 <div
                   ref={summaryRef}
                   className={`transition-opacity duration-300 ${
-                    currentStep >= 4
+                    currentStep >= 4 && phoneReadyForPayment
                       ? "opacity-100"
                       : "opacity-40 pointer-events-none"
                   }`}
@@ -536,7 +552,12 @@ export default function ProductPage({ params }) {
 
                   <button
                     onClick={handleCheckout}
-                    disabled={currentStep < 4 || isCheckingOut}
+                    disabled={
+                      currentStep < 4 ||
+                      !phoneReadyForPayment ||
+                      !selectedPayment ||
+                      isCheckingOut
+                    }
                     className="w-full mt-4 gradient-red text-white font-bold text-base py-3.5 rounded-xl shadow-lg shadow-tred/20 hover:opacity-95 transition-opacity btn-ripple disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                   >
                     {isCheckingOut ? (
