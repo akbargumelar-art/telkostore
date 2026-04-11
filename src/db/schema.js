@@ -5,6 +5,18 @@
 
 import { sqliteTable, text, integer, real } from "drizzle-orm/sqlite-core";
 
+// ===== USERS (OAuth accounts) =====
+export const users = sqliteTable("users", {
+  id: text("id").primaryKey(),
+  name: text("name"),
+  email: text("email").unique(),
+  image: text("image"),
+  phone: text("phone"),
+  provider: text("provider"), // google, facebook
+  providerId: text("provider_id"),
+  createdAt: text("created_at").default("CURRENT_TIMESTAMP"),
+});
+
 // ===== CATEGORIES =====
 export const categories = sqliteTable("categories", {
   id: text("id").primaryKey(),

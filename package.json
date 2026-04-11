@@ -13,22 +13,23 @@
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "next": "^15.3.1",
-    "lucide-react": "^0.469.0",
+    "better-sqlite3": "^11.8.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "tailwind-merge": "^3.0.2",
     "drizzle-orm": "^0.39.0",
-    "better-sqlite3": "^11.8.1",
+    "lucide-react": "^0.469.0",
     "midtrans-client": "^1.3.1",
-    "nanoid": "^5.1.5"
+    "nanoid": "^5.1.5",
+    "next": "^15.3.1",
+    "next-auth": "^5.0.0-beta.30",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "tailwind-merge": "^3.0.2"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.1.4",
-    "tailwindcss": "^4.1.4",
+    "drizzle-kit": "^0.30.5",
     "postcss": "^8.5.3",
-    "drizzle-kit": "^0.30.5"
+    "tailwindcss": "^4.1.4"
   }
 }

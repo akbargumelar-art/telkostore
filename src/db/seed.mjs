@@ -20,6 +20,17 @@ console.log("🔧 Creating tables...");
 
 // Create tables
 sqlite.exec(`
+  CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    name TEXT,
+    email TEXT UNIQUE,
+    image TEXT,
+    phone TEXT,
+    provider TEXT,
+    provider_id TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+  );
+
   CREATE TABLE IF NOT EXISTS categories (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,

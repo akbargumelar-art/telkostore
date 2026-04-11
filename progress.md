@@ -1,58 +1,154 @@
 # Telko.Store — Progress Report
 
-**Log Terakhir:** 11 April 2026
+**Log Terakhir:** 12 April 2026
 
 ## ✅ Apa yang sudah selesai dilakukan
 
 ### 1. Sistem Desain & Layout (Frontend)
-- **Tema & Warna**: Menggunakan sistem warna kustom (`tred`, `navy`, `success`, `gold`) terintegrasi penuh pada Tailwind v4. Tidak ada konflik dengan default warna bawaan.
-- **Responsivitas**: Tampilan Mobile-first (mirip aplikasi) dengan *sticky header* dan *floating bottom nav*, serta tampilan Desktop yang rapi (layout dua kolom pada halaman utama).
-- **Perbaikan CSS**: Penghapusan kelas *dynamic* Tailwind pada `BannerSlider` dengan mengganti menjadi *inline styles* untuk menjaga keamanan build-time. Penambahan `overflow-x-hidden` untuk membatasi pergeseran horizontal layar mobile.
-- **Favicon Terpasang**: Konfigurasi `public/favicon/` dengan `favicon.svg` dan manifest Web / PWA yang terhubung lewat file layout utama.
+- **Tema & Warna**: Menggunakan sistem warna kustom (`tred`, `navy`, `success`, `gold`) terintegrasi penuh pada Tailwind v4.
+- **Responsivitas**: Tampilan Mobile-first (mirip aplikasi) dengan *sticky header* dan *floating bottom nav*, serta tampilan Desktop dua kolom pada halaman utama.
+- **Perbaikan CSS**: Penghapusan kelas dynamic Tailwind pada `BannerSlider` dengan inline styles. Penambahan `overflow-x-hidden` untuk membatasi pergeseran horizontal layar mobile.
+- **Favicon Terpasang**: Konfigurasi `public/favicon/` dengan `favicon.svg` dan manifest Web/PWA.
+- **Animasi Tambahan**: `slide-right` keyframe untuk admin mobile sidebar.
 
 ### 2. Peningkatan Flow & Rebranding All-Operator (Frontend)
-- **Rebranding Operator**: Mengubah kalimat "Pulsa Telkomsel" menjadi "Semua Operator". Form checkout kini bisa membaca Provider/operator (Telkomsel, Indosat, XL, Tri, Axis, Smartfren) dari 10-13 digit nomor HP secara otomatis menyesuaikan format.
-- **Auto-Scroll UX**: Implementasi gulir otomatis (via `useRef`) antara Input Produk -> Nomor Tujuan -> Metode Bayar pada layar Mobile guna memanjakan user tanpa manual scrolling.
-- **Update Mobile UX Checkout (11 April 2026)**: Tab kategori produk pada mobile sudah dipindahkan ke section **Semua Produk**, tepat di bawah banner **Promo Spesial Bulan Ini** dan sebelum daftar produk.
-- **Perbaikan Auto-Scroll Checkout**: Setelah memilih produk, auto-scroll ke input nomor HP kini memakai offset mobile agar field tidak tertutup sticky header. Auto-scroll dari nomor HP ke metode pembayaran dikunci sampai nomor valid mencapai 12 digit.
-- **Deteksi Provider**: Keterangan provider tampil setelah nomor siap diproses, termasuk Telkomsel, byU, XL, Indosat, Smartfren, Three, Axis, dan operator lain sesuai prefix yang tersedia.
-- **Logo SVG Metode Bayar**: Komponen terpisah `PaymentLogos.js` khusus untuk me-render logo SVG (Qris, GoPay, OVO, DANA, ShopeePay, dsb) demi kredibilitas tampilan (menggantikan logo tulisan/emoji lama).
+- **Rebranding Operator**: Mengubah kalimat "Pulsa Telkomsel" menjadi "Semua Operator". Form checkout membaca Provider secara otomatis dari 10-13 digit nomor HP.
+- **Auto-Scroll UX**: Gulir otomatis (via `useRef`) antara Input Produk → Nomor Tujuan pada layar mobile.
+- **Tab Kategori Mobile**: Dipindahkan ke section Semua Produk, tepat di bawah banner Promo Spesial Bulan Ini.
+- **Deteksi Provider**: Keterangan provider tampil setelah nomor valid (Telkomsel, byU, XL, Indosat, Smartfren, Three, Axis).
+- **Logo SVG Metode Bayar**: Komponen terpisah `PaymentLogos.js` untuk render logo SVG (QRIS, GoPay, OVO, DANA, ShopeePay).
 
 ### 3. Komponen & Halaman (Frontend)
-- **Komponen Utama**: `ProductCard` (termasuk hover state & bayangan kartu terpisah), `Header`, `BottomNav`, `CategoryTabs`, `BannerSlider`, dan `FlashSaleBanner` seluruhnya dirapikan.
+- **Komponen Utama**: `ProductCard`, `Header`, `BottomNav`, `CategoryTabs`, `BannerSlider`, `FlashSaleBanner`, `Sidebar`, `PaymentLogos`.
 - **Daftar Halaman Selesai**:
-  - `HomePage` (/)
-  - `ProductPage` (/product/[id]) — mendukung Next.js 15 parameters dengan fungsi `use(params)`. Termasuk kelancaran express checkout.
-  - `PromoPage` (/promo)
-  - `HistoryPage` (/history)
-  - `AccountPage` (/account)
-  - `Order Tracking` (/order/[id]) — melacak invoice spesifik.
+  - `HomePage` (/) — data dari API database
+  - `ProductPage` (/product/[id]) — data dari API database, 3-step checkout
+  - `PromoPage` (/promo) — data dari API database
+  - `HistoryPage` (/history) — pencarian pesanan via API
+  - `AccountPage` (/account) — placeholder (belum fungsional)
+  - `Order Tracking` (/order/[id]) — auto-check status Midtrans
 
 ### 4. Setup Database (Backend)
-- Stack: **SQLite** via `better-sqlite3` dengan **Drizzle ORM**. Konfigurasi WAL mode untuk concurrency.
-- **Schema**: Terdiri atas `categories`, `products`, `orders`, `payments`, dan `gateway_settings`.
-- **Seed Script**: Tersedia script `src/db/seed.mjs` untuk menyuntikkan (masukkan) data awal produk.
-- Konfigurasi pengecualian modul natif pada `next.config.mjs` untuk menghindari error SSR/bundling dari `better-sqlite3`.
+- Stack: **SQLite** via `better-sqlite3` dengan **Drizzle ORM**. WAL mode untuk concurrency.
+- **Schema**: `categories`, `products`, `orders`, `payments`, `gateway_settings`.
+- **Seed Script**: `src/db/seed.mjs` — 4 kategori, 29 produk, 10 dummy orders, 8 dummy payments, 2 gateway settings.
+- Konfigurasi `serverExternalPackages` pada `next.config.mjs` untuk `better-sqlite3`.
 
-### 5. API Routes & Automation
-- **Produk & Kategori**: GET untuk merender semua koleksi dengan pendukung fitur pencarian.
-- **Sistem Pembayaran / Midtrans**: Terhubung dengan Endpoint POST `/api/checkout` sebagai pembuatan *Snap Token* serta POST `/api/webhook/midtrans` sebagai *callback* pembaruan status pembayaran otomatis.
-- **Checkout multi-operator**: Endpoint `api/checkout` sudah tidak lagi terkunci ke awalan 0812 (Telkomsel), namun terbuka untuk prefix Indosat, XL, Axis, dll.
-- **Pemberitahuan**: Pengiriman pemberitahuan otomatis ke WA pelanggan berhasil digabungkan memanfaatkan antarmuka **WAHA (WhatsApp API)**.
-- **Deploy Script VPS**: Pembuatan automasi skrip `deploy.sh` berisi tahapan (*git fetch*, *install dependency*, *build npm*, lalu *pm2 restart*) untuk mengefisiensi perputaran sinkronasi (deployment) VPS.
-- **Deploy Main Terbaru**: Perubahan mobile kategori dan auto-scroll checkout sudah digabung ke branch `main`; deploy VPS cukup menjalankan `bash deploy.sh` dari `/var/www/telkostore`.
+### 5. API Routes & Automation (Public)
+- **Produk & Kategori**: `GET /api/products` (filter: category, promo, flash_sale) dan `GET /api/categories`.
+- **Checkout**: `POST /api/checkout` — buat order + Midtrans Snap Token (multi-operator, tanpa pilih metode bayar).
+- **Webhook Midtrans**: `POST /api/webhook/midtrans` — callback status pembayaran otomatis + WA notifikasi.
+- **Cek Status Midtrans**: `POST /api/orders/[id]/check` — langsung query Midtrans API untuk sinkronisasi status (solusi untuk webhook unreachable di localhost).
+- **Order**: `GET /api/orders/[id]` (detail pesanan) dan `GET /api/orders/search` (cari via invoice/HP).
+- **Notifikasi WA**: Terintegrasi WAHA (WhatsApp API) — notif otomatis saat pesanan dibuat dan saat pembayaran berhasil.
+- **Deploy Script VPS**: `deploy.sh` (git fetch → install → build → pm2 restart).
+
+### 6. Admin Dashboard (12 April 2026) ✨
+- **Admin Auth**: Middleware (`src/middleware.js`) proteksi `/admin/*` dan `/api/admin/*` via cookie. Login dengan secret key (`ADMIN_SECRET`).
+- **Admin Login**: `/admin/login` — form input kunci admin.
+- **Dashboard**: `/admin` — total produk, total pesanan, revenue, pesanan hari ini, recent orders.
+- **Kelola Produk**: `/admin/produk` — tabel CRUD, modal form tambah/edit, search, filter kategori, toggle aktif/nonaktif, soft-delete.
+- **Kelola Pesanan**: `/admin/pesanan` — daftar orders expandable, filter status (pending/paid/processing/completed/failed), update status inline + WA notifikasi otomatis.
+- **Pengaturan**: `/admin/pengaturan` — konfigurasi Midtrans (server key, client key, sandbox/production toggle), konfigurasi WAHA (API URL, API key).
+
+### 7. Admin API Routes (12 April 2026) ✨
+| Endpoint | Method | Fungsi |
+|---|---|---|
+| `/api/admin/auth` | POST | Login admin (set cookie) |
+| `/api/admin/stats` | GET | Dashboard statistics |
+| `/api/admin/products` | GET, POST | List/Create produk |
+| `/api/admin/products/[id]` | PUT, DELETE | Update/Soft-delete produk |
+| `/api/admin/orders` | GET | List orders + pagination + filter |
+| `/api/admin/orders/[id]` | GET, PUT | Detail/Update status pesanan |
+| `/api/admin/settings` | GET, PUT | Gateway settings (upsert) |
+
+### 8. Shared Backend Helpers (12 April 2026) ✨
+- **`src/lib/whatsapp.js`**: `sendWhatsAppNotification()` + `formatRupiahServer()` — terpusat, digunakan oleh checkout, webhook, dan admin order update.
+- **`src/lib/midtrans.js`**: `createSnapClient()` + `verifySignature()` — terpusat untuk semua Midtrans API calls.
+
+### 9. Frontend Migrasi ke Database API (12 April 2026) ✨
+- **HomePage** (`/`) — sebelumnya import dari `@/data/products.js` (mock data), sekarang `fetch("/api/products")` + `fetch("/api/categories")`. Loading skeleton ditambahkan.
+- **ProductPage** (`/product/[id]`) — sebelumnya `getProductById()` dari mock, sekarang `fetch("/api/products/${id}")`. Checkout disederhanakan menjadi **3 langkah** (Produk → No. HP → Konfirmasi). Pilihan metode bayar dihapus karena Midtrans Snap sudah handle.
+- **PromoPage** (`/promo`) — sebelumnya `getPromoProducts()` dari mock, sekarang `fetch("/api/products?promo=true")`.
+- **Order Page** (`/order/[id]`) — ditambahkan auto-check Midtrans status saat user kembali dari pembayaran + tombol "Sudah Bayar? Cek Status".
+
+### 10. Login Google & Facebook — OAuth (12 April 2026) ✨
+- **Stack**: Auth.js v5 (`next-auth@beta`) dengan JWT strategy.
+- **Provider**: Google OAuth 2.0 + Facebook Login. Credential diisi via `.env.local` (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `FACEBOOK_CLIENT_ID`, `FACEBOOK_CLIENT_SECRET`).
+- **Auth Config**: `src/auth.js` — upsert user ke tabel `users` saat pertama kali login, attach user ID ke JWT token.
+- **API Route**: `src/app/api/auth/[...nextauth]/route.js` — handler NextAuth (signin, signout, callback).
+- **Session Provider**: `src/components/AuthProvider.js` — wrapper `SessionProvider` di root layout agar `useSession` berfungsi di semua halaman.
+- **Account Page**: `/account` — dua tampilan:
+  - **Belum login**: Tombol "Masuk dengan Google" & "Masuk dengan Facebook" + akses tamu (tracking link).
+  - **Sudah login**: Profil user (foto, nama, email), menu navigasi, daftar pesanan terakhir, tombol logout dengan konfirmasi.
+- **User Orders API**: `GET /api/user/orders` — menampilkan pesanan milik user yang login (berdasarkan `userId`).
+- **Database**: Tabel `users` baru (id, name, email, image, phone, provider, provider_id, created_at).
+- **Env Vars Baru**: `AUTH_SECRET`, `AUTH_TRUST_HOST`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `FACEBOOK_CLIENT_ID`, `FACEBOOK_CLIENT_SECRET`.
 
 ---
 
-## 🛠️ Langkah Lanjutan (Next Session)
+## 🛠️ Langkah Lanjutan
 
-Jika proyek akan dilanjutkan pada sesi selanjutnya, berikut yang mesti diprioritaskan:
+1. **Buat OAuth App Google & Facebook**:
+   - Google: [Google Cloud Console](https://console.cloud.google.com/) → Credentials → OAuth 2.0 Client ID. Redirect URI: `https://telko.store/api/auth/callback/google`.
+   - Facebook: [Facebook Developers](https://developers.facebook.com/) → Facebook Login. Redirect URI: `https://telko.store/api/auth/callback/facebook`.
+   - Isi Client ID & Secret di `.env.local` dan `.env.local` di VPS.
 
-1. **Test Fitur Callback/Webhook Pembayaran (Midtrans):**
-   Pastikan Ngrok atau webhook public pada VPS berjalan untuk menerima notifikasi dari Midtrans sehingga order.status berubah menjadi `paid` pasca kesuksesan pembelian.
+2. **Webhook Midtrans Production**:
+   Pastikan webhook URL production (`https://telko.store/api/webhook/midtrans`) terdaftar di Midtrans Dashboard agar status pesanan berubah otomatis tanpa perlu manual check.
 
-2. **Integrasi Admin / Dashboard Spesifik (Optional)**:
-   Membangun sisi UI Admin (seperti halaman '/admin') guna melakukan kontrol produk secara real-time. Saat ini masih dikontrol melalui `products.js` (komponen tampilan manual) maupun SQLite langsung.
+3. **Perluasan Katalog Produk**:
+   Melengkapi data produk tambahan (paket spesifik Telkomsel, Indosat, XL, dll) melalui admin dashboard.
 
-3. **Perluasan Seed Database**:
-   Melengkapi katalog data base produk tambahan (terutama paket spesifik milik Telkomsel / Indosat / XL).
+4. **Integrasi Fulfillment API**:
+   Menghubungkan dengan provider (Digipos / API reseller) untuk pengiriman pulsa & paket data otomatis setelah pembayaran berhasil.
+
+---
+
+## 📁 Struktur File Utama
+
+```
+telko.store/
+├── src/
+│   ├── middleware.js                  # Admin auth middleware
+│   ├── lib/
+│   │   ├── utils.js                   # formatRupiah, operator detection
+│   │   ├── whatsapp.js                # Shared WA notification helper
+│   │   └── midtrans.js                # Shared Midtrans helper
+│   ├── db/
+│   │   ├── schema.js                  # Drizzle ORM schema
+│   │   ├── index.js                   # DB connection singleton
+│   │   └── seed.mjs                   # Full seed (products + dummy orders)
+│   ├── data/
+│   │   └── products.js                # Legacy mock data (tidak lagi diimport)
+│   ├── auth.js                        # Auth.js v5 config (Google + Facebook)
+│   ├── components/                    # 9 komponen UI (+ AuthProvider)
+│   ├── app/
+│   │   ├── page.js                    # Homepage (API-driven)
+│   │   ├── product/[id]/page.js       # Product detail + 3-step checkout
+│   │   ├── promo/page.js              # Promo page (API-driven)
+│   │   ├── history/page.js            # Order search
+│   │   ├── account/page.js            # Login Google/Facebook + Profil
+│   │   ├── order/[id]/page.js         # Order tracking + Midtrans check
+│   │   ├── admin/                     # Admin dashboard (5 pages)
+│   │   │   ├── layout.js
+│   │   │   ├── page.js                # Dashboard overview
+│   │   │   ├── login/page.js
+│   │   │   ├── produk/page.js         # CRUD produk
+│   │   │   ├── pesanan/page.js        # Manajemen pesanan
+│   │   │   └── pengaturan/page.js     # Gateway settings
+│   │   └── api/
+│   │       ├── checkout/route.js
+│   │       ├── webhook/midtrans/route.js
+│   │       ├── products/route.js
+│   │       ├── categories/route.js
+│   │       ├── orders/[id]/route.js
+│   │       ├── orders/[id]/check/route.js
+│   │       ├── orders/search/route.js
+│   │       ├── auth/[...nextauth]/route.js  # NextAuth handler
+│   │       ├── user/orders/route.js   # User's orders
+│   │       └── admin/                 # Admin API (7 routes)
+├── .env.local                         # Environment variables
+├── deploy.sh                          # VPS deploy script
+└── telko.db                           # SQLite database
+```

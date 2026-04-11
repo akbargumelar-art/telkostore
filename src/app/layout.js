@@ -1,6 +1,7 @@
 import "./globals.css";
 import Header from "@/components/Header";
 import BottomNav from "@/components/BottomNav";
+import AuthProvider from "@/components/AuthProvider";
 
 export const metadata = {
   title: "Telko.Store — Beli Pulsa & Paket Data Semua Operator Murah",
@@ -38,9 +39,11 @@ export default function RootLayout({ children }) {
         <meta name="theme-color" content="#ED0226" />
       </head>
       <body className="min-h-screen bg-gray-50 font-sans antialiased overflow-x-hidden">
-        <Header />
-        <main className="safe-bottom">{children}</main>
-        <BottomNav />
+        <AuthProvider>
+          <Header />
+          <main className="safe-bottom">{children}</main>
+          <BottomNav />
+        </AuthProvider>
       </body>
     </html>
   );
