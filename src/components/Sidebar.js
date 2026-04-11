@@ -11,7 +11,7 @@ export default function Sidebar({ activeCategory, onCategoryChange }) {
         <div className="gradient-navy px-5 py-4">
           <h2 className="text-white font-bold text-base">Kategori Produk</h2>
           <p className="text-white/60 text-xs mt-0.5">
-            Pilih kategori produk Telkomsel
+            Pilih kategori produk
           </p>
         </div>
 

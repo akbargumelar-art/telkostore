@@ -38,7 +38,7 @@ echo ""
 # 4. Restart aplikasi (PM2)
 if command -v pm2 &> /dev/null; then
   echo "🔄 Restarting PM2 process..."
-  pm2 restart telkostore --update-env 2>/dev/null || pm2 start npm --name "telkostore" -- start
+  pm2 restart telkostore-app --update-env 2>/dev/null || pm2 start npm --name "telkostore-app" -- start
   echo "✅ PM2 restarted"
 else
   echo "⚠️  PM2 tidak terdeteksi. Restart manual diperlukan."
