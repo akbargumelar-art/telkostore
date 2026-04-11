@@ -42,14 +42,6 @@ export default function HomePage() {
           {/* Banner Slider */}
           <BannerSlider />
 
-          {/* Category Tabs (mobile only) */}
-          <div className="overflow-hidden -mx-4">
-            <CategoryTabs
-              activeCategory={activeCategory}
-              onCategoryChange={setActiveCategory}
-            />
-          </div>
-
           {/* Flash Sale Section */}
           {(activeCategory === "all" ||
             flashSaleProducts.some(
@@ -104,8 +96,16 @@ export default function HomePage() {
             </Link>
           </section>
 
+          {/* Category Tabs (mobile only) */}
+          <div className="overflow-hidden -mx-4 mt-4 md:mt-0">
+            <CategoryTabs
+              activeCategory={activeCategory}
+              onCategoryChange={setActiveCategory}
+            />
+          </div>
+
           {/* Product Grid */}
-          <section className="mt-6 md:mt-8" id="beli">
+          <section className="mt-3 md:mt-8" id="beli">
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h2 className="text-navy font-extrabold text-lg md:text-xl flex items-center gap-2">

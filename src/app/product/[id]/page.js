@@ -23,6 +23,8 @@ import {
   Lock,
 } from "lucide-react";
 
+const PHONE_READY_LENGTH = 12;
+
 export default function ProductPage({ params }) {
   const { id } = use(params);
 
@@ -38,6 +40,7 @@ export default function ProductPage({ params }) {
   const phoneRef = useRef(null);
   const paymentRef = useRef(null);
   const summaryRef = useRef(null);
+  const phoneAutoScrolledRef = useRef(false);
 
   // Auto-scroll helper (only on mobile)
   const scrollToRef = useCallback((ref) => {
@@ -79,13 +82,27 @@ export default function ProductPage({ params }) {
   );
 
   const phoneValid = isValidIndonesianNumber(phoneNumber);
-  const detectedOperator = phoneValid ? getOperatorName(phoneNumber) : null;
+  const phoneReadyForPayment =
+    phoneNumber.length >= PHONE_READY_LENGTH && phoneValid;
+  const detectedOperator = phoneReadyForPayment
+    ? getOperatorName(phoneNumber)
+    : null;
 
   const handlePhoneChange = (e) => {
     const value = e.target.value.replace(/\D/g, "");
     setPhoneNumber(value);
-    if (value.length >= 10 && isValidIndonesianNumber(value)) {
-      setCurrentStep(3);
+
+    if (value.length < PHONE_READY_LENGTH) {
+      phoneAutoScrolledRef.current = false;
+      return;
+    }
+
+    if (
+      isValidIndonesianNumber(value) &&
+      !phoneAutoScrolledRef.current
+    ) {
+      phoneAutoScrolledRef.current = true;
+      setCurrentStep((step) => Math.max(step, 3));
       scrollToRef(paymentRef);
     }
   };
@@ -392,7 +409,7 @@ export default function ProductPage({ params }) {
                   {phoneValid && detectedOperator && (
                     <p className="text-success text-[11px] mt-1.5 flex items-center gap-1">
                       <CheckCircle2 size={12} />
-                      Nomor {detectedOperator} terverifikasi ✓
+                      Provider: {detectedOperator} terverifikasi
                     </p>
                   )}
                 </div>

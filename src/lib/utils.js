@@ -20,9 +20,12 @@ export function calculateDiscount(original, discounted) {
 
 // All Indonesian mobile operator prefixes
 const operatorPrefixes = {
+  byU: [
+    "0851",
+  ],
   Telkomsel: [
     "0811", "0812", "0813", "0821", "0822", "0823",
-    "0851", "0852", "0853",
+    "0852", "0853",
   ],
   Indosat: [
     "0814", "0815", "0816", "0855", "0856", "0857", "0858",
@@ -33,7 +36,7 @@ const operatorPrefixes = {
   Axis: [
     "0831", "0832", "0833", "0838",
   ],
-  Tri: [
+  Three: [
     "0895", "0896", "0897", "0898", "0899",
   ],
   Smartfren: [
