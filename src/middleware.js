@@ -8,9 +8,9 @@ import { NextResponse } from "next/server";
 export function middleware(request) {
   const { pathname } = request.nextUrl;
 
-  // Only protect /admin/* and /api/admin/* routes
+  // Only protect /admin/* and /api/admin/* routes (exclude login + auth endpoints)
   const isAdminPage = pathname.startsWith("/admin") && !pathname.startsWith("/admin/login");
-  const isAdminApi = pathname.startsWith("/api/admin");
+  const isAdminApi = pathname.startsWith("/api/admin") && !pathname.startsWith("/api/admin/auth");
 
   if (!isAdminPage && !isAdminApi) {
     return NextResponse.next();
