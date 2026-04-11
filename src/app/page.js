@@ -42,14 +42,6 @@ export default function HomePage() {
           {/* Banner Slider */}
           <BannerSlider />
 
-          {/* Category Tabs (mobile only) */}
-          <div className="overflow-hidden -mx-4">
-            <CategoryTabs
-              activeCategory={activeCategory}
-              onCategoryChange={setActiveCategory}
-            />
-          </div>
-
           {/* Flash Sale Section */}
           {(activeCategory === "all" ||
             flashSaleProducts.some(
@@ -125,6 +117,14 @@ export default function HomePage() {
                   {filteredProducts.length} produk tersedia
                 </p>
               </div>
+            </div>
+
+            {/* Category Tabs (mobile only) */}
+            <div className="overflow-hidden -mx-4 mb-4 md:hidden">
+              <CategoryTabs
+                activeCategory={activeCategory}
+                onCategoryChange={setActiveCategory}
+              />
             </div>
 
             {/* Category Sub-sections for "All" view */}
