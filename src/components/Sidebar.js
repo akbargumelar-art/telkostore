@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { categories } from "@/data/products";
+import { HelpCircle, MessageCircle } from "lucide-react";
 
 export default function Sidebar({ activeCategory, onCategoryChange }) {
   return (
@@ -67,7 +68,7 @@ export default function Sidebar({ activeCategory, onCategoryChange }) {
 
         {/* Info section */}
         <div className="px-4 pb-4">
-          <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
+          <div className="bg-gray-50 rounded-xl p-4 border border-gray-100 mb-3">
             <p className="text-xs font-semibold text-navy mb-1">
               💡 Express Checkout
             </p>
@@ -75,6 +76,24 @@ export default function Sidebar({ activeCategory, onCategoryChange }) {
               Beli langsung tanpa daftar akun. Pilih produk, masukkan nomor HP,
               bayar, selesai!
             </p>
+          </div>
+
+          {/* Quick links */}
+          <div className="space-y-1.5">
+            <Link
+              href="/faq"
+              className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-gray-500 hover:bg-gray-50 hover:text-tred transition-all text-sm font-medium"
+            >
+              <HelpCircle size={16} />
+              FAQ
+            </Link>
+            <Link
+              href="/contact"
+              className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-gray-500 hover:bg-gray-50 hover:text-tred transition-all text-sm font-medium"
+            >
+              <MessageCircle size={16} />
+              Hubungi Kami
+            </Link>
           </div>
         </div>
       </div>

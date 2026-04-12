@@ -14,10 +14,62 @@ import {
   CheckCircle2,
   ChevronRight,
   Lock,
+  Gamepad2,
+  User,
+  Server,
+  Globe,
 } from "lucide-react";
 
 const MOBILE_SCROLL_OFFSET = 88;
-const PHONE_READY_LENGTH = 12;
+const MIN_PHONE_LENGTH = 10;
+const AUTO_SCROLL_LENGTH = 12;
+
+// Game ID field configuration per game
+const GAME_ID_CONFIG = {
+  "Mobile Legends": {
+    fields: [
+      { key: "userId", label: "User ID", placeholder: "Contoh: 123456789", type: "number", icon: User },
+      { key: "serverId", label: "Server ID", placeholder: "Contoh: 8123", type: "number", icon: Server },
+    ],
+    hint: "Buka game → Profile → di bawah username tertera User ID dan Server ID (Zone ID).",
+  },
+  "Free Fire": {
+    fields: [
+      { key: "playerId", label: "Player ID", placeholder: "Contoh: 1234567890", type: "number", icon: User },
+    ],
+    hint: "Buka game → Profile → ID tertera di kanan atas nama kamu.",
+  },
+  "PUBG Mobile": {
+    fields: [
+      { key: "playerId", label: "Player ID", placeholder: "Contoh: 51234567890", type: "number", icon: User },
+    ],
+    hint: "Buka game → Setting → Basic → Character ID.",
+  },
+  "Genshin Impact": {
+    fields: [
+      { key: "uid", label: "UID", placeholder: "Contoh: 8123456789", type: "number", icon: User },
+      {
+        key: "server", label: "Server", type: "select", icon: Globe,
+        options: [
+          { value: "", label: "Pilih Server" },
+          { value: "Asia", label: "Asia" },
+          { value: "America", label: "America" },
+          { value: "Europe", label: "Europe" },
+          { value: "TW/HK/MO", label: "TW, HK, MO" },
+        ],
+      },
+    ],
+    hint: "Buka game → Paimon Menu → Settings → Account → UID tertera di kanan bawah.",
+  },
+};
+
+// Default config for unknown games
+const DEFAULT_GAME_CONFIG = {
+  fields: [
+    { key: "gameId", label: "Game ID", placeholder: "Masukkan ID akun game kamu", type: "text", icon: User },
+  ],
+  hint: "Masukkan ID akun game yang tertera di profil game kamu.",
+};
 
 export default function ProductPage({ params }) {
   const { id } = use(params);
@@ -29,6 +81,7 @@ export default function ProductPage({ params }) {
 
   const [selectedVariant, setSelectedVariant] = useState(id);
   const [phoneNumber, setPhoneNumber] = useState("");
+  const [gameIdData, setGameIdData] = useState({});
   const [currentStep, setCurrentStep] = useState(1);
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [checkoutError, setCheckoutError] = useState("");
@@ -85,10 +138,10 @@ export default function ProductPage({ params }) {
     fetchProduct();
   }, [id]);
 
-  // 3-step checkout: Produk → No. HP → Konfirmasi
+  // 3-step checkout: Produk → No. HP / Game ID → Konfirmasi
   const steps = [
     { num: 1, label: "Produk" },
-    { num: 2, label: "No. HP" },
+    { num: 2, label: product?.categoryId === "voucher-game" ? "Akun Game" : "No. HP" },
     { num: 3, label: "Konfirmasi" },
   ];
 
@@ -146,6 +199,12 @@ export default function ProductPage({ params }) {
     );
   }
 
+  // Determine if this is a game voucher product
+  const isGameVoucher = product.categoryId === "voucher-game";
+  const gameConfig = isGameVoucher
+    ? (GAME_ID_CONFIG[product.gameName] || DEFAULT_GAME_CONFIG)
+    : null;
+
   // Compute category info from product
   const categoryName = product.categoryId === "pulsa" ? "Pulsa"
     : product.categoryId === "paket-data" ? "Paket Data"
@@ -169,51 +228,131 @@ export default function ProductPage({ params }) {
 
   const phoneValid = isValidIndonesianNumber(phoneNumber);
   const phoneReadyForPayment =
-    phoneNumber.length >= PHONE_READY_LENGTH && phoneValid;
+    phoneNumber.length >= MIN_PHONE_LENGTH && phoneValid;
   const detectedOperator = phoneReadyForPayment
     ? getOperatorName(phoneNumber)
     : null;
+
+  // Check if game ID fields are all filled
+  const isGameIdValid = () => {
+    if (!isGameVoucher || !gameConfig) return true;
+    return gameConfig.fields.every((field) => {
+      const val = gameIdData[field.key];
+      return val && val.toString().trim().length > 0;
+    });
+  };
+
+  // Determine if step 2 is complete (ready for step 3)
+  const isStep2Complete = isGameVoucher
+    ? (isGameIdValid() && phoneReadyForPayment)
+    : phoneReadyForPayment;
 
   const handlePhoneChange = (e) => {
     const value = e.target.value.replace(/\D/g, "");
     setPhoneNumber(value);
 
-    const nextPhoneReady =
-      value.length >= PHONE_READY_LENGTH && isValidIndonesianNumber(value);
+    if (isGameVoucher) {
+      // For game vouchers, phone is secondary — check game ID + phone
+      const nextReady = value.length >= MIN_PHONE_LENGTH && isValidIndonesianNumber(value) && isGameIdValid();
+      if (!nextReady) {
+        phoneAutoScrolledRef.current = false;
+        setCurrentStep((step) => (step > 2 ? 2 : step));
+        return;
+      }
+      if (!phoneAutoScrolledRef.current) {
+        phoneAutoScrolledRef.current = true;
+        setCurrentStep(3);
+        scrollToRef(summaryRef);
+      }
+    } else {
+      // For non-game products
+      const nextPhoneReady =
+        value.length >= MIN_PHONE_LENGTH && isValidIndonesianNumber(value);
 
-    if (!nextPhoneReady) {
-      phoneAutoScrolledRef.current = false;
-      setCurrentStep((step) => (step > 2 ? 2 : step));
-      return;
+      if (!nextPhoneReady) {
+        phoneAutoScrolledRef.current = false;
+        setCurrentStep((step) => (step > 2 ? 2 : step));
+        return;
+      }
+
+      // Enable step 3 when phone is valid (min 10 digit)
+      if (currentStep < 3) {
+        setCurrentStep(3);
+      }
+
+      // Auto-scroll only when phone reaches 12 digits
+      if (value.length >= AUTO_SCROLL_LENGTH && !phoneAutoScrolledRef.current) {
+        phoneAutoScrolledRef.current = true;
+        scrollToRef(summaryRef);
+      }
     }
+  };
 
-    if (!phoneAutoScrolledRef.current) {
+  const handleGameIdChange = (key, value) => {
+    const newData = { ...gameIdData, [key]: value };
+    setGameIdData(newData);
+
+    // Check if all game fields valid + phone valid
+    const allFieldsFilled = gameConfig.fields.every((field) => {
+      const v = field.key === key ? value : newData[field.key];
+      return v && v.toString().trim().length > 0;
+    });
+    const phoneReady = phoneNumber.length >= MIN_PHONE_LENGTH && isValidIndonesianNumber(phoneNumber);
+
+    if (allFieldsFilled && phoneReady && !phoneAutoScrolledRef.current) {
       phoneAutoScrolledRef.current = true;
       setCurrentStep(3);
       scrollToRef(summaryRef);
+    } else if (!allFieldsFilled || !phoneReady) {
+      phoneAutoScrolledRef.current = false;
+      setCurrentStep((step) => (step > 2 ? 2 : step));
     }
   };
 
   const handleSelectVariant = (variantId) => {
     setSelectedVariant(variantId);
+    // Reset game ID data when switching variant (different game may need different fields)
+    const newProduct = allVariants.find((p) => p.id === variantId);
+    if (newProduct && newProduct.gameName !== selectedProduct.gameName) {
+      setGameIdData({});
+      phoneAutoScrolledRef.current = false;
+    }
     if (currentStep < 2) setCurrentStep(2);
     scrollToRef(phoneRef);
   };
 
+  // Format game data for targetData
+  const formatGameTargetData = () => {
+    if (!isGameVoucher) return phoneNumber;
+    const parts = gameConfig.fields.map((f) => `${f.label}: ${gameIdData[f.key] || ""}`);
+    return parts.join(" | ");
+  };
+
   const handleCheckout = async () => {
-    if (isCheckingOut || !phoneReadyForPayment) return;
+    if (isCheckingOut || !isStep2Complete) return;
 
     setIsCheckingOut(true);
     setCheckoutError("");
 
     try {
+      const bodyData = {
+        productId: selectedVariant,
+        phoneNumber,
+      };
+
+      // Include game data if it's a game voucher
+      if (isGameVoucher) {
+        bodyData.gameData = {
+          gameName: selectedProduct.gameName,
+          ...gameIdData,
+        };
+        bodyData.targetData = formatGameTargetData();
+      }
+
       const res = await fetch("/api/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          productId: selectedVariant,
-          phoneNumber,
-        }),
+        body: JSON.stringify(bodyData),
       });
 
       const data = await res.json();
@@ -420,7 +559,7 @@ export default function ProductPage({ params }) {
               </div>
 
               <div className="p-5 space-y-5">
-                {/* Step 2: Phone Number */}
+                {/* Step 2: Game ID (for game vouchers) + Phone Number */}
                 <div ref={phoneRef}>
                   <div className="flex items-center gap-2 mb-3">
                     <div
@@ -433,10 +572,98 @@ export default function ProductPage({ params }) {
                       {currentStep > 2 ? <Check size={12} /> : "2"}
                     </div>
                     <h3 className="font-bold text-sm text-navy">
-                      Nomor HP Tujuan
+                      {isGameVoucher ? "Data Akun Game" : "Nomor HP Tujuan"}
                     </h3>
                   </div>
 
+                  {/* Game ID Fields (only for game vouchers) */}
+                  {isGameVoucher && gameConfig && (
+                    <div className="mb-4 space-y-3">
+                      {/* Game name badge */}
+                      <div className="flex items-center gap-2 bg-navy/5 rounded-lg px-3 py-2">
+                        <Gamepad2 size={14} className="text-navy" />
+                        <span className="text-xs font-semibold text-navy">{selectedProduct.gameName}</span>
+                      </div>
+
+                      {gameConfig.fields.map((field) => {
+                        const FieldIcon = field.icon;
+                        if (field.type === "select") {
+                          return (
+                            <div key={field.key}>
+                              <label className="text-xs font-medium text-gray-600 mb-1 block">{field.label}</label>
+                              <div className="relative">
+                                <FieldIcon
+                                  size={16}
+                                  className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400"
+                                />
+                                <select
+                                  value={gameIdData[field.key] || ""}
+                                  onChange={(e) => handleGameIdChange(field.key, e.target.value)}
+                                  className={`w-full pl-10 pr-4 py-3 border-2 rounded-xl text-sm font-medium transition-all focus:outline-none appearance-none bg-white ${
+                                    !gameIdData[field.key]
+                                      ? "border-gray-200 focus:border-tred focus:ring-2 focus:ring-tred/10"
+                                      : "border-success bg-success-light/40 focus:ring-2 focus:ring-success/20"
+                                  }`}
+                                >
+                                  {field.options.map((opt) => (
+                                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                  ))}
+                                </select>
+                              </div>
+                            </div>
+                          );
+                        }
+                        return (
+                          <div key={field.key}>
+                            <label className="text-xs font-medium text-gray-600 mb-1 block">{field.label}</label>
+                            <div className="relative">
+                              <FieldIcon
+                                size={16}
+                                className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400"
+                              />
+                              <input
+                                type={field.type === "number" ? "tel" : "text"}
+                                value={gameIdData[field.key] || ""}
+                                onChange={(e) => {
+                                  const val = field.type === "number"
+                                    ? e.target.value.replace(/\D/g, "")
+                                    : e.target.value;
+                                  handleGameIdChange(field.key, val);
+                                }}
+                                placeholder={field.placeholder}
+                                className={`w-full pl-10 pr-10 py-3 border-2 rounded-xl text-sm font-medium transition-all focus:outline-none ${
+                                  !gameIdData[field.key]
+                                    ? "border-gray-200 focus:border-tred focus:ring-2 focus:ring-tred/10"
+                                    : "border-success bg-success-light/40 focus:ring-2 focus:ring-success/20"
+                                }`}
+                              />
+                              {gameIdData[field.key] && (
+                                <div className="absolute right-3.5 top-1/2 -translate-y-1/2">
+                                  <CheckCircle2 size={18} className="text-success" />
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+
+                      {/* Game ID hint */}
+                      <div className="bg-gold-light/60 border border-gold/30 rounded-lg p-2.5">
+                        <p className="text-[11px] text-yellow-800 leading-relaxed">
+                          💡 {gameConfig.hint}
+                        </p>
+                      </div>
+
+                      {/* Divider */}
+                      <div className="flex items-center gap-3 pt-1">
+                        <div className="flex-1 h-px bg-gray-200"></div>
+                        <span className="text-[10px] text-gray-400 font-medium">Nomor HP untuk Notifikasi</span>
+                        <div className="flex-1 h-px bg-gray-200"></div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Phone Number Input */}
                   <div className="relative">
                     <Phone
                       size={16}
@@ -470,7 +697,7 @@ export default function ProductPage({ params }) {
                   {phoneNumber.length > 0 && !phoneValid && (
                     <p className="text-tred text-[11px] mt-1.5 flex items-center gap-1">
                       <AlertCircle size={12} />
-                      Masukkan nomor HP Indonesia yang valid
+                      Masukkan nomor HP Indonesia yang valid (10-13 digit)
                     </p>
                   )}
                   {phoneValid && detectedOperator && (
@@ -479,13 +706,18 @@ export default function ProductPage({ params }) {
                       Provider: {detectedOperator} terverifikasi
                     </p>
                   )}
+                  {isGameVoucher && (
+                    <p className="text-gray-400 text-[10px] mt-1.5">
+                      Nomor HP digunakan untuk notifikasi status pesanan via WhatsApp.
+                    </p>
+                  )}
                 </div>
 
                 {/* Step 3: Summary & Checkout */}
                 <div
                   ref={summaryRef}
                   className={`transition-opacity duration-300 ${
-                    currentStep >= 3 && phoneReadyForPayment
+                    currentStep >= 3 && isStep2Complete
                       ? "opacity-100"
                       : "opacity-40 pointer-events-none"
                   }`}
@@ -512,13 +744,32 @@ export default function ProductPage({ params }) {
                         {selectedProduct.name}
                       </span>
                     </div>
+                    {isGameVoucher && selectedProduct.gameName && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-500">Game</span>
+                        <span className="font-semibold text-gray-800">
+                          {selectedProduct.gameName}
+                        </span>
+                      </div>
+                    )}
+                    {/* Show game ID data in summary */}
+                    {isGameVoucher && gameConfig && gameConfig.fields.map((field) => (
+                      gameIdData[field.key] && (
+                        <div key={field.key} className="flex justify-between text-sm">
+                          <span className="text-gray-500">{field.label}</span>
+                          <span className="font-semibold text-gray-800">
+                            {gameIdData[field.key]}
+                          </span>
+                        </div>
+                      )
+                    ))}
                     <div className="flex justify-between text-sm">
-                      <span className="text-gray-500">No. Tujuan</span>
+                      <span className="text-gray-500">{isGameVoucher ? "No. HP (notif)" : "No. Tujuan"}</span>
                       <span className="font-semibold text-gray-800">
                         {phoneNumber || "—"}
                       </span>
                     </div>
-                    {detectedOperator && (
+                    {detectedOperator && !isGameVoucher && (
                       <div className="flex justify-between text-sm">
                         <span className="text-gray-500">Operator</span>
                         <span className="font-semibold text-gray-800">
@@ -553,7 +804,7 @@ export default function ProductPage({ params }) {
                     onClick={handleCheckout}
                     disabled={
                       currentStep < 3 ||
-                      !phoneReadyForPayment ||
+                      !isStep2Complete ||
                       isCheckingOut
                     }
                     className="w-full mt-4 gradient-red text-white font-bold text-base py-3.5 rounded-xl shadow-lg shadow-tred/20 hover:opacity-95 transition-opacity btn-ripple disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"

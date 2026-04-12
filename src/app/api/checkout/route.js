@@ -12,7 +12,7 @@ import { createSnapClient } from "@/lib/midtrans";
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { productId, phoneNumber, paymentMethod } = body;
+    const { productId, phoneNumber, paymentMethod, gameData, targetData: customTargetData } = body;
 
     // Validate input
     if (!productId || !phoneNumber) {
@@ -54,6 +54,12 @@ export async function POST(request) {
       );
     }
 
+    // Determine targetData — use game data for voucher games, phone number for others
+    let resolvedTargetData = phoneNumber;
+    if (product.categoryId === "voucher-game" && customTargetData) {
+      resolvedTargetData = customTargetData;
+    }
+
     // Generate IDs
     const now = new Date();
     const datePrefix = now.toISOString().slice(0, 10).replace(/-/g, "");
@@ -82,9 +88,15 @@ export async function POST(request) {
         phone: phoneNumber,
       },
       callbacks: {
-        finish: `${process.env.NEXT_PUBLIC_BASE_URL}/order/${orderId}?token=${guestToken}`,
+        finish: `${process.env.NEXT_PUBLIC_BASE_URL}/payment/finish?order_id=${midtransOrderId}&token=${guestToken}`,
       },
     });
+
+    // Build notes with game data if present
+    let notes = null;
+    if (gameData) {
+      notes = JSON.stringify(gameData);
+    }
 
     // Create order in database
     await db.insert(orders).values({
@@ -94,12 +106,13 @@ export async function POST(request) {
       productPrice: product.price,
       guestPhone: phoneNumber,
       guestToken: guestToken,
-      targetData: phoneNumber,
+      targetData: resolvedTargetData,
       status: "pending",
       paymentMethod: paymentMethod || null,
       snapToken: snapTransaction.token,
       snapRedirectUrl: snapTransaction.redirect_url,
       midtransOrderId: midtransOrderId,
+      notes: notes,
       createdAt: now.toISOString(),
       updatedAt: now.toISOString(),
     });
@@ -110,17 +123,23 @@ export async function POST(request) {
       .set({ stock: product.stock - 1 })
       .where(eq(products.id, product.id));
 
-    // Send WhatsApp - order created
-    sendWhatsAppNotification(
-      phoneNumber,
-      `🛒 *Pesanan Dibuat — Telko.Store*\n\n` +
-      `📦 Produk: ${product.name}\n` +
-      `📱 No. Tujuan: ${phoneNumber}\n` +
+    // Build WA message
+    let waMessage = `🛒 *Pesanan Dibuat — Telko.Store*\n\n` +
+      `📦 Produk: ${product.name}\n`;
+
+    if (product.categoryId === "voucher-game" && gameData) {
+      waMessage += `🎮 Game: ${gameData.gameName || product.gameName}\n`;
+      waMessage += `🆔 Data Akun: ${resolvedTargetData}\n`;
+    }
+
+    waMessage += `📱 No. HP: ${phoneNumber}\n` +
       `💰 Total: ${formatRupiahServer(product.price)}\n\n` +
       `🔗 Bayar sekarang:\n${snapTransaction.redirect_url}\n\n` +
       `📋 Invoice: ${orderId}\n` +
-      `🔑 Lacak pesanan:\n${process.env.NEXT_PUBLIC_BASE_URL}/order/${orderId}?token=${guestToken}`
-    );
+      `🔑 Lacak pesanan:\n${process.env.NEXT_PUBLIC_BASE_URL}/order/${orderId}?token=${guestToken}`;
+
+    // Send WhatsApp - order created
+    sendWhatsAppNotification(phoneNumber, waMessage);
 
     return NextResponse.json({
       success: true,

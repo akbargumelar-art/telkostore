@@ -94,6 +94,50 @@
 - **Profil Admin**: Halaman `/admin/profil` — form ubah kunci admin (validasi old key, min 8 karakter, konfirmasi). Perubahan disimpan di database + `process.env` sehingga berlaku tanpa restart.
 - **Manajemen User**: Halaman `/admin/users` — tabel user OAuth (Google/Facebook) dengan search. Expandable detail menampilkan info user + daftar pesanan. Tombol hapus user dengan konfirmasi modal.
 
+### 12. Perbaikan & Fitur Baru (12 April 2026) ✨
+
+#### a. Fix Validasi Nomor HP
+- **Sebelumnya**: Nomor HP harus 12 digit agar bisa proceed checkout — padahal nomor valid Indonesia bisa 10–13 digit.
+- **Sesudah**: Validasi minimum **10 digit**, checkout bisa dilakukan saat nomor valid. Auto-scroll ke summary tetap trigger di 12 digit agar UX tetap smooth.
+- **Konstanta**: `MIN_PHONE_LENGTH = 10` (proceed checkout) + `AUTO_SCROLL_LENGTH = 12` (trigger auto-scroll).
+
+#### b. Fix Hyperlink Banner CTA
+- Banner slider item "Top Up Sekarang" (voucher game) dan "Lihat Voucher" (voucher internet) sebelumnya hanya navigasi ke query string yang tidak mengubah state kategori.
+- **Sesudah**: BannerSlider menerima prop `onCategoryChange` dari HomePage → CTA category langsung mengubah state kategori + scroll ke section produk `#beli`.
+
+#### c. Halaman FAQ (`/faq`)
+- Halaman FAQ lengkap dengan accordion expandable, dikelompokkan per kategori: Cara Pembelian, Pembayaran, Voucher Game, Refund & Masalah, Keamanan & Privasi.
+- 16 pertanyaan umum lengkap dengan jawaban.
+- CTA ke halaman Contact dan WhatsApp di bagian bawah.
+
+#### d. Halaman Contact (`/contact`)
+- Contact form (Nama, Email, Subjek, Pesan) dengan validasi.
+- Info kontak: WhatsApp, Email, Instagram — dengan hover effect dan external link.
+- Jam operasional: Senin–Jumat, Sabtu, Minggu.
+- Link ke halaman FAQ.
+
+#### e. Halaman Redirect Midtrans (`/payment/finish`)
+- Landing page setelah user selesai bayar di Midtrans.
+- Membaca query params: `order_id`, `status_code`, `transaction_status` → tampilkan status sukses/pending/gagal.
+- Auto-check status via API `/api/orders/[id]/check`.
+- Auto-redirect ke `/order/[id]?token=xxx` setelah 5 detik dengan countdown.
+- Checkout API (`/api/checkout`) callback URL diupdate ke `/payment/finish`.
+
+#### f. Form Game ID untuk Voucher Game
+- Saat checkout produk voucher game, Step 2 menampilkan form **Game ID** sesuai game:
+  - **Mobile Legends**: User ID + Server ID (Zone ID)
+  - **Free Fire**: Player ID
+  - **PUBG Mobile**: Player ID
+  - **Genshin Impact**: UID + Server (dropdown: Asia/America/Europe/TW)
+- Validasi: semua field game wajib diisi + nomor HP tetap wajib (untuk notif WA).
+- Hint info cara menemukan Game ID di tiap game.
+- `targetData` dikirim sebagai `"User ID: xxx | Server ID: yyy"` ke API.
+- Data game disimpan di kolom `notes` order (format JSON).
+
+#### g. Link FAQ & Contact di Navigasi
+- **Desktop Header**: Link "FAQ" dan "Hubungi Kami" ditambahkan di top bar.
+- **Desktop Sidebar**: Quick links FAQ & Contact di bawah section Express Checkout.
+
 ---
 
 ## 🛠️ Langkah Lanjutan
@@ -131,14 +175,17 @@ telko.store/
 │   ├── data/
 │   │   └── products.js                # Legacy mock data (tidak lagi diimport)
 │   ├── auth.js                        # Auth.js v5 config (Google + Facebook)
-│   ├── components/                    # 9 komponen UI (+ AuthProvider)
+│   ├── components/                    # 10 komponen UI (+ AuthProvider)
 │   ├── app/
 │   │   ├── page.js                    # Homepage (API-driven)
-│   │   ├── product/[id]/page.js       # Product detail + 3-step checkout
+│   │   ├── product/[id]/page.js       # Product detail + 3-step checkout + Game ID form
 │   │   ├── promo/page.js              # Promo page (API-driven)
 │   │   ├── history/page.js            # Order search
 │   │   ├── account/page.js            # Login Google/Facebook + Profil
 │   │   ├── order/[id]/page.js         # Order tracking + Midtrans check
+│   │   ├── faq/page.js                # FAQ — accordion per kategori ✨
+│   │   ├── contact/page.js            # Contact — form + info kontak ✨
+│   │   ├── payment/finish/page.js     # Midtrans redirect sukses/gagal ✨
 │   │   ├── admin/                     # Admin dashboard (5 pages)
 │   │   │   ├── layout.js
 │   │   │   ├── page.js                # Dashboard overview
@@ -147,7 +194,7 @@ telko.store/
 │   │   │   ├── pesanan/page.js        # Manajemen pesanan
 │   │   │   └── pengaturan/page.js     # Gateway settings
 │   │   └── api/
-│   │       ├── checkout/route.js
+│   │       ├── checkout/route.js      # Checkout + Game ID support ✨
 │   │       ├── webhook/midtrans/route.js
 │   │       ├── products/route.js
 │   │       ├── categories/route.js

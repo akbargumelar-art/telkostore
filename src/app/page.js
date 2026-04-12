@@ -161,7 +161,7 @@ export default function HomePage() {
           {/* Main content */}
           <div className="flex-1 min-w-0">
             {/* Banner Slider */}
-            <BannerSlider />
+            <BannerSlider onCategoryChange={setActiveCategory} />
 
             {/* Flash Sale Section */}
             {(activeCategory === "all" ||

@@ -165,6 +165,14 @@ export default function Header() {
           <div className="max-w-7xl mx-auto px-6 flex items-center justify-between">
             <span>⚡ Express Checkout — Beli langsung tanpa daftar akun!</span>
             <div className="flex items-center gap-4">
+              <Link href="/faq" className="hover:text-tred-light transition-colors">
+                FAQ
+              </Link>
+              <span className="text-white/40">|</span>
+              <Link href="/contact" className="hover:text-tred-light transition-colors">
+                Hubungi Kami
+              </Link>
+              <span className="text-white/40">|</span>
               <Link href="/history" className="hover:text-tred-light transition-colors">
                 Lacak Pesanan
               </Link>

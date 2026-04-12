@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 const bannerData = [
@@ -12,14 +13,16 @@ const bannerData = [
     bg: "linear-gradient(135deg, #ED0226 0%, #1A1A4E 100%)",
     ctaText: "Beli Sekarang",
     ctaLink: "/product/data-combo-30d",
+    type: "link",
   },
   {
     id: 2,
-    title: "Pulsa Murah Telkomsel",
+    title: "Pulsa Murah Semua Operator",
     subtitle: "Mulai dari Rp6.500 — Proses instan!",
     bg: "linear-gradient(135deg, #1A1A4E 0%, #2D2D6B 100%)",
     ctaText: "Isi Pulsa",
     ctaLink: "/product/pulsa-5k",
+    type: "link",
   },
   {
     id: 3,
@@ -27,7 +30,8 @@ const bannerData = [
     subtitle: "Mobile Legends, Free Fire, PUBG & Genshin",
     bg: "linear-gradient(135deg, #0F0F30 0%, #B8001F 100%)",
     ctaText: "Top Up Sekarang",
-    ctaLink: "/?category=voucher-game",
+    type: "category",
+    categoryId: "voucher-game",
   },
   {
     id: 4,
@@ -35,13 +39,15 @@ const bannerData = [
     subtitle: "25GB hanya Rp85.000 — Diskon 15%!",
     bg: "linear-gradient(135deg, #B8001F 0%, #1A1A4E 100%)",
     ctaText: "Lihat Voucher",
-    ctaLink: "/?category=voucher-internet",
+    type: "category",
+    categoryId: "voucher-internet",
   },
 ];
 
-export default function BannerSlider() {
+export default function BannerSlider({ onCategoryChange }) {
   const [current, setCurrent] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
+  const router = useRouter();
 
   const next = useCallback(() => {
     setCurrent((prev) => (prev + 1) % bannerData.length);
@@ -56,6 +62,22 @@ export default function BannerSlider() {
     const timer = setInterval(next, 5000);
     return () => clearInterval(timer);
   }, [isPaused, next]);
+
+  const handleCategoryCta = (categoryId) => {
+    if (onCategoryChange) {
+      onCategoryChange(categoryId);
+      // Scroll to products section
+      setTimeout(() => {
+        const el = document.getElementById("beli");
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      }, 100);
+    } else {
+      // Fallback: navigate to homepage with category
+      router.push(`/?category=${categoryId}#beli`);
+    }
+  };
 
   return (
     <div
@@ -86,13 +108,23 @@ export default function BannerSlider() {
                 <p className="text-white/80 text-sm md:text-base mb-5">
                   {banner.subtitle}
                 </p>
-                <Link
-                  href={banner.ctaLink}
-                  className="inline-flex items-center gap-2 bg-white text-navy font-bold text-sm px-6 py-2.5 rounded-xl hover:bg-gray-100 transition-colors shadow-lg"
-                >
-                  {banner.ctaText}
-                  <ChevronRight size={16} />
-                </Link>
+                {banner.type === "link" ? (
+                  <Link
+                    href={banner.ctaLink}
+                    className="inline-flex items-center gap-2 bg-white text-navy font-bold text-sm px-6 py-2.5 rounded-xl hover:bg-gray-100 transition-colors shadow-lg"
+                  >
+                    {banner.ctaText}
+                    <ChevronRight size={16} />
+                  </Link>
+                ) : (
+                  <button
+                    onClick={() => handleCategoryCta(banner.categoryId)}
+                    className="inline-flex items-center gap-2 bg-white text-navy font-bold text-sm px-6 py-2.5 rounded-xl hover:bg-gray-100 transition-colors shadow-lg cursor-pointer"
+                  >
+                    {banner.ctaText}
+                    <ChevronRight size={16} />
+                  </button>
+                )}
               </div>
             </div>
           </div>
