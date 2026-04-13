@@ -68,11 +68,20 @@ function getPaymentStatus(statusCode, transactionStatus, customStatus) {
 
 export default function PaymentFinishPage({ searchParams }) {
   const resolvedParams = use(searchParams);
-  const orderId = String(resolvedParams?.order_id || "");
-  const token = String(resolvedParams?.token || "");
-  const statusCode = String(resolvedParams?.status_code || "");
-  const transactionStatus = String(resolvedParams?.transaction_status || "");
-  const customStatus = String(resolvedParams?.status || "");
+
+  // Helper: Midtrans may add duplicate params (e.g. order_id appears twice),
+  // so searchParams values can be arrays. Always take the first value.
+  const getParam = (key) => {
+    const val = resolvedParams?.[key];
+    if (Array.isArray(val)) return val[0] || "";
+    return String(val || "");
+  };
+
+  const orderId = getParam("order_id");
+  const token = getParam("token");
+  const statusCode = getParam("status_code");
+  const transactionStatus = getParam("transaction_status");
+  const customStatus = getParam("status");
 
   const [countdown, setCountdown] = useState(5);
   const [orderData, setOrderData] = useState(null);
