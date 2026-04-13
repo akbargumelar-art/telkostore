@@ -8,6 +8,11 @@ import { nanoid } from "nanoid";
 import { sendWhatsAppNotification, formatRupiahServer } from "@/lib/whatsapp";
 import { verifySignature } from "@/lib/midtrans";
 
+// GET /api/webhook/midtrans — Health check for Midtrans URL verification
+export async function GET() {
+  return NextResponse.json({ success: true, message: "Midtrans webhook endpoint is active" });
+}
+
 export async function POST(request) {
   try {
     const body = await request.json();
