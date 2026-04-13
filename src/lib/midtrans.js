@@ -18,6 +18,17 @@ export function createSnapClient() {
 }
 
 /**
+ * Create a Midtrans Core API client (for transaction.status, etc.)
+ */
+export function createCoreClient() {
+  return new midtransClient.CoreApi({
+    isProduction: process.env.MIDTRANS_IS_PRODUCTION === "true",
+    serverKey: process.env.MIDTRANS_SERVER_KEY,
+    clientKey: process.env.MIDTRANS_CLIENT_KEY,
+  });
+}
+
+/**
  * Verify Midtrans webhook signature
  * @param {string} orderId - Midtrans order_id
  * @param {string} statusCode - HTTP status code from Midtrans

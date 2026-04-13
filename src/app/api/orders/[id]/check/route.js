@@ -4,7 +4,7 @@ import db from "@/db/index.js";
 import { orders, payments, products } from "@/db/schema.js";
 import { eq, and } from "drizzle-orm";
 import { nanoid } from "nanoid";
-import { createSnapClient } from "@/lib/midtrans";
+import { createCoreClient } from "@/lib/midtrans";
 import { sendWhatsAppNotification, formatRupiahServer } from "@/lib/whatsapp";
 
 export async function POST(request, { params }) {
@@ -54,8 +54,8 @@ export async function POST(request, { params }) {
     }
 
     try {
-      const snap = createSnapClient();
-      const statusResponse = await snap.transaction.status(order.midtransOrderId);
+      const core = createCoreClient();
+      const statusResponse = await core.transaction.status(order.midtransOrderId);
 
       const { transaction_status, payment_type, fraud_status } = statusResponse;
       const now = new Date().toISOString();
