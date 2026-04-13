@@ -68,11 +68,11 @@ function getPaymentStatus(statusCode, transactionStatus, customStatus) {
 
 export default function PaymentFinishPage({ searchParams }) {
   const resolvedParams = use(searchParams);
-  const orderId = resolvedParams?.order_id || "";
-  const token = resolvedParams?.token || "";
-  const statusCode = resolvedParams?.status_code || "";
-  const transactionStatus = resolvedParams?.transaction_status || "";
-  const customStatus = resolvedParams?.status || "";
+  const orderId = String(resolvedParams?.order_id || "");
+  const token = String(resolvedParams?.token || "");
+  const statusCode = String(resolvedParams?.status_code || "");
+  const transactionStatus = String(resolvedParams?.transaction_status || "");
+  const customStatus = String(resolvedParams?.status || "");
 
   const [countdown, setCountdown] = useState(5);
   const [orderData, setOrderData] = useState(null);

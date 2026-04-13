@@ -29,7 +29,7 @@ export async function POST(request) {
 
     console.log(`📬 Midtrans webhook: ${order_id} → ${transaction_status}`);
 
-    // Idempotency check — skip if this transaction_id was already processed
+    // Idempotency check — skip only if this transaction was already settled/captured
     if (transaction_id) {
       const existingPayment = await db
         .select()
@@ -37,8 +37,14 @@ export async function POST(request) {
         .where(eq(payments.transactionId, transaction_id))
         .limit(1);
       if (existingPayment.length > 0) {
-        console.log(`⏭️ Webhook already processed for transaction: ${transaction_id}`);
-        return NextResponse.json({ success: true, message: "Already processed" });
+        const existingStatus = existingPayment[0].transactionStatus;
+        // Only skip if already in a final state (settlement/capture)
+        if (existingStatus === "settlement" || existingStatus === "capture") {
+          console.log(`⏭️ Webhook already settled for transaction: ${transaction_id}`);
+          return NextResponse.json({ success: true, message: "Already processed" });
+        }
+        // Otherwise allow re-processing (e.g. pending → settlement)
+        console.log(`🔄 Updating transaction ${transaction_id}: ${existingStatus} → ${transaction_status}`);
       }
     }
 
