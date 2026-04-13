@@ -1,6 +1,6 @@
 # Telko.Store — Progress Report
 
-**Log Terakhir:** 12 April 2026
+**Log Terakhir:** 14 April 2026
 
 ## ✅ Apa yang sudah selesai dilakukan
 
@@ -138,17 +138,46 @@
 - **Desktop Header**: Link "FAQ" dan "Hubungi Kami" ditambahkan di top bar.
 - **Desktop Sidebar**: Quick links FAQ & Contact di bawah section Express Checkout.
 
+### 13. Audit & Fix Midtrans Payment Gateway (14 April 2026) 🔒
+
+#### a. Redirect URL Lengkap
+- **Sebelumnya**: Hanya `finish` callback URL yang dikirim ke Midtrans saat create transaction.
+- **Sesudah**: Tiga callback URL lengkap — `finish`, `error`, dan `unfinish` — semuanya mengarah ke `/payment/finish` dengan parameter `status` berbeda.
+- Halaman `/payment/finish` ditambahkan status `unfinish` (UI kuning, pesan "Pembayaran Belum Selesai").
+
+#### b. Payment Expiry 24 Jam
+- Ditambahkan `expiry: { unit: "hours", duration: 24 }` pada `snap.createTransaction()`.
+- Transaksi pending yang tidak dibayar dalam 24 jam akan otomatis expired/dibatalkan oleh Midtrans.
+
+#### c. Webhook Idempotency
+- **Sebelumnya**: Webhook bisa memproses `transaction_id` yang sama berkali-kali → duplikasi payment record & WA notifikasi ganda.
+- **Sesudah**: Pengecekan `transaction_id` di tabel `payments` sebelum memproses. Jika sudah ada, webhook langsung return `{ success: true, message: "Already processed" }`.
+
+#### d. Stock Rollback
+- **Sebelumnya**: Stock dikurangi saat checkout, tapi tidak dikembalikan jika pembayaran gagal/expired.
+- **Sesudah**: Saat status `deny`, `cancel`, atau `expire` diterima (via webhook ATAU polling `/api/orders/[id]/check`), stock produk otomatis +1. Guard mencegah double rollback.
+
+#### e. Environment Production
+- `NEXT_PUBLIC_BASE_URL` diubah dari `http://localhost:3000` ke `https://telko.store` di `.env.local` dan `.env.example`.
+
+#### f. Update Informasi Kontak
+- **WhatsApp**: `0812 857 55557` → `wa.me/6281285755557` (contact page + FAQ page)
+- **Email**: `hq@telko.store` (sebelumnya `cs@telko.store`)
+- **Alamat**: Ditambahkan card baru — Jl. Pemuda Raya No. 21A, Kota Cirebon (dengan link Google Maps)
+
 ---
 
 ## 🛠️ Langkah Lanjutan
 
-1. **Buat OAuth App Google & Facebook**:
+1. **Konfigurasi Midtrans Dashboard** (PENTING):
+   - Notification URL → `https://telko.store/api/webhook/midtrans` (hapus `/public/` dari URL lama)
+   - Finish Redirect URL → `https://telko.store/payment/finish` (bukan `/checkout/finish`)
+   - Snap Preferences → Finish URL: `https://telko.store/payment/finish`, Error URL: `https://telko.store/payment/finish?status=error`
+
+2. **Buat OAuth App Google & Facebook**:
    - Google: [Google Cloud Console](https://console.cloud.google.com/) → Credentials → OAuth 2.0 Client ID. Redirect URI: `https://telko.store/api/auth/callback/google`.
    - Facebook: [Facebook Developers](https://developers.facebook.com/) → Facebook Login. Redirect URI: `https://telko.store/api/auth/callback/facebook`.
    - Isi Client ID & Secret di `.env.local` dan `.env.local` di VPS.
-
-2. **Webhook Midtrans Production**:
-   Pastikan webhook URL production (`https://telko.store/api/webhook/midtrans`) terdaftar di Midtrans Dashboard.
 
 3. **Perluasan Katalog Produk**:
    Melengkapi data produk tambahan (paket spesifik Telkomsel, Indosat, XL, dll) melalui admin dashboard.

@@ -89,6 +89,12 @@ export async function POST(request) {
       },
       callbacks: {
         finish: `${process.env.NEXT_PUBLIC_BASE_URL}/payment/finish?order_id=${midtransOrderId}&token=${guestToken}`,
+        error: `${process.env.NEXT_PUBLIC_BASE_URL}/payment/finish?order_id=${midtransOrderId}&token=${guestToken}&status=error`,
+        unfinish: `${process.env.NEXT_PUBLIC_BASE_URL}/payment/finish?order_id=${midtransOrderId}&token=${guestToken}&status=unfinish`,
+      },
+      expiry: {
+        unit: "hours",
+        duration: 24,
       },
     });
 

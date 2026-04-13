@@ -21,8 +21,8 @@ const contactInfo = [
   {
     icon: Smartphone,
     label: "WhatsApp",
-    value: "+62 851-2345-6789",
-    href: "https://wa.me/6285123456789",
+    value: "0812 857 55557",
+    href: "https://wa.me/6281285755557",
     color: "text-green-600",
     bg: "bg-green-50",
     desc: "Respon tercepat, biasanya < 5 menit",
@@ -30,11 +30,20 @@ const contactInfo = [
   {
     icon: Mail,
     label: "Email",
-    value: "cs@telko.store",
-    href: "mailto:cs@telko.store",
+    value: "hq@telko.store",
+    href: "mailto:hq@telko.store",
     color: "text-blue-600",
     bg: "bg-blue-50",
     desc: "Respon dalam 1x24 jam kerja",
+  },
+  {
+    icon: MapPin,
+    label: "Alamat",
+    value: "Jl. Pemuda Raya No. 21A, Kota Cirebon",
+    href: "https://maps.google.com/?q=Jl.+Pemuda+Raya+No.+21A+Kota+Cirebon",
+    color: "text-orange-600",
+    bg: "bg-orange-50",
+    desc: "Kantor pusat Telko.Store",
   },
   {
     icon: Instagram,

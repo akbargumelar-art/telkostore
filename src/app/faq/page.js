@@ -210,7 +210,7 @@ export default function FAQPage() {
             Hubungi Kami
           </Link>
           <a
-            href="https://wa.me/6285123456789"
+            href="https://wa.me/6281285755557"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center justify-center gap-2 bg-success text-white font-bold text-sm px-6 py-2.5 rounded-xl hover:opacity-90 transition-opacity"

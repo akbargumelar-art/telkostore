@@ -1,7 +1,7 @@
 // POST /api/webhook/midtrans — Handle Midtrans payment callback
 import { NextResponse } from "next/server";
 import db from "@/db/index.js";
-import { orders, payments } from "@/db/schema.js";
+import { orders, payments, products } from "@/db/schema.js";
 import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
@@ -23,6 +23,19 @@ export async function POST(request) {
     } = body;
 
     console.log(`📬 Midtrans webhook: ${order_id} → ${transaction_status}`);
+
+    // Idempotency check — skip if this transaction_id was already processed
+    if (transaction_id) {
+      const existingPayment = await db
+        .select()
+        .from(payments)
+        .where(eq(payments.transactionId, transaction_id))
+        .limit(1);
+      if (existingPayment.length > 0) {
+        console.log(`⏭️ Webhook already processed for transaction: ${transaction_id}`);
+        return NextResponse.json({ success: true, message: "Already processed" });
+      }
+    }
 
     // Verify signature
     if (!verifySignature(order_id, status_code, gross_amount, signature_key)) {
@@ -88,6 +101,26 @@ export async function POST(request) {
       transaction_status === "expire"
     ) {
       newStatus = "failed";
+
+      // Rollback stock for failed/expired payments
+      if (order.status !== "failed") {
+        try {
+          const productResult = await db
+            .select()
+            .from(products)
+            .where(eq(products.id, order.productId))
+            .limit(1);
+          if (productResult.length > 0) {
+            await db
+              .update(products)
+              .set({ stock: productResult[0].stock + 1 })
+              .where(eq(products.id, order.productId));
+            console.log(`📦 Stock restored for product: ${order.productId}`);
+          }
+        } catch (stockErr) {
+          console.error("Stock rollback failed:", stockErr.message);
+        }
+      }
     }
 
     // Update order status

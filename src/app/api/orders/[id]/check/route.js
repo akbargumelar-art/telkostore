@@ -1,7 +1,7 @@
 // POST /api/orders/[id]/check — Check Midtrans status & sync order
 import { NextResponse } from "next/server";
 import db from "@/db/index.js";
-import { orders, payments } from "@/db/schema.js";
+import { orders, payments, products } from "@/db/schema.js";
 import { eq, and } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { createSnapClient } from "@/lib/midtrans";
@@ -76,6 +76,25 @@ export async function POST(request, { params }) {
         transaction_status === "expire"
       ) {
         newStatus = "failed";
+
+        // Rollback stock for failed/expired payments
+        if (order.status !== "failed") {
+          try {
+            const productResult = await db
+              .select()
+              .from(products)
+              .where(eq(products.id, order.productId))
+              .limit(1);
+            if (productResult.length > 0) {
+              await db
+                .update(products)
+                .set({ stock: productResult[0].stock + 1 })
+                .where(eq(products.id, order.productId));
+            }
+          } catch (stockErr) {
+            console.error("Stock rollback failed:", stockErr.message);
+          }
+        }
       }
 
       if (newStatus !== order.status) {

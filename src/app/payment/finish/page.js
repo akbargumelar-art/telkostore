@@ -40,9 +40,22 @@ const statusMap = {
     border: "border-red-200",
     iconBg: "bg-red-100",
   },
+  unfinish: {
+    icon: Clock,
+    title: "Pembayaran Belum Selesai ⏸️",
+    subtitle: "Kamu meninggalkan halaman pembayaran sebelum selesai. Kamu masih bisa melanjutkan pembayaran.",
+    bg: "bg-yellow-50",
+    color: "text-yellow-600",
+    border: "border-yellow-200",
+    iconBg: "bg-yellow-100",
+  },
 };
 
-function getPaymentStatus(statusCode, transactionStatus) {
+function getPaymentStatus(statusCode, transactionStatus, customStatus) {
+  // Handle custom status from our redirect callbacks
+  if (customStatus === "error") return "failed";
+  if (customStatus === "unfinish") return "unfinish";
+
   if (transactionStatus === "settlement" || transactionStatus === "capture") return "success";
   if (transactionStatus === "pending") return "pending";
   if (["deny", "cancel", "expire", "failure"].includes(transactionStatus)) return "failed";
@@ -50,7 +63,7 @@ function getPaymentStatus(statusCode, transactionStatus) {
   // Fallback: check status code
   if (statusCode === "200") return "success";
   if (statusCode === "201") return "pending";
-  return "failed";
+  return "pending"; // Default to pending instead of failed for ambiguous cases
 }
 
 export default function PaymentFinishPage({ searchParams }) {
@@ -59,14 +72,15 @@ export default function PaymentFinishPage({ searchParams }) {
   const token = resolvedParams?.token || "";
   const statusCode = resolvedParams?.status_code || "";
   const transactionStatus = resolvedParams?.transaction_status || "";
+  const customStatus = resolvedParams?.status || "";
 
   const [countdown, setCountdown] = useState(5);
   const [orderData, setOrderData] = useState(null);
   const [checking, setChecking] = useState(false);
 
-  // Determine status from Midtrans params
-  const status = getPaymentStatus(statusCode, transactionStatus);
-  const config = statusMap[status];
+  // Determine status from Midtrans params + custom status
+  const status = getPaymentStatus(statusCode, transactionStatus, customStatus);
+  const config = statusMap[status] || statusMap.pending;
   const StatusIcon = config.icon;
 
   // Extract the actual order ID from Midtrans order_id (format: TELKO-INV-xxx)
