@@ -2,11 +2,16 @@
 import { NextResponse } from "next/server";
 import db from "@/db/index.js";
 import { products, orders } from "@/db/schema.js";
-import { eq, and } from "drizzle-orm";
+import { eq, and, gt, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
 import { isValidIndonesianNumber } from "@/lib/utils";
-import { sendWhatsAppNotification, formatRupiahServer } from "@/lib/whatsapp";
+import {
+  sendWhatsAppNotification,
+  sendGroupNotification,
+  buildOrderCreatedMsg,
+  buildGroupNewOrderMsg,
+} from "@/lib/whatsapp";
 import { createSnapClient } from "@/lib/midtrans";
 
 export async function POST(request) {
@@ -56,8 +61,21 @@ export async function POST(request) {
 
     // Determine targetData — use game data for voucher games, phone number for others
     let resolvedTargetData = phoneNumber;
-    if (product.categoryId === "voucher-game" && customTargetData) {
-      resolvedTargetData = customTargetData;
+    if (product.categoryId === "voucher-game") {
+      if (!customTargetData || !gameData || Object.keys(gameData).length === 0) {
+        return NextResponse.json(
+          { success: false, error: "Data akun game wajib diisi" },
+          { status: 400 }
+        );
+      }
+
+      resolvedTargetData = String(customTargetData).trim();
+      if (!resolvedTargetData || resolvedTargetData.length > 250) {
+        return NextResponse.json(
+          { success: false, error: "Data akun game tidak valid" },
+          { status: 400 }
+        );
+      }
     }
 
     // Generate IDs
@@ -68,7 +86,7 @@ export async function POST(request) {
     const midtransOrderId = `TELKO-${orderId}`;
 
     // Create Midtrans Snap transaction
-    const snap = createSnapClient();
+    const snap = await createSnapClient();
 
     const snapTransaction = await snap.createTransaction({
       transaction_details: {
@@ -104,48 +122,66 @@ export async function POST(request) {
       notes = JSON.stringify(gameData);
     }
 
-    // Create order in database
-    await db.insert(orders).values({
+    // [FIX 3.1] Wrap order creation + stock decrease in a database transaction
+    db.transaction((tx) => {
+      // [FIX 2.3] Atomic stock decrease with an in-DB stock guard
+      const stockUpdate = tx
+        .update(products)
+        .set({ stock: sql`${products.stock} - 1` })
+        .where(and(eq(products.id, product.id), gt(products.stock, 0)))
+        .returning({ id: products.id })
+        .all();
+
+      if (stockUpdate.length === 0) {
+        throw new Error("Stok produk habis");
+      }
+
+      tx.insert(orders).values({
+        id: orderId,
+        productId: product.id,
+        productName: product.name,
+        productPrice: product.price,
+        guestPhone: phoneNumber,
+        guestToken: guestToken,
+        targetData: resolvedTargetData,
+        status: "pending",
+        paymentMethod: paymentMethod || null,
+        snapToken: snapTransaction.token,
+        snapRedirectUrl: snapTransaction.redirect_url,
+        midtransOrderId: midtransOrderId,
+        notes: notes,
+        createdAt: now.toISOString(),
+        updatedAt: now.toISOString(),
+      }).run();
+    });
+
+    // [FIX 8.1] Send enriched WhatsApp to buyer — order created
+    const orderData = {
       id: orderId,
-      productId: product.id,
       productName: product.name,
       productPrice: product.price,
       guestPhone: phoneNumber,
       guestToken: guestToken,
       targetData: resolvedTargetData,
-      status: "pending",
-      paymentMethod: paymentMethod || null,
-      snapToken: snapTransaction.token,
-      snapRedirectUrl: snapTransaction.redirect_url,
-      midtransOrderId: midtransOrderId,
-      notes: notes,
-      createdAt: now.toISOString(),
-      updatedAt: now.toISOString(),
-    });
+    };
 
-    // Decrease stock
-    await db
-      .update(products)
-      .set({ stock: product.stock - 1 })
-      .where(eq(products.id, product.id));
-
-    // Build WA message
-    let waMessage = `🛒 *Pesanan Dibuat — Telko.Store*\n\n` +
-      `📦 Produk: ${product.name}\n`;
-
-    if (product.categoryId === "voucher-game" && gameData) {
-      waMessage += `🎮 Game: ${gameData.gameName || product.gameName}\n`;
-      waMessage += `🆔 Data Akun: ${resolvedTargetData}\n`;
+    try {
+      await sendWhatsAppNotification(
+        phoneNumber,
+        buildOrderCreatedMsg(orderData, product, snapTransaction.redirect_url, gameData)
+      );
+    } catch (waErr) {
+      console.error("WA buyer notification failed:", waErr.message);
     }
 
-    waMessage += `📱 No. HP: ${phoneNumber}\n` +
-      `💰 Total: ${formatRupiahServer(product.price)}\n\n` +
-      `🔗 Bayar sekarang:\n${snapTransaction.redirect_url}\n\n` +
-      `📋 Invoice: ${orderId}\n` +
-      `🔑 Lacak pesanan:\n${process.env.NEXT_PUBLIC_BASE_URL}/order/${orderId}?token=${guestToken}`;
-
-    // Send WhatsApp - order created
-    sendWhatsAppNotification(phoneNumber, waMessage);
+    // [FIX 8.2] Send WhatsApp to internal group
+    try {
+      await sendGroupNotification(
+        buildGroupNewOrderMsg(orderData, product)
+      );
+    } catch (waErr) {
+      console.error("WA group notification failed:", waErr.message);
+    }
 
     return NextResponse.json({
       success: true,
@@ -164,6 +200,13 @@ export async function POST(request) {
     });
   } catch (error) {
     console.error("POST /api/checkout error:", error);
+    if (error.message === "Stok produk habis") {
+      return NextResponse.json(
+        { success: false, error: "Stok produk habis" },
+        { status: 400 }
+      );
+    }
+
     return NextResponse.json(
       { success: false, error: error.message || "Checkout gagal" },
       { status: 500 }

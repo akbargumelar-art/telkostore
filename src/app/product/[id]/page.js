@@ -85,6 +85,7 @@ export default function ProductPage({ params }) {
   const [currentStep, setCurrentStep] = useState(1);
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [checkoutError, setCheckoutError] = useState("");
+  const [showConfirm, setShowConfirm] = useState(false);
 
   // Refs for auto-scroll
   const phoneRef = useRef(null);
@@ -199,10 +200,14 @@ export default function ProductPage({ params }) {
     );
   }
 
+  // Find selected product from related + current
+  const allVariants = [product, ...relatedProducts];
+  const selectedProduct = allVariants.find((p) => p.id === selectedVariant) || product;
+
   // Determine if this is a game voucher product
-  const isGameVoucher = product.categoryId === "voucher-game";
+  const isGameVoucher = selectedProduct.categoryId === "voucher-game";
   const gameConfig = isGameVoucher
-    ? (GAME_ID_CONFIG[product.gameName] || DEFAULT_GAME_CONFIG)
+    ? (GAME_ID_CONFIG[selectedProduct.gameName] || DEFAULT_GAME_CONFIG)
     : null;
 
   // Compute category info from product
@@ -218,9 +223,6 @@ export default function ProductPage({ params }) {
     : product.categoryId === "voucher-game" ? "🎮"
     : "📦";
 
-  // Find selected product from related + current
-  const allVariants = [product, ...relatedProducts];
-  const selectedProduct = allVariants.find((p) => p.id === selectedVariant) || product;
   const discount = calculateDiscount(
     selectedProduct.originalPrice,
     selectedProduct.price
@@ -328,8 +330,16 @@ export default function ProductPage({ params }) {
     return parts.join(" | ");
   };
 
+  // [FIX 4.3] Show confirmation dialog before checkout
+  const handleCheckoutClick = () => {
+    if (!isStep2Complete) return;
+    setCheckoutError("");
+    setShowConfirm(true);
+  };
+
   const handleCheckout = async () => {
     if (isCheckingOut || !isStep2Complete) return;
+    setShowConfirm(false);
 
     setIsCheckingOut(true);
     setCheckoutError("");
@@ -374,6 +384,72 @@ export default function ProductPage({ params }) {
   };
 
   return (
+    <>
+    {/* [FIX 4.3] Confirmation Modal */}
+    {showConfirm && (
+      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm px-4 animate-fade-in">
+        <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl animate-scale-in">
+          <h3 className="text-lg font-extrabold text-navy mb-1">Konfirmasi Pesanan</h3>
+          <p className="text-gray-400 text-xs mb-4">Pastikan data di bawah sudah benar sebelum melanjutkan.</p>
+
+          <div className="bg-gray-50 rounded-xl p-4 space-y-2 border border-gray-100 mb-4">
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-500">Produk</span>
+              <span className="font-semibold text-gray-800 text-right">{selectedProduct.name}</span>
+            </div>
+            {isGameVoucher && selectedProduct.gameName && (
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500">Game</span>
+                <span className="font-semibold text-gray-800">{selectedProduct.gameName}</span>
+              </div>
+            )}
+            {isGameVoucher && gameConfig && gameConfig.fields.map((field) => (
+              gameIdData[field.key] && (
+                <div key={field.key} className="flex justify-between text-sm">
+                  <span className="text-gray-500">{field.label}</span>
+                  <span className="font-semibold text-gray-800">{gameIdData[field.key]}</span>
+                </div>
+              )
+            ))}
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-500">{isGameVoucher ? "No. HP" : "No. Tujuan"}</span>
+              <span className="font-semibold text-gray-800">{phoneNumber}</span>
+            </div>
+            <div className="border-t border-gray-200 pt-2">
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-bold text-navy">Total</span>
+                <span className="text-lg font-extrabold text-tred">{formatRupiah(selectedProduct.price)}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex gap-3">
+            <button
+              onClick={() => setShowConfirm(false)}
+              className="flex-1 py-3 border-2 border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-all"
+            >
+              Batal
+            </button>
+            <button
+              onClick={handleCheckout}
+              className="flex-1 py-3 gradient-red text-white rounded-xl text-sm font-bold shadow-lg shadow-tred/20 hover:opacity-95 transition-opacity"
+            >
+              Ya, Bayar Sekarang
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* Full-screen loading overlay during Midtrans redirect */}
+    {isCheckingOut && (
+      <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-white/95 backdrop-blur-sm">
+        <div className="w-16 h-16 rounded-full border-4 border-gray-200 border-t-tred animate-spin mb-4"></div>
+        <p className="text-navy font-bold text-lg">Mempersiapkan Pembayaran...</p>
+        <p className="text-gray-400 text-sm mt-1">Kamu akan diarahkan ke halaman pembayaran</p>
+      </div>
+    )}
+
     <div className="max-w-7xl mx-auto px-4 md:px-6 py-4 md:py-6">
       {/* Breadcrumb (Desktop) */}
       <nav className="hidden md:flex items-center gap-2 text-sm text-gray-400 mb-6">
@@ -801,7 +877,7 @@ export default function ProductPage({ params }) {
                   )}
 
                   <button
-                    onClick={handleCheckout}
+                    onClick={handleCheckoutClick}
                     disabled={
                       currentStep < 3 ||
                       !isStep2Complete ||
@@ -835,5 +911,6 @@ export default function ProductPage({ params }) {
         </div>
       </div>
     </div>
+  </>
   );
 }

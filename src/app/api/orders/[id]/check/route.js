@@ -2,10 +2,17 @@
 import { NextResponse } from "next/server";
 import db from "@/db/index.js";
 import { orders, payments, products } from "@/db/schema.js";
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { createCoreClient } from "@/lib/midtrans";
-import { sendWhatsAppNotification, formatRupiahServer } from "@/lib/whatsapp";
+import {
+  sendWhatsAppNotification,
+  sendGroupNotification,
+  buildPaymentSuccessMsg,
+  buildPaymentFailedMsg,
+  buildGroupPaymentSuccessMsg,
+  buildGroupPaymentFailedMsg,
+} from "@/lib/whatsapp";
 
 export async function POST(request, { params }) {
   try {
@@ -54,7 +61,7 @@ export async function POST(request, { params }) {
     }
 
     try {
-      const core = createCoreClient();
+      const core = await createCoreClient();
       const statusResponse = await core.transaction.status(order.midtransOrderId);
 
       const { transaction_status, payment_type, fraud_status } = statusResponse;
@@ -65,10 +72,23 @@ export async function POST(request, { params }) {
 
       if (transaction_status === "capture" || transaction_status === "settlement") {
         if (fraud_status === "accept" || !fraud_status) {
-          newStatus = "completed"; // Auto-complete for virtual products
+          // [FIX 2.2] Check product type for virtual vs fisik
+          const productResult = await db
+            .select()
+            .from(products)
+            .where(eq(products.id, order.productId))
+            .limit(1);
+          const productType = productResult[0]?.type || "virtual";
+
           statusUpdates.paidAt = now;
-          statusUpdates.completedAt = now;
           statusUpdates.paymentMethod = payment_type;
+
+          if (productType === "virtual") {
+            newStatus = "completed";
+            statusUpdates.completedAt = now;
+          } else {
+            newStatus = "paid";
+          }
         }
       } else if (
         transaction_status === "deny" ||
@@ -77,20 +97,13 @@ export async function POST(request, { params }) {
       ) {
         newStatus = "failed";
 
-        // Rollback stock for failed/expired payments
+        // [FIX 2.3] Atomic stock rollback
         if (order.status !== "failed") {
           try {
-            const productResult = await db
-              .select()
-              .from(products)
-              .where(eq(products.id, order.productId))
-              .limit(1);
-            if (productResult.length > 0) {
-              await db
-                .update(products)
-                .set({ stock: productResult[0].stock + 1 })
-                .where(eq(products.id, order.productId));
-            }
+            await db
+              .update(products)
+              .set({ stock: sql`stock + 1` })
+              .where(eq(products.id, order.productId));
           } catch (stockErr) {
             console.error("Stock rollback failed:", stockErr.message);
           }
@@ -118,24 +131,46 @@ export async function POST(request, { params }) {
           createdAt: now,
         });
 
-        // Send WhatsApp for completed
-        if (newStatus === "completed" && !order.whatsappSent) {
-          sendWhatsAppNotification(
-            order.guestPhone,
-            `✅ *Pembayaran Berhasil — Telko.Store*\n\n` +
-            `📦 Produk: ${order.productName}\n` +
-            `📱 No. Tujuan: ${order.targetData}\n` +
-            `💰 Total: ${formatRupiahServer(order.productPrice)}\n` +
-            `💳 Pembayaran: ${payment_type}\n\n` +
-            `✨ Produk sudah berhasil dikirim ke nomor tujuan.\n` +
-            `Terima kasih! 🙏\n\n` +
-            `📋 Invoice: ${order.id}`
-          );
+        // [FIX 8.1/8.2] Send WhatsApp for completed/paid
+        if ((newStatus === "completed" || newStatus === "paid") && !order.whatsappSent) {
+          try {
+            await sendWhatsAppNotification(
+              order.guestPhone,
+              buildPaymentSuccessMsg(order, payment_type)
+            );
+            await db
+              .update(orders)
+              .set({ whatsappSent: true })
+              .where(eq(orders.id, order.id));
+          } catch (waErr) {
+            console.error("WA notification failed:", waErr.message);
+          }
 
-          await db
-            .update(orders)
-            .set({ whatsappSent: true })
-            .where(eq(orders.id, order.id));
+          // Notify internal group
+          try {
+            await sendGroupNotification(
+              buildGroupPaymentSuccessMsg(order, payment_type)
+            );
+          } catch (waErr) {
+            console.error("WA group notification failed:", waErr.message);
+          }
+        } else if (newStatus === "failed") {
+          try {
+            await sendWhatsAppNotification(
+              order.guestPhone,
+              buildPaymentFailedMsg(order, transaction_status)
+            );
+          } catch (waErr) {
+            console.error("WA notification failed:", waErr.message);
+          }
+
+          try {
+            await sendGroupNotification(
+              buildGroupPaymentFailedMsg(order, transaction_status)
+            );
+          } catch (waErr) {
+            console.error("WA group notification failed:", waErr.message);
+          }
         }
 
         // Return updated order

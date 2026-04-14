@@ -2,10 +2,17 @@
 import { NextResponse } from "next/server";
 import db from "@/db/index.js";
 import { orders, payments, products } from "@/db/schema.js";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
-import { sendWhatsAppNotification, formatRupiahServer } from "@/lib/whatsapp";
+import {
+  sendWhatsAppNotification,
+  sendGroupNotification,
+  buildPaymentSuccessMsg,
+  buildPaymentFailedMsg,
+  buildGroupPaymentSuccessMsg,
+  buildGroupPaymentFailedMsg,
+} from "@/lib/whatsapp";
 import { verifySignature } from "@/lib/midtrans";
 
 // GET /api/webhook/midtrans — Health check for Midtrans URL verification
@@ -30,6 +37,7 @@ export async function POST(request) {
     console.log(`📬 Midtrans webhook: ${order_id} → ${transaction_status}`);
 
     // Idempotency check — skip only if this transaction was already settled/captured
+    let existingPaymentRecord = null;
     if (transaction_id) {
       const existingPayment = await db
         .select()
@@ -37,19 +45,14 @@ export async function POST(request) {
         .where(eq(payments.transactionId, transaction_id))
         .limit(1);
       if (existingPayment.length > 0) {
-        const existingStatus = existingPayment[0].transactionStatus;
-        // Only skip if already in a final state (settlement/capture)
-        if (existingStatus === "settlement" || existingStatus === "capture") {
-          console.log(`⏭️ Webhook already settled for transaction: ${transaction_id}`);
-          return NextResponse.json({ success: true, message: "Already processed" });
-        }
-        // Otherwise allow re-processing (e.g. pending → settlement)
-        console.log(`🔄 Updating transaction ${transaction_id}: ${existingStatus} → ${transaction_status}`);
+        existingPaymentRecord = existingPayment[0];
+        const existingStatus = existingPaymentRecord.transactionStatus;
+        console.log(`🔄 Existing transaction ${transaction_id}: ${existingStatus} → ${transaction_status}`);
       }
     }
 
     // Verify signature
-    if (!verifySignature(order_id, status_code, gross_amount, signature_key)) {
+    if (!(await verifySignature(order_id, status_code, gross_amount, signature_key))) {
       console.error("❌ Invalid Midtrans signature");
       return NextResponse.json(
         { success: false, error: "Invalid signature" },
@@ -75,19 +78,42 @@ export async function POST(request) {
     const order = orderResult[0];
     const now = new Date().toISOString();
 
-    // Log payment
-    await db.insert(payments).values({
-      id: `PAY-${nanoid(12)}`,
-      orderId: order.id,
-      gateway: "midtrans",
-      paymentType: payment_type,
-      transactionId: transaction_id,
-      transactionStatus: transaction_status,
-      grossAmount: parseFloat(gross_amount),
-      fraudStatus: fraud_status,
-      rawResponse: JSON.stringify(body),
-      createdAt: now,
-    });
+    if (
+      existingPaymentRecord &&
+      (existingPaymentRecord.transactionStatus === "settlement" ||
+        existingPaymentRecord.transactionStatus === "capture") &&
+      ["paid", "processing", "completed"].includes(order.status)
+    ) {
+      console.log(`⏭️ Webhook already processed for transaction: ${transaction_id}`);
+      return NextResponse.json({ success: true, message: "Already processed" });
+    }
+
+    // [FIX 2.1] Upsert payment — update existing record if transaction_id already exists
+    if (existingPaymentRecord) {
+      await db
+        .update(payments)
+        .set({
+          transactionStatus: transaction_status,
+          paymentType: payment_type,
+          grossAmount: parseFloat(gross_amount),
+          fraudStatus: fraud_status,
+          rawResponse: JSON.stringify(body),
+        })
+        .where(eq(payments.id, existingPaymentRecord.id));
+    } else {
+      await db.insert(payments).values({
+        id: `PAY-${nanoid(12)}`,
+        orderId: order.id,
+        gateway: "midtrans",
+        paymentType: payment_type,
+        transactionId: transaction_id,
+        transactionStatus: transaction_status,
+        grossAmount: parseFloat(gross_amount),
+        fraudStatus: fraud_status,
+        rawResponse: JSON.stringify(body),
+        createdAt: now,
+      });
+    }
 
     // Determine new order status
     let newStatus = order.status;
@@ -99,10 +125,24 @@ export async function POST(request) {
         statusUpdates.paidAt = now;
         statusUpdates.paymentMethod = payment_type;
 
-        // For virtual products, auto-complete (simulate fulfillment)
-        // In production, this would call Digipos/provider API
-        newStatus = "completed";
-        statusUpdates.completedAt = now;
+        // [FIX 2.2] Separate flow for virtual vs fisik products
+        // Fetch product to check type
+        const productResult = await db
+          .select()
+          .from(products)
+          .where(eq(products.id, order.productId))
+          .limit(1);
+        const productType = productResult[0]?.type || "virtual";
+
+        if (productType === "virtual") {
+          // Virtual products: auto-complete (simulate fulfillment)
+          // In production, this would call Digipos/provider API
+          newStatus = "completed";
+          statusUpdates.completedAt = now;
+        } else {
+          // Fisik products: stay at "paid", admin will process manually
+          newStatus = "paid";
+        }
       }
     } else if (transaction_status === "pending") {
       newStatus = "pending";
@@ -113,21 +153,14 @@ export async function POST(request) {
     ) {
       newStatus = "failed";
 
-      // Rollback stock for failed/expired payments
+      // [FIX 2.3] Atomic stock rollback for failed/expired payments
       if (order.status !== "failed") {
         try {
-          const productResult = await db
-            .select()
-            .from(products)
-            .where(eq(products.id, order.productId))
-            .limit(1);
-          if (productResult.length > 0) {
-            await db
-              .update(products)
-              .set({ stock: productResult[0].stock + 1 })
-              .where(eq(products.id, order.productId));
-            console.log(`📦 Stock restored for product: ${order.productId}`);
-          }
+          await db
+            .update(products)
+            .set({ stock: sql`stock + 1` })
+            .where(eq(products.id, order.productId));
+          console.log(`📦 Stock restored for product: ${order.productId}`);
         } catch (stockErr) {
           console.error("Stock rollback failed:", stockErr.message);
         }
@@ -140,33 +173,49 @@ export async function POST(request) {
       .set({ status: newStatus, ...statusUpdates })
       .where(eq(orders.id, order.id));
 
-    // Send WhatsApp notification based on status
-    if (newStatus === "completed" && !order.whatsappSent) {
-      sendWhatsAppNotification(
-        order.guestPhone,
-        `✅ *Pembayaran Berhasil — Telko.Store*\n\n` +
-        `📦 Produk: ${order.productName}\n` +
-        `📱 No. Tujuan: ${order.targetData}\n` +
-        `💰 Total: ${formatRupiahServer(order.productPrice)}\n` +
-        `💳 Pembayaran: ${payment_type}\n\n` +
-        `✨ Produk sedang diproses dan akan segera masuk ke nomor tujuan.\n\n` +
-        `📋 Invoice: ${order.id}\n` +
-        `🔑 Lacak pesanan:\n${process.env.NEXT_PUBLIC_BASE_URL}/order/${order.id}?token=${order.guestToken}`
-      );
+    // [FIX 8.1/8.2] Send WhatsApp notifications with enriched templates
+    if ((newStatus === "paid" || newStatus === "completed") && !order.whatsappSent) {
+      // Notify buyer
+      try {
+        await sendWhatsAppNotification(
+          order.guestPhone,
+          buildPaymentSuccessMsg(order, payment_type)
+        );
+        await db
+          .update(orders)
+          .set({ whatsappSent: true })
+          .where(eq(orders.id, order.id));
+      } catch (waErr) {
+        console.error("WA buyer notification failed:", waErr.message);
+      }
 
-      await db
-        .update(orders)
-        .set({ whatsappSent: true })
-        .where(eq(orders.id, order.id));
+      // Notify internal group
+      try {
+        await sendGroupNotification(
+          buildGroupPaymentSuccessMsg(order, payment_type)
+        );
+      } catch (waErr) {
+        console.error("WA group notification failed:", waErr.message);
+      }
     } else if (newStatus === "failed") {
-      sendWhatsAppNotification(
-        order.guestPhone,
-        `❌ *Pembayaran Gagal — Telko.Store*\n\n` +
-        `📦 Produk: ${order.productName}\n` +
-        `📋 Invoice: ${order.id}\n\n` +
-        `Status: ${transaction_status}\n` +
-        `Silakan coba lagi atau hubungi customer service.`
-      );
+      // Notify buyer
+      try {
+        await sendWhatsAppNotification(
+          order.guestPhone,
+          buildPaymentFailedMsg(order, transaction_status)
+        );
+      } catch (waErr) {
+        console.error("WA buyer notification failed:", waErr.message);
+      }
+
+      // Notify internal group
+      try {
+        await sendGroupNotification(
+          buildGroupPaymentFailedMsg(order, transaction_status)
+        );
+      } catch (waErr) {
+        console.error("WA group notification failed:", waErr.message);
+      }
     }
 
     return NextResponse.json({ success: true, status: newStatus });
