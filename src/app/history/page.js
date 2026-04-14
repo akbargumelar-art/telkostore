@@ -229,13 +229,19 @@ export default function HistoryPage() {
 
                       {/* View detail button */}
                       <div className="pt-3">
-                        <a
-                          href={`/order/${order.id}?token=${order.guestToken}`}
-                          className="w-full flex items-center justify-center gap-2 py-2.5 border-2 border-gray-200 rounded-xl text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-all"
-                        >
-                          <ExternalLink size={14} />
-                          Lihat Detail Pesanan
-                        </a>
+                        {order.detailAvailable && order.guestToken ? (
+                          <a
+                            href={`/order/${order.id}?token=${order.guestToken}`}
+                            className="w-full flex items-center justify-center gap-2 py-2.5 border-2 border-gray-200 rounded-xl text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-all"
+                          >
+                            <ExternalLink size={14} />
+                            Lihat Detail Pesanan
+                          </a>
+                        ) : (
+                          <p className="text-[11px] text-gray-400 text-center bg-gray-50 rounded-xl px-3 py-2.5">
+                            Masukkan nomor HP lengkap untuk membuka detail pesanan.
+                          </p>
+                        )}
                       </div>
                     </div>
                   </div>

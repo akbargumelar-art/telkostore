@@ -16,7 +16,7 @@ export async function GET(request) {
       );
     }
 
-    // Search by invoice ID or phone number
+    // [FIX 3.3] Search by invoice ID or phone number — DO NOT expose full guestToken
     const result = await db
       .select({
         id: orders.id,
@@ -42,10 +42,28 @@ export async function GET(request) {
       .orderBy(desc(orders.createdAt))
       .limit(20);
 
+    const normalizedQuery = query.replace(/\D/g, "");
+
+    // Mask sensitive fields — only return the access token for an exact phone lookup.
+    const safeResult = result.map(({ guestToken, guestPhone, ...rest }) => {
+      const normalizedPhone = (guestPhone || "").replace(/\D/g, "");
+      const canOpenDetail =
+        normalizedQuery.length >= 10 && normalizedQuery === normalizedPhone;
+
+      return {
+        ...rest,
+        guestPhone: guestPhone
+          ? `${guestPhone.slice(0, 4)}****${guestPhone.slice(-3)}`
+          : "—",
+        guestToken: canOpenDetail ? guestToken : null,
+        detailAvailable: canOpenDetail,
+      };
+    });
+
     return NextResponse.json({
       success: true,
-      data: result,
-      count: result.length,
+      data: safeResult,
+      count: safeResult.length,
     });
   } catch (error) {
     console.error("GET /api/orders/search error:", error);

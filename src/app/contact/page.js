@@ -87,12 +87,27 @@ export default function ContactPage() {
     setSending(true);
     setError("");
 
-    // Simulate sending (for now — can be connected to a real API later)
-    await new Promise((r) => setTimeout(r, 1500));
+    try {
+      const res = await fetch("/api/contact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData),
+      });
 
-    setSending(false);
-    setSent(true);
-    setFormData({ name: "", email: "", subject: "", message: "" });
+      const data = await res.json();
+
+      if (!data.success) {
+        setError(data.error || "Gagal mengirim pesan");
+        return;
+      }
+
+      setSent(true);
+      setFormData({ name: "", email: "", subject: "", message: "" });
+    } catch (err) {
+      setError("Terjadi kesalahan. Silakan coba lagi.");
+    } finally {
+      setSending(false);
+    }
   };
 
   return (

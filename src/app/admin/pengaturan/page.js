@@ -12,6 +12,8 @@ import {
   CreditCard,
   ToggleLeft,
   ToggleRight,
+  Users,
+  HelpCircle,
 } from "lucide-react";
 
 export default function AdminPengaturanPage() {
@@ -26,7 +28,7 @@ export default function AdminPengaturanPage() {
     serverKey: "", clientKey: "", isProduction: false, isActive: true,
   });
   const [waha, setWaha] = useState({
-    apiUrl: "", serverKey: "", isActive: true,
+    apiUrl: "", serverKey: "", clientKey: "", isActive: true,
   });
 
   const fetchSettings = async () => {
@@ -50,6 +52,7 @@ export default function AdminPengaturanPage() {
           setWaha({
             apiUrl: wahaSetting.apiUrl || "",
             serverKey: wahaSetting.serverKey || "",
+            clientKey: wahaSetting.clientKey || "",
             isActive: wahaSetting.isActive ?? true,
           });
         }
@@ -226,8 +229,30 @@ export default function AdminPengaturanPage() {
                 placeholder="waha-api-key"
               />
             </div>
+
+            {/* WA Group ID for internal notifications */}
+            <div className="border-t border-gray-100 pt-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Users size={14} className="text-green-600" />
+                <label className="text-xs font-semibold text-gray-600">WhatsApp Group ID (Notifikasi Internal)</label>
+              </div>
+              <input
+                type="text" value={waha.clientKey}
+                onChange={(e) => setWaha({...waha, clientKey: e.target.value})}
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy font-mono"
+                placeholder="120363xxxxxxxxxxxx@g.us"
+              />
+              <div className="flex items-start gap-1.5 mt-1.5">
+                <HelpCircle size={11} className="text-gray-400 shrink-0 mt-0.5" />
+                <p className="text-[11px] text-gray-400">
+                  Group ID untuk menerima notifikasi pesanan baru, pembayaran, dan pesan pelanggan.
+                  Dapatkan Group ID via endpoint <code className="text-navy bg-navy/5 px-1 rounded">GET /api/groups</code> di WAHA API.
+                </p>
+              </div>
+            </div>
+
             <button
-              onClick={() => handleSave("waha", { apiUrl: waha.apiUrl, serverKey: waha.serverKey, isActive: waha.isActive })}
+              onClick={() => handleSave("waha", { apiUrl: waha.apiUrl, serverKey: waha.serverKey, clientKey: waha.clientKey, isActive: waha.isActive })}
               disabled={saving}
               className="gradient-navy text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:opacity-95 disabled:opacity-50 flex items-center gap-2"
             >

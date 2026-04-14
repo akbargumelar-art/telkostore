@@ -3,7 +3,11 @@ import { NextResponse } from "next/server";
 import db from "@/db/index.js";
 import { orders } from "@/db/schema.js";
 import { eq } from "drizzle-orm";
-import { sendWhatsAppNotification, formatRupiahServer } from "@/lib/whatsapp";
+import {
+  sendWhatsAppNotification,
+  buildOrderCompletedMsg,
+  buildOrderProcessingMsg,
+} from "@/lib/whatsapp";
 
 export async function GET(request, { params }) {
   try {
@@ -31,7 +35,7 @@ export async function PUT(request, { params }) {
   try {
     const { id } = await params;
     const body = await request.json();
-    const { status, notes, trackingReceipt } = body;
+    const { status, notes } = body;
 
     const existing = await db.select().from(orders).where(eq(orders.id, id)).limit(1);
     if (existing.length === 0) {
@@ -54,29 +58,18 @@ export async function PUT(request, { params }) {
     if (notes !== undefined) updateData.notes = notes;
 
     // Send WhatsApp based on status change
-    const newStatus = status || order.status;
-
     if (status === "completed" && order.status !== "completed") {
-      sendWhatsAppNotification(
+      await sendWhatsAppNotification(
         order.guestPhone,
-        `✅ *Pesanan Selesai — Telko.Store*\n\n` +
-        `📦 Produk: ${order.productName}\n` +
-        `📱 No. Tujuan: ${order.targetData}\n` +
-        `💰 Total: ${formatRupiahServer(order.productPrice)}\n\n` +
-        `✨ Produk sudah berhasil dikirim ke nomor tujuan.\n` +
-        `Terima kasih telah berbelanja di Telko.Store! 🙏\n\n` +
-        `📋 Invoice: ${order.id}`
+        buildOrderCompletedMsg(order)
       );
       updateData.whatsappSent = true;
     }
 
     if (status === "processing" && order.status !== "processing") {
-      sendWhatsAppNotification(
+      await sendWhatsAppNotification(
         order.guestPhone,
-        `⏳ *Pesanan Diproses — Telko.Store*\n\n` +
-        `📦 Produk: ${order.productName}\n` +
-        `📋 Invoice: ${order.id}\n\n` +
-        `Pesanan kamu sedang diproses. Mohon tunggu sebentar. 🙏`
+        buildOrderProcessingMsg(order)
       );
     }
 
