@@ -244,6 +244,7 @@ export default function AdminPengaturanPage() {
                   Nama session WAHA yang digunakan untuk mengirim pesan. Default: <code className="text-navy bg-navy/5 px-1 rounded">default</code>. Lihat daftar session di <code className="text-navy bg-navy/5 px-1 rounded">GET /api/sessions</code> pada WAHA API.
                 </p>
               </div>
+            </div>
 
             {/* WA Group ID for internal notifications */}
             <div className="border-t border-gray-100 pt-4">
