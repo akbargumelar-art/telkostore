@@ -13,8 +13,20 @@ import {
   buildGroupNewOrderMsg,
 } from "@/lib/whatsapp";
 import { createSnapClient } from "@/lib/midtrans";
+import { checkoutLimiter } from "@/lib/rate-limit";
 
 export async function POST(request) {
+  // Rate limiting
+  const forwarded = request.headers.get("x-forwarded-for");
+  const ip = forwarded ? forwarded.split(",")[0].trim() : "unknown";
+  const rateCheck = checkoutLimiter.check(ip);
+
+  if (!rateCheck.allowed) {
+    return NextResponse.json(
+      { success: false, error: "Terlalu banyak permintaan. Silakan coba lagi nanti." },
+      { status: 429, headers: { "Retry-After": String(Math.ceil(rateCheck.resetIn / 1000)) } }
+    );
+  }
   try {
     const body = await request.json();
     const { productId, phoneNumber, paymentMethod, gameData, targetData: customTargetData } = body;
@@ -207,8 +219,9 @@ export async function POST(request) {
       );
     }
 
+    // Sanitize error — never expose internal details to client
     return NextResponse.json(
-      { success: false, error: error.message || "Checkout gagal" },
+      { success: false, error: "Checkout gagal. Silakan coba lagi." },
       { status: 500 }
     );
   }

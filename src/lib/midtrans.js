@@ -113,5 +113,15 @@ export function generateSignature(orderId, statusCode, grossAmount, serverKey) {
 export async function verifySignature(orderId, statusCode, grossAmount, signatureKey) {
   const { serverKey } = await resolveMidtransConfig();
   const expected = generateSignature(orderId, statusCode, grossAmount, serverKey);
-  return signatureKey === expected;
+
+  // Timing-safe comparison to prevent timing attacks
+  if (!signatureKey || signatureKey.length !== expected.length) return false;
+  try {
+    return crypto.timingSafeEqual(
+      Buffer.from(signatureKey, "utf8"),
+      Buffer.from(expected, "utf8")
+    );
+  } catch {
+    return false;
+  }
 }

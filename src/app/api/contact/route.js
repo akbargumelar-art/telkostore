@@ -4,8 +4,20 @@ import {
   sendGroupNotification,
   buildGroupContactFormMsg,
 } from "@/lib/whatsapp";
+import { contactLimiter } from "@/lib/rate-limit";
 
 export async function POST(request) {
+  // Rate limiting
+  const forwarded = request.headers.get("x-forwarded-for");
+  const ip = forwarded ? forwarded.split(",")[0].trim() : "unknown";
+  const rateCheck = contactLimiter.check(ip);
+
+  if (!rateCheck.allowed) {
+    return NextResponse.json(
+      { success: false, error: "Terlalu banyak pesan. Silakan coba lagi nanti." },
+      { status: 429, headers: { "Retry-After": String(Math.ceil(rateCheck.resetIn / 1000)) } }
+    );
+  }
   try {
     const body = await request.json();
     const { name, email, subject, message } = body;
@@ -23,6 +35,14 @@ export async function POST(request) {
     if (!emailRegex.test(email)) {
       return NextResponse.json(
         { success: false, error: "Format email tidak valid" },
+        { status: 400 }
+      );
+    }
+
+    // Validate input length to prevent abuse
+    if (name.length > 100 || email.length > 100 || message.length > 2000) {
+      return NextResponse.json(
+        { success: false, error: "Input melebihi batas karakter" },
         { status: 400 }
       );
     }
