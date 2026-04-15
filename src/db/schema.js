@@ -95,6 +95,7 @@ export const gatewaySettings = sqliteTable("gateway_settings", {
   serverKey: text("server_key"),
   clientKey: text("client_key"),
   apiUrl: text("api_url"),
+  sessionName: text("session_name"), // WAHA session name (e.g. "default", "telkostore")
   isProduction: integer("is_production", { mode: "boolean" }).default(false),
   isActive: integer("is_active", { mode: "boolean" }).default(true),
   createdAt: text("created_at").default("CURRENT_TIMESTAMP"),

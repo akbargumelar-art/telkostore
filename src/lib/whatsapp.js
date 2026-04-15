@@ -75,7 +75,7 @@ export async function sendWhatsAppNotification(phone, message) {
 
   const wahaUrl = settings?.apiUrl || process.env.WAHA_API_URL;
   const wahaApiKey = settings?.serverKey || process.env.WAHA_API_KEY;
-  const wahaSession = process.env.WAHA_SESSION || "default";
+  const wahaSession = settings?.sessionName || process.env.WAHA_SESSION || "default";
 
   if (!wahaUrl) {
     console.warn("⚠️ WAHA_API_URL not set, skipping WhatsApp notification");
@@ -125,7 +125,7 @@ export async function sendGroupNotification(message) {
   const wahaUrl = settings?.apiUrl || process.env.WAHA_API_URL;
   const wahaApiKey = settings?.serverKey || process.env.WAHA_API_KEY;
   const groupId = settings?.clientKey || process.env.WAHA_GROUP_ID;
-  const wahaSession = process.env.WAHA_SESSION || "default";
+  const wahaSession = settings?.sessionName || process.env.WAHA_SESSION || "default";
 
   if (!wahaUrl || !groupId) {
     console.warn("⚠️ WA Group ID belum diisi di Pengaturan Admin, skipping group notification");

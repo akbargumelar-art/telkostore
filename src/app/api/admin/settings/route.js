@@ -27,7 +27,7 @@ export async function GET() {
 export async function PUT(request) {
   try {
     const body = await request.json();
-    const { providerName, serverKey, clientKey, apiUrl, isProduction, isActive } = body;
+    const { providerName, serverKey, clientKey, apiUrl, sessionName, isProduction, isActive } = body;
 
     if (!providerName) {
       return NextResponse.json(
@@ -51,6 +51,7 @@ export async function PUT(request) {
       if (serverKey !== undefined) updateData.serverKey = serverKey;
       if (clientKey !== undefined) updateData.clientKey = clientKey;
       if (apiUrl !== undefined) updateData.apiUrl = apiUrl;
+      if (sessionName !== undefined) updateData.sessionName = sessionName;
       if (isProduction !== undefined) updateData.isProduction = isProduction;
       if (isActive !== undefined) updateData.isActive = isActive;
 
@@ -71,6 +72,7 @@ export async function PUT(request) {
         serverKey: serverKey || null,
         clientKey: clientKey || null,
         apiUrl: apiUrl || null,
+        sessionName: sessionName || null,
         isProduction: isProduction || false,
         isActive: isActive ?? true,
         createdAt: now,

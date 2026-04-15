@@ -28,7 +28,7 @@ export default function AdminPengaturanPage() {
     serverKey: "", clientKey: "", isProduction: false, isActive: true,
   });
   const [waha, setWaha] = useState({
-    apiUrl: "", serverKey: "", clientKey: "", isActive: true,
+    apiUrl: "", serverKey: "", clientKey: "", sessionName: "", isActive: true,
   });
 
   const fetchSettings = async () => {
@@ -53,6 +53,7 @@ export default function AdminPengaturanPage() {
             apiUrl: wahaSetting.apiUrl || "",
             serverKey: wahaSetting.serverKey || "",
             clientKey: wahaSetting.clientKey || "",
+            sessionName: wahaSetting.sessionName || "",
             isActive: wahaSetting.isActive ?? true,
           });
         }
@@ -229,6 +230,20 @@ export default function AdminPengaturanPage() {
                 placeholder="waha-api-key"
               />
             </div>
+            <div>
+              <label className="text-xs font-semibold text-gray-600 mb-1 block">Session Name</label>
+              <input
+                type="text" value={waha.sessionName}
+                onChange={(e) => setWaha({...waha, sessionName: e.target.value})}
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy font-mono"
+                placeholder="default"
+              />
+              <div className="flex items-start gap-1.5 mt-1.5">
+                <HelpCircle size={11} className="text-gray-400 shrink-0 mt-0.5" />
+                <p className="text-[11px] text-gray-400">
+                  Nama session WAHA yang digunakan untuk mengirim pesan. Default: <code className="text-navy bg-navy/5 px-1 rounded">default</code>. Lihat daftar session di <code className="text-navy bg-navy/5 px-1 rounded">GET /api/sessions</code> pada WAHA API.
+                </p>
+              </div>
 
             {/* WA Group ID for internal notifications */}
             <div className="border-t border-gray-100 pt-4">
@@ -252,7 +267,7 @@ export default function AdminPengaturanPage() {
             </div>
 
             <button
-              onClick={() => handleSave("waha", { apiUrl: waha.apiUrl, serverKey: waha.serverKey, clientKey: waha.clientKey, isActive: waha.isActive })}
+              onClick={() => handleSave("waha", { apiUrl: waha.apiUrl, serverKey: waha.serverKey, clientKey: waha.clientKey, sessionName: waha.sessionName, isActive: waha.isActive })}
               disabled={saving}
               className="gradient-navy text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:opacity-95 disabled:opacity-50 flex items-center gap-2"
             >
