@@ -12,6 +12,9 @@ import {
   ShoppingBag,
   Mail,
   Calendar,
+  Shield,
+  ShieldCheck,
+  UserCog,
 } from "lucide-react";
 
 function formatDate(dateStr) {
@@ -37,12 +40,14 @@ export default function AdminUsersPage() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [filterRole, setFilterRole] = useState("all");
   const [selectedUser, setSelectedUser] = useState(null);
   const [userOrders, setUserOrders] = useState([]);
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [success, setSuccess] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  const [togglingRole, setTogglingRole] = useState(null);
 
   const fetchUsers = async () => {
     try {
@@ -106,6 +111,31 @@ export default function AdminUsersPage() {
     }
   };
 
+  const handleToggleRole = async (userId, currentRole) => {
+    const newRole = currentRole === "admin" ? "user" : "admin";
+    setTogglingRole(userId);
+    try {
+      const res = await fetch(`/api/admin/users/${userId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role: newRole }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSuccess(`Role diubah menjadi ${newRole}`);
+        setTimeout(() => setSuccess(""), 3000);
+        setLoading(true);
+        fetchUsers();
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setTogglingRole(null);
+    }
+  };
+
+  const filteredUsers = filterRole === "all" ? users : users.filter((u) => (u.role || "user") === filterRole);
+
   return (
     <div>
       {/* Header */}
@@ -115,7 +145,7 @@ export default function AdminUsersPage() {
             <Users size={24} /> Manajemen User
           </h1>
           <p className="text-gray-400 text-sm mt-0.5">
-            {users.length} user terdaftar via OAuth
+            {filteredUsers.length} user terdaftar{filterRole !== "all" ? ` (${filterRole})` : ""}
           </p>
         </div>
         <button
@@ -135,8 +165,8 @@ export default function AdminUsersPage() {
       )}
 
       {/* Search */}
-      <div className="bg-white rounded-2xl border border-gray-100 p-4 mb-4">
-        <form onSubmit={handleSearch} className="flex gap-2">
+      <div className="bg-white rounded-2xl border border-gray-100 p-4 mb-4 flex flex-col md:flex-row gap-3">
+        <form onSubmit={handleSearch} className="flex-1 flex gap-2">
           <div className="relative flex-1">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
@@ -147,6 +177,11 @@ export default function AdminUsersPage() {
           </div>
           <button type="submit" className="px-4 py-2.5 bg-navy text-white rounded-xl text-sm font-semibold hover:opacity-90 shrink-0">Cari</button>
         </form>
+        <select value={filterRole} onChange={(e) => setFilterRole(e.target.value)} className="px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy bg-white">
+          <option value="all">Semua Role</option>
+          <option value="admin">Admin</option>
+          <option value="user">User</option>
+        </select>
       </div>
 
       {/* Users List */}
@@ -155,15 +190,16 @@ export default function AdminUsersPage() {
           <div className="flex items-center justify-center py-12">
             <div className="w-8 h-8 rounded-full border-4 border-gray-200 border-t-navy animate-spin"></div>
           </div>
-        ) : users.length === 0 ? (
+        ) : filteredUsers.length === 0 ? (
           <div className="text-center py-12">
             <Users className="text-gray-200 mx-auto mb-3" size={40} />
             <p className="text-gray-400 text-sm">Belum ada user terdaftar</p>
           </div>
         ) : (
           <div className="divide-y divide-gray-50">
-            {users.map((user) => {
+            {filteredUsers.map((user) => {
               const isExpanded = selectedUser?.id === user.id;
+              const userRole = user.role || "user";
               return (
                 <div key={user.id}>
                   <button
@@ -185,6 +221,11 @@ export default function AdminUsersPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <p className="font-bold text-sm text-gray-800 truncate">{user.name || "—"}</p>
+                        {userRole === "admin" && (
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700 flex items-center gap-0.5">
+                            <ShieldCheck size={8} /> Admin
+                          </span>
+                        )}
                         {user.provider && (
                           <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full capitalize ${providerBadge[user.provider] || "bg-gray-100 text-gray-600"}`}>
                             {user.provider}
@@ -260,6 +301,22 @@ export default function AdminUsersPage() {
 
                         {/* Actions */}
                         <div className="flex gap-2 pt-2 border-t border-gray-100">
+                          <button
+                            onClick={() => handleToggleRole(user.id, userRole)}
+                            disabled={togglingRole === user.id}
+                            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all ${
+                              userRole === "admin"
+                                ? "bg-purple-50 text-purple-700 hover:bg-purple-100"
+                                : "bg-blue-50 text-blue-700 hover:bg-blue-100"
+                            }`}
+                          >
+                            {togglingRole === user.id ? (
+                              <div className="w-3 h-3 rounded-full border-2 border-current/30 border-t-current animate-spin" />
+                            ) : (
+                              <UserCog size={12} />
+                            )}
+                            {userRole === "admin" ? "Set ke User" : "Set ke Admin"}
+                          </button>
                           <button
                             onClick={() => setDeleteConfirm(user.id)}
                             className="flex items-center gap-1.5 px-3 py-2 bg-red-50 text-red-600 rounded-xl text-xs font-semibold hover:bg-red-100 transition-all"

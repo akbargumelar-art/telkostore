@@ -78,6 +78,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           if (dbUser.length > 0) {
             token.userId = dbUser[0].id;
             token.phone = dbUser[0].phone;
+            token.role = dbUser[0].role || "user";
           }
         } catch (err) {
           console.error("Error fetching user for JWT:", err);
@@ -93,6 +94,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       }
       if (token.phone) {
         session.user.phone = token.phone;
+      }
+      if (token.role) {
+        session.user.role = token.role;
       }
       return session;
     },

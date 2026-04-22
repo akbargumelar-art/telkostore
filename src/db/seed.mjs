@@ -22,6 +22,7 @@ async function seed() {
       email VARCHAR(255) UNIQUE,
       image TEXT,
       phone VARCHAR(20),
+      role VARCHAR(20) DEFAULT 'user',
       provider VARCHAR(50),
       provider_id VARCHAR(255),
       created_at VARCHAR(50)

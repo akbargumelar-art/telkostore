@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Package,
   Plus,
@@ -13,6 +13,13 @@ import {
   ChevronDown,
   Eye,
   EyeOff,
+  Upload,
+  Download,
+  CheckSquare,
+  Square,
+  ToggleLeft,
+  ToggleRight,
+  Layers,
 } from "lucide-react";
 
 function formatRupiah(n) {
@@ -46,6 +53,15 @@ export default function AdminProdukPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  // Bulk management state
+  const [selected, setSelected] = useState(new Set());
+  const [bulkAction, setBulkAction] = useState("");
+  const [bulkProcessing, setBulkProcessing] = useState(false);
+  const [showImport, setShowImport] = useState(false);
+  const [importData, setImportData] = useState("");
+  const [importResult, setImportResult] = useState(null);
+  const [bulkStockValue, setBulkStockValue] = useState(999);
+  const fileInputRef = useRef(null);
 
   const fetchProducts = async () => {
     try {
@@ -176,6 +192,126 @@ export default function AdminProdukPage() {
     }
   };
 
+  // ===== BULK HANDLERS =====
+  const toggleSelect = (id) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selected.size === products.length) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(products.map((p) => p.id)));
+    }
+  };
+
+  const handleBulkAction = async (action, extraData = {}) => {
+    if (selected.size === 0) return;
+    setBulkProcessing(true);
+    try {
+      const res = await fetch("/api/admin/products/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, ids: [...selected], data: extraData }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSuccess(data.message);
+        setTimeout(() => setSuccess(""), 3000);
+        setSelected(new Set());
+        setLoading(true);
+        fetchProducts();
+      } else {
+        setError(data.error);
+        setTimeout(() => setError(""), 3000);
+      }
+    } catch (err) {
+      setError("Gagal memproses bulk action");
+    } finally {
+      setBulkProcessing(false);
+      setBulkAction("");
+    }
+  };
+
+  const handleExport = async () => {
+    try {
+      const res = await fetch("/api/admin/products/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "export" }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        const blob = new Blob([JSON.stringify(data.data, null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `produk-export-${new Date().toISOString().slice(0,10)}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+        setSuccess(`${data.count} produk berhasil diexport`);
+        setTimeout(() => setSuccess(""), 3000);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleImportFile = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = ev.target.result;
+      if (file.name.endsWith(".csv")) {
+        // Parse CSV
+        const lines = text.split("\n").filter((l) => l.trim());
+        if (lines.length < 2) { setImportData(""); return; }
+        const headers = lines[0].split(",").map((h) => h.trim());
+        const items = lines.slice(1).map((line) => {
+          const vals = line.split(",").map((v) => v.trim());
+          const obj = {};
+          headers.forEach((h, i) => { obj[h] = vals[i] || ""; });
+          return obj;
+        });
+        setImportData(JSON.stringify(items, null, 2));
+      } else {
+        setImportData(text);
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleImportSubmit = async () => {
+    setBulkProcessing(true);
+    setImportResult(null);
+    try {
+      const parsed = JSON.parse(importData);
+      const items = Array.isArray(parsed) ? parsed : [parsed];
+      const res = await fetch("/api/admin/products/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "import", data: items }),
+      });
+      const data = await res.json();
+      setImportResult(data);
+      if (data.success && data.data?.imported > 0) {
+        setSuccess(data.message);
+        setTimeout(() => setSuccess(""), 4000);
+        setLoading(true);
+        fetchProducts();
+      }
+    } catch (err) {
+      setImportResult({ success: false, message: "Format JSON tidak valid" });
+    } finally {
+      setBulkProcessing(false);
+    }
+  };
+
   return (
     <div>
       {/* Header */}
@@ -186,13 +322,37 @@ export default function AdminProdukPage() {
           </h1>
           <p className="text-gray-400 text-sm mt-0.5">{products.length} produk ditemukan</p>
         </div>
-        <button
-          onClick={openCreate}
-          className="gradient-red text-white font-bold px-5 py-2.5 rounded-xl text-sm hover:opacity-95 transition-opacity flex items-center gap-2 self-start"
-        >
-          <Plus size={16} /> Tambah Produk
-        </button>
+        <div className="flex items-center gap-2 self-start flex-wrap">
+          <button onClick={() => setShowImport(true)} className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50">
+            <Upload size={14} /> Import
+          </button>
+          <button onClick={handleExport} className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50">
+            <Download size={14} /> Export
+          </button>
+          <button onClick={openCreate} className="gradient-red text-white font-bold px-5 py-2.5 rounded-xl text-sm hover:opacity-95 transition-opacity flex items-center gap-2">
+            <Plus size={16} /> Tambah Produk
+          </button>
+        </div>
       </div>
+
+      {/* Bulk Action Toolbar */}
+      {selected.size > 0 && (
+        <div className="mb-4 bg-navy/5 border border-navy/20 rounded-2xl p-3 flex flex-wrap items-center gap-2 animate-fade-in">
+          <span className="text-sm font-bold text-navy px-2"><Layers size={14} className="inline mr-1" />{selected.size} dipilih</span>
+          <div className="h-5 w-px bg-navy/20 hidden md:block" />
+          <button onClick={() => handleBulkAction("toggle-active", { isActive: true })} disabled={bulkProcessing} className="px-3 py-1.5 bg-green-50 text-green-700 rounded-lg text-xs font-semibold hover:bg-green-100 flex items-center gap-1"><ToggleRight size={12} /> Aktifkan</button>
+          <button onClick={() => handleBulkAction("toggle-active", { isActive: false })} disabled={bulkProcessing} className="px-3 py-1.5 bg-yellow-50 text-yellow-700 rounded-lg text-xs font-semibold hover:bg-yellow-100 flex items-center gap-1"><ToggleLeft size={12} /> Nonaktifkan</button>
+          <button onClick={() => handleBulkAction("toggle-promo", { isPromo: true })} disabled={bulkProcessing} className="px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-xs font-semibold hover:bg-blue-100">🏷️ Promo ON</button>
+          <button onClick={() => handleBulkAction("toggle-promo", { isPromo: false })} disabled={bulkProcessing} className="px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs font-semibold hover:bg-gray-200">🏷️ Promo OFF</button>
+          <div className="flex items-center gap-1">
+            <input type="number" value={bulkStockValue} onChange={(e) => setBulkStockValue(e.target.value)} className="w-20 px-2 py-1.5 border border-gray-200 rounded-lg text-xs" placeholder="Stok" />
+            <button onClick={() => handleBulkAction("update-stock", { stock: Number(bulkStockValue) })} disabled={bulkProcessing} className="px-3 py-1.5 bg-purple-50 text-purple-700 rounded-lg text-xs font-semibold hover:bg-purple-100">Set Stok</button>
+          </div>
+          <button onClick={() => { if(confirm(`Hapus ${selected.size} produk?`)) handleBulkAction("delete"); }} disabled={bulkProcessing} className="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs font-semibold hover:bg-red-100 flex items-center gap-1 ml-auto"><Trash2 size={12} /> Hapus</button>
+          <button onClick={() => setSelected(new Set())} className="px-3 py-1.5 bg-gray-100 text-gray-500 rounded-lg text-xs font-semibold hover:bg-gray-200"><X size={12} /></button>
+          {bulkProcessing && <div className="w-4 h-4 rounded-full border-2 border-navy/30 border-t-navy animate-spin" />}
+        </div>
+      )}
 
       {/* Success Message */}
       {success && (
@@ -247,6 +407,11 @@ export default function AdminProdukPage() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-100">
                 <tr>
+                  <th className="px-3 py-3 w-10">
+                    <button onClick={toggleSelectAll} className="text-gray-400 hover:text-navy">
+                      {selected.size === products.length && products.length > 0 ? <CheckSquare size={16} className="text-navy" /> : <Square size={16} />}
+                    </button>
+                  </th>
                   <th className="text-left px-4 py-3 font-semibold text-gray-500 text-xs uppercase">Produk</th>
                   <th className="text-left px-4 py-3 font-semibold text-gray-500 text-xs uppercase">Kategori</th>
                   <th className="text-right px-4 py-3 font-semibold text-gray-500 text-xs uppercase">Harga</th>
@@ -257,7 +422,12 @@ export default function AdminProdukPage() {
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {products.map((p) => (
-                  <tr key={p.id} className={`hover:bg-gray-50 transition-colors ${!p.isActive ? "opacity-50" : ""}`}>
+                  <tr key={p.id} className={`hover:bg-gray-50 transition-colors ${!p.isActive ? "opacity-50" : ""} ${selected.has(p.id) ? "bg-navy/5" : ""}`}>
+                    <td className="px-3 py-3">
+                      <button onClick={() => toggleSelect(p.id)} className="text-gray-400 hover:text-navy">
+                        {selected.has(p.id) ? <CheckSquare size={16} className="text-navy" /> : <Square size={16} />}
+                      </button>
+                    </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         {p.isFlashSale && <span className="text-[9px] bg-red-100 text-red-600 font-bold px-1.5 py-0.5 rounded-full">⚡</span>}
@@ -428,6 +598,51 @@ export default function AdminProdukPage() {
                 className="gradient-navy text-white px-6 py-2.5 rounded-xl text-sm font-bold hover:opacity-95 disabled:opacity-50 flex items-center gap-2">
                 {saving ? <div className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin"></div> : <Check size={14} />}
                 {editId ? "Simpan Perubahan" : "Tambah Produk"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Import Modal */}
+      {showImport && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+          <div className="absolute inset-0 bg-black/40" onClick={() => { setShowImport(false); setImportResult(null); setImportData(""); }} />
+          <div className="relative bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl">
+            <div className="sticky top-0 bg-white border-b border-gray-100 px-5 py-4 flex items-center justify-between rounded-t-2xl">
+              <h2 className="font-bold text-navy text-base flex items-center gap-2"><Upload size={16} /> Import Produk</h2>
+              <button onClick={() => { setShowImport(false); setImportResult(null); setImportData(""); }} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center hover:bg-gray-200"><X size={16} /></button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs text-blue-700">
+                <p className="font-semibold mb-1">Format JSON:</p>
+                <code className="block bg-white/60 rounded p-2 text-[10px] leading-relaxed">{`[{"name":"Pulsa 5K","categoryId":"pulsa","price":6500,"stock":999}]`}</code>
+                <p className="mt-2 font-semibold">Format CSV:</p>
+                <code className="block bg-white/60 rounded p-2 text-[10px]">name,categoryId,price,stock</code>
+              </div>
+              <div>
+                <input ref={fileInputRef} type="file" accept=".json,.csv" onChange={handleImportFile} className="hidden" />
+                <button onClick={() => fileInputRef.current?.click()} className="w-full border-2 border-dashed border-gray-300 rounded-xl py-6 text-center hover:border-navy hover:bg-navy/5 transition-all">
+                  <Upload size={20} className="mx-auto text-gray-400 mb-2" />
+                  <p className="text-sm text-gray-500 font-medium">Pilih file CSV atau JSON</p>
+                  <p className="text-[10px] text-gray-400 mt-1">Atau paste data JSON di bawah</p>
+                </button>
+              </div>
+              <textarea value={importData} onChange={(e) => setImportData(e.target.value)} rows={6} placeholder='Paste JSON array di sini...' className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-xs font-mono focus:outline-none focus:border-navy" />
+              {importResult && (
+                <div className={`rounded-xl p-3 text-xs ${importResult.success ? "bg-green-50 border border-green-200 text-green-700" : "bg-red-50 border border-red-200 text-red-600"}`}>
+                  <p className="font-semibold">{importResult.message}</p>
+                  {importResult.data?.errors?.length > 0 && (
+                    <ul className="mt-2 space-y-0.5 max-h-24 overflow-y-auto">{importResult.data.errors.map((e, i) => <li key={i}>• {e}</li>)}</ul>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="sticky bottom-0 bg-white border-t border-gray-100 px-5 py-4 flex justify-end gap-3 rounded-b-2xl">
+              <button onClick={() => { setShowImport(false); setImportResult(null); setImportData(""); }} className="px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50">Batal</button>
+              <button onClick={handleImportSubmit} disabled={bulkProcessing || !importData.trim()} className="gradient-navy text-white px-6 py-2.5 rounded-xl text-sm font-bold hover:opacity-95 disabled:opacity-50 flex items-center gap-2">
+                {bulkProcessing ? <div className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" /> : <Upload size={14} />}
+                Import
               </button>
             </div>
           </div>

@@ -1,4 +1,4 @@
-// GET/DELETE /api/admin/users/[id]
+// GET/PUT/DELETE /api/admin/users/[id]
 import { NextResponse } from "next/server";
 import db from "@/db/index.js";
 import { users, orders } from "@/db/schema.js";
@@ -43,6 +43,65 @@ export async function GET(request, { params }) {
   }
 }
 
+// PUT — Update user (role, phone, etc.)
+export async function PUT(request, { params }) {
+  try {
+    const { id } = await params;
+    const body = await request.json();
+
+    // Check user exists
+    const [existing] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, id))
+      .limit(1);
+
+    if (!existing) {
+      return NextResponse.json(
+        { success: false, error: "User tidak ditemukan" },
+        { status: 404 }
+      );
+    }
+
+    const updateData = {};
+    const allowedFields = ["role", "phone", "name"];
+
+    for (const field of allowedFields) {
+      if (body[field] !== undefined) {
+        updateData[field] = body[field];
+      }
+    }
+
+    // Validate role
+    if (updateData.role && !["user", "admin"].includes(updateData.role)) {
+      return NextResponse.json(
+        { success: false, error: "Role harus 'user' atau 'admin'" },
+        { status: 400 }
+      );
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      return NextResponse.json(
+        { success: false, error: "Tidak ada data yang diperbarui" },
+        { status: 400 }
+      );
+    }
+
+    await db.update(users).set(updateData).where(eq(users.id, id));
+
+    return NextResponse.json({
+      success: true,
+      message: "User berhasil diperbarui",
+    });
+  } catch (error) {
+    console.error("PUT /api/admin/users/[id] error:", error);
+    return NextResponse.json(
+      { success: false, error: "Gagal memperbarui user" },
+      { status: 500 }
+    );
+  }
+}
+
 // DELETE — Remove user
 export async function DELETE(request, { params }) {
   try {
@@ -62,3 +121,4 @@ export async function DELETE(request, { params }) {
     );
   }
 }
+
