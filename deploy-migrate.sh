@@ -1,0 +1,173 @@
+#!/bin/bash
+# ==============================
+# Telko.Store — ONE-TIME Migration Script
+# Migrasi dari SQLite → MySQL
+#
+# SEBELUM jalankan script ini:
+#   1. MySQL sudah terinstall & running
+#   2. Buat database & user MANUAL:
+#      mysql -u root -p
+#      CREATE DATABASE telkostore CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+#      CREATE USER 'telkostore'@'localhost' IDENTIFIED BY 'PASSWORD_KUAT';
+#      GRANT ALL PRIVILEGES ON telkostore.* TO 'telkostore'@'localhost';
+#      FLUSH PRIVILEGES;
+#      EXIT;
+#   3. Edit .env.local → DATABASE_URL, AUTH_SECRET, ADMIN_SECRET
+#
+# Jalankan: bash deploy-migrate.sh
+# ==============================
+
+set -e
+
+APP_DIR="/var/www/telkostore"
+BRANCH="main"
+
+echo ""
+echo "🔄 Telko.Store — Migration Deploy (SQLite → MySQL)"
+echo "===================================================="
+echo ""
+
+# ===== PRE-CHECK =====
+echo "🔍 Pre-flight checks..."
+
+# Check MySQL is running
+if ! systemctl is-active --quiet mysql 2>/dev/null && ! systemctl is-active --quiet mariadb 2>/dev/null; then
+  echo "❌ MySQL/MariaDB is not running!"
+  echo "   Fix: sudo systemctl start mysql"
+  exit 1
+fi
+echo "   ✅ MySQL is running"
+
+cd "$APP_DIR"
+
+# Check .env.local exists
+if [ ! -f ".env.local" ]; then
+  echo "❌ .env.local not found!"
+  echo "   Fix: Create .env.local with DATABASE_URL, AUTH_SECRET, etc."
+  exit 1
+fi
+
+# Check DATABASE_URL is set and points to MySQL
+if ! grep -q "^DATABASE_URL=mysql://" .env.local; then
+  echo "❌ DATABASE_URL in .env.local is not set to MySQL!"
+  echo "   Fix: DATABASE_URL=mysql://telkostore:PASSWORD@localhost:3306/telkostore"
+  exit 1
+fi
+echo "   ✅ .env.local configured with MySQL"
+
+# Check AUTH_SECRET is not default
+if grep -q "ganti-dengan-random" .env.local; then
+  echo "❌ AUTH_SECRET masih placeholder! Generate dulu:"
+  echo "   openssl rand -base64 32"
+  exit 1
+fi
+echo "   ✅ AUTH_SECRET configured"
+
+echo ""
+
+# ===== STEP 1: BACKUP =====
+echo "💾 Step 1: Backup data lama..."
+BACKUP_DIR="$APP_DIR/backup/$(date +%Y%m%d-%H%M%S)"
+mkdir -p "$BACKUP_DIR"
+
+if [ -f "telko.db" ]; then
+  cp telko.db "$BACKUP_DIR/telko.db"
+  echo "   ✅ SQLite database backed up → $BACKUP_DIR/telko.db"
+else
+  echo "   ⚠️  telko.db not found (skip backup)"
+fi
+
+if [ -f ".env.local.backup" ]; then
+  cp .env.local.backup "$BACKUP_DIR/"
+fi
+echo ""
+
+# ===== STEP 2: PULL LATEST =====
+echo "📥 Step 2: Pull latest from GitHub ($BRANCH)..."
+git fetch origin
+git reset --hard origin/$BRANCH
+echo "   ✅ Pull complete"
+echo ""
+
+# ===== STEP 3: INSTALL DEPENDENCIES =====
+echo "📦 Step 3: Installing dependencies..."
+npm install --production=false
+echo "   ✅ Dependencies installed"
+echo ""
+
+# ===== STEP 4: CREATE MYSQL TABLES + SEED =====
+echo "🗄️ Step 4: Creating MySQL tables & seeding data..."
+npm run db:seed
+echo "   ✅ Tables created & data seeded"
+echo ""
+
+# ===== STEP 5: MIGRATE SQLITE DATA =====
+if [ -f "telko.db" ] || [ -f "$BACKUP_DIR/telko.db" ]; then
+  echo "🔄 Step 5: Migrating SQLite data → MySQL..."
+
+  # Ensure telko.db is in project root for migration script
+  if [ ! -f "telko.db" ] && [ -f "$BACKUP_DIR/telko.db" ]; then
+    cp "$BACKUP_DIR/telko.db" ./telko.db
+  fi
+
+  # Install better-sqlite3 temporarily
+  npm install better-sqlite3 --save-dev --no-audit --no-fund 2>/dev/null
+  
+  # Run migration
+  npm run db:migrate-data
+  
+  # Remove better-sqlite3
+  npm uninstall better-sqlite3 --no-audit --no-fund 2>/dev/null
+  
+  echo "   ✅ Data migration complete"
+else
+  echo "⏭️ Step 5: No SQLite database found, skipping migration"
+fi
+echo ""
+
+# ===== STEP 6: BUILD =====
+echo "🔨 Step 6: Building Next.js..."
+npm run build
+echo "   ✅ Build complete"
+echo ""
+
+# ===== STEP 7: RESTART PM2 =====
+echo "🔄 Step 7: Restarting application..."
+if command -v pm2 &> /dev/null; then
+  pm2 restart telkostore-app --update-env 2>/dev/null || pm2 start npm --name "telkostore-app" -- start
+  pm2 save 2>/dev/null
+  echo "   ✅ PM2 restarted"
+else
+  echo "   ⚠️  PM2 not found. Install: npm install -g pm2"
+  echo "   Manual start: pm2 start npm --name telkostore-app -- start"
+fi
+echo ""
+
+# ===== STEP 8: HEALTH CHECK =====
+echo "🏥 Step 8: Health check..."
+sleep 3  # Wait for app to start
+
+HEALTH=$(curl -s http://localhost:3000/api/health 2>/dev/null || echo '{"status":"unreachable"}')
+echo "   Response: $HEALTH"
+
+if echo "$HEALTH" | grep -q '"status":"ok"'; then
+  echo "   ✅ Application is healthy!"
+else
+  echo "   ⚠️  Health check failed — check: pm2 logs telkostore-app"
+fi
+echo ""
+
+# ===== DONE =====
+echo "===================================================="
+echo "🎉 Migration deploy complete!"
+echo ""
+echo "📋 Checklist manual setelah ini:"
+echo "   1. Buka https://telko.store/ → pastikan produk muncul"
+echo "   2. Login admin → /admin/login"
+echo "   3. Update Midtrans Dashboard webhook URL:"
+echo "      → https://telko.store/api/webhook/midtrans"
+echo "   4. Test checkout end-to-end"
+echo ""
+echo "💾 Backup SQLite tersimpan di: $BACKUP_DIR"
+echo "===================================================="
+echo ""
