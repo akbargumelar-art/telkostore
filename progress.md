@@ -1,6 +1,6 @@
 # Telko.Store — Progress Report
 
-**Log Terakhir:** 14 April 2026
+**Log Terakhir:** 22 April 2026
 
 ## ✅ Apa yang sudah selesai dilakukan
 
@@ -165,7 +165,110 @@
 - **Email**: `hq@telko.store` (sebelumnya `cs@telko.store`)
 - **Alamat**: Ditambahkan card baru — Jl. Pemuda Raya No. 21A, Kota Cirebon (dengan link Google Maps)
 
+### 14. Migrasi Database ke MySQL (22 April 2026) 🚀
+- **Perubahan Platform**: Memigrasikan database dari **SQLite** (`better-sqlite3`) ke **MySQL** (`mysql2`).
+- **Update Drizzle**: Mengubah konfigurasi `drizzle.config.js` dan skema ke `mysql-core`. Menyesuaikan tipe data (misalnya `text` menjadi `varchar`, boolean, default timestamps).
+- **Asynchronous Transaction**: Merombak fitur checkout yang sebelumnya menggunakan synchronous SQLite transaction (`db.transaction`) menjadi asynchronous MySQL transaction.
+- **Data Migration Script**: Membuat script khusus `src/db/migrate-sqlite-to-mysql.mjs` untuk memindahkan data lama dengan aman tanpa downtime, serta `mysql-init.sql` untuk referensi skema manual.
+- **Seed Script Baru**: Menulis ulang `src/db/seed.mjs` dengan query MySQL murni dan pola `ON DUPLICATE KEY UPDATE` agar *idempotent*.
+
+### 15. Integrasi Pakasir Payment Gateway (22 April 2026) 💳
+- **Opsi Multi-Gateway**: Menambahkan [Pakasir](https://pakasir.com/) sebagai metode pembayaran alternatif selain Midtrans.
+- **Helper Baru**: Dibuat `src/lib/pakasir.js` untuk membuat transaksi link pembayaran, mengecek status, membatalkan transaksi, dan simulasi sandbox.
+- **Webhook Pakasir**: Endpoint `POST /api/webhook/pakasir` ditambahkan dengan fitur lengkap setara Midtrans (idempotency, stock rollback, WA notification update).
+- **Pengaturan Admin**: Menambahkan tab konfigurasi Pakasir di `/admin/pengaturan` untuk admin, termasuk *Project Slug* dan *API Key*.
+- **Dynamic Checkout**: API checkout disesuaikan agar bisa menerima pilihan gateway dan merespons dengan URL *redirect* yang sesuai.
+
+### 16. Audit & Perbaikan Menyeluruh (22 April 2026) 🔒
+
+#### a. Fix Pakasir API — Sesuai Dokumentasi Resmi
+- **Sebelumnya**: `src/lib/pakasir.js` menggunakan endpoint `POST /api/transaction` dengan `Authorization: Bearer` header yang **tidak sesuai** dengan [dokumentasi resmi Pakasir](https://pakasir.com/p/docs).
+- **Sesudah**: Rewrite total — menggunakan **URL-Based payment flow** (`/pay/{slug}/{amount}?order_id=xxx&redirect=xxx`) yang direkomendasikan Pakasir. Semua endpoint API lain (transactioncreate, transactiondetail, transactioncancel, paymentsimulation) diperbaiki menggunakan `api_key` di body JSON.
+- **Tambahan**: Fungsi `createPakasirTransactionAPI()` untuk opsi advanced (render QR/VA sendiri). Fungsi `clearPakasirCache()` untuk invalidasi cache setelah admin update settings.
+
+#### b. Fix Webhook Pakasir — Validasi Amount
+- **Sebelumnya**: Webhook Pakasir tidak memvalidasi `amount` terhadap `order.productPrice`.
+- **Sesudah**: Validasi amount wajib (toleransi Rp1 untuk pembulatan). Request dengan amount tidak cocok langsung ditolak `400 Bad Request`. Ini sesuai dengan peringatan di dokumentasi Pakasir: *"Pastikan amount dan order_id sesuai dengan transaksi di sistem Anda."*
+
+#### c. Fix Order Check API — Support Dual Gateway
+- **Sebelumnya**: `/api/orders/[id]/check` hanya memanggil Midtrans Core API.
+- **Sesudah**: Routing berdasarkan `order.paymentGateway` — Midtrans → `core.transaction.status()`, Pakasir → `checkPakasirTransaction()`. Shared helper `applyStatusUpdate()` untuk mengurangi duplikasi kode.
+
+#### d. Frontend Gateway Selection UI
+- **Sebelumnya**: User tidak bisa memilih gateway — semua order otomatis Midtrans.
+- **Sesudah**: Di Step 3 checkout, tampil **2 tombol pilihan** (Midtrans / Pakasir) — hanya muncul jika Pakasir aktif di admin. Pengecekan via API baru `GET /api/gateway/status`. Dialog konfirmasi juga menampilkan gateway yang dipilih.
+
+#### e. Fix Payment Finish Page — Dynamic Gateway Text
+- **Sebelumnya**: Hardcoded "Transaksi aman & terenkripsi via Midtrans".
+- **Sesudah**: Dinamis berdasarkan query param `gateway`. Juga menambahkan mapping status khusus Pakasir (`completed`, `expired`, `cancelled`).
+
+#### f. Fix MySQL Pool — Error Handling & Reconnect
+- **Sebelumnya**: Pool MySQL singleton tanpa error handling — jika MySQL disconnect, koneksi stale.
+- **Sesudah**: Menambahkan `pool.on("error")` handler yang force-reset koneksi, dan `enableKeepAlive` untuk mencegah idle disconnect.
+
+#### g. Callback URL Consistency
+- Semua callback URL (Midtrans finish/error/unfinish, Pakasir redirect) sekarang menyertakan `&gateway=midtrans` atau `&gateway=pakasir` agar halaman `/payment/finish` selalu tahu gateway yang digunakan.
+
+### 17. Manajemen Voucher Internet — Simpati & byU (22 April 2026) 🎫
+
+#### Fase 1: Database & Helper Library
+- **Tabel Baru `voucher_codes`**: Menyimpan kode voucher per produk dengan tracking status (available, reserved, redeemed, failed), provider (simpati/byu), dan assignment ke order.
+- **Helper `src/lib/voucher.js`**: Fungsi `assignVoucherToOrder()` dengan race-condition guard, `detectProviderFromPhone()` untuk auto-detect Simpati vs byU, `getRedeemInstructions()` dengan panduan spesifik per provider, **kini dilengkapi opsi redeem via website maupun dial UMB *133***.
+
+#### Fase 2: Auto-Assign Setelah Bayar
+- Kedua webhook (Midtrans & Pakasir) otomatis:
+  1. Detect provider dari nomor HP pembeli
+  2. Assign kode voucher yang tersedia
+  3. Kirim kode + **cara redeem (Website & Dial UMB *133*)** via WhatsApp ke pembeli
+  4. Kirim notifikasi ke grup admin untuk semi-auto redeem
+  5. Jika stok habis → alert ke grup admin
+- Jika pembayaran gagal/expire → kode voucher otomatis **dikembalikan** ke status tersedia
+
+#### Fase 3: Semi-Auto Redeem (1-Click Admin)
+- Halaman `/admin/voucher` dengan dashboard lengkap:
+  - **Stats cards**: total, tersedia, dipesan, redeemed, gagal
+  - **Low-stock alert**: peringatan jika stok ≤ 5
+  - **Needs-redeem banner**: daftar voucher yang perlu di-redeem
+  - **1-Click Redeem**: salin kode ke clipboard + buka situs redeem provider (Telkomsel/byU) di tab baru
+  - **Mark Redeemed**: tandai berhasil → order auto-complete + WA notifikasi ke pembeli
+  - **Mark Failed**: tandai gagal → kode bisa di-reset
+
+#### Fase 4: Laporan & CRUD
+- **Filter multi-dimensi**: produk, provider, status, pencarian kode
+- **Tambah kode**: input 1-per-1 atau bulk (pisah baris/koma)
+- **Hapus**: hanya kode dengan status "available"
+- **Reset**: kembalikan kode gagal ke tersedia
+- **API Endpoints**:
+  - `GET/POST /api/admin/vouchers` (list + stats + add)
+  - `PUT/DELETE /api/admin/vouchers/[id]` (redeem, fail, release, delete)
+
+### 18. Audit & Hardening Pra-Deploy (22 April 2026) 🛡️
+
+#### a. Fix Database Reconnect — Proxy Pattern
+- **Sebelumnya**: `export const db = getConnection()` → jika MySQL pool error dan `_db` di-reset ke `null`, semua module yang sudah import `db` tetap merujuk ke koneksi stale.
+- **Sesudah**: `db` diekspor sebagai **Proxy** yang selalu mendelegasikan ke `getConnection()` pada setiap property access. Ini memastikan auto-reconnect benar-benar bekerja setelah pool error.
+
+#### b. Fix Voucher Race Condition — SELECT FOR UPDATE
+- **Sebelumnya**: Fungsi `assignVoucherToOrder()` menggunakan pola SELECT → UPDATE → re-SELECT yang rentan race condition (dua request concurrent bisa ambil voucher sama).
+- **Sesudah**: Menggunakan **MySQL transaction** dengan `SELECT ... FOR UPDATE` untuk mengunci row voucher sebelum update. Ditambahkan:
+  - Depth-limited retry (max 3) untuk mencegah infinite recursion
+  - Deadlock handling otomatis (retry pada `ER_LOCK_DEADLOCK`)
+  - Drizzle `sql` template literal untuk parameterized queries (bukan `sql.raw`)
+
+#### c. Fix Pakasir Webhook Security — API Verification
+- **Sebelumnya**: Webhook Pakasir tidak memvalidasi signature — siapa saja bisa mengirim POST palsu dengan `status: "completed"` dan order langsung di-mark paid.
+- **Sesudah**: Setiap webhook dengan status `completed`/`paid` diverifikasi dengan memanggil `checkPakasirTransaction()` langsung ke API Pakasir. Jika API menunjukkan status berbeda, webhook ditolak `403`.
+- Seluruh downstream logic (payment record, order status, WA notifikasi) menggunakan `verifiedStatus` bukan raw webhook status.
+
+#### d. Infrastructure Improvements
+- **Health Check Endpoint**: `GET /api/health` — memeriksa konektivitas database dan keberadaan environment variables kritis. Mengembalikan JSON terstruktur dengan latency metrics.
+- **SEO Files**: Ditambahkan `robots.txt` (block `/admin`, `/api`, `/payment`) dan `sitemap.xml` (6 halaman publik).
+- **Node.js Version Lock**: Ditambahkan `.nvmrc` (Node 18) dan `engines` field di `package.json` (`>=18.0.0`).
+- **Cleanup**: Dihapus `better-sqlite3` dari devDependencies (tidak lagi dibutuhkan setelah migrasi MySQL).
+- **Fix WAHA_GROUP_ID**: Ditambahkan variable `WAHA_GROUP_ID` ke `.env.local` yang sebelumnya hilang (menyebabkan group notification di-skip silent).
+
 ---
+
 
 ## 🛠️ Langkah Lanjutan
 
@@ -196,44 +299,65 @@ telko.store/
 │   ├── lib/
 │   │   ├── utils.js                   # formatRupiah, operator detection
 │   │   ├── whatsapp.js                # Shared WA notification helper
-│   │   └── midtrans.js                # Shared Midtrans helper
+│   │   ├── midtrans.js                # Shared Midtrans helper
+│   │   ├── pakasir.js                 # Pakasir payment gateway helper
+│   │   ├── voucher.js                 # Voucher auto-assign + redeem helper
+│   │   ├── jwt.js                     # Admin JWT token management
+│   │   ├── rate-limit.js              # In-memory rate limiter
+│   │   └── notification-scheduler.js  # Delayed WA notification scheduler
 │   ├── db/
-│   │   ├── schema.js                  # Drizzle ORM schema
-│   │   ├── index.js                   # DB connection singleton
-│   │   └── seed.mjs                   # Full seed (products + dummy orders)
+│   │   ├── schema.js                  # Drizzle ORM schema (MySQL)
+│   │   ├── index.js                   # DB connection pool (mysql2 + Proxy reconnect)
+│   │   ├── seed.mjs                   # MySQL seed data
+│   │   ├── mysql-init.sql             # SQL schema reference
+│   │   └── migrate-sqlite-to-mysql.mjs # Script migrasi data
 │   ├── data/
-│   │   └── products.js                # Legacy mock data (tidak lagi diimport)
+│   │   └── products.js                # Legacy mock data
 │   ├── auth.js                        # Auth.js v5 config (Google + Facebook)
 │   ├── components/                    # 10 komponen UI (+ AuthProvider)
 │   ├── app/
 │   │   ├── page.js                    # Homepage (API-driven)
-│   │   ├── product/[id]/page.js       # Product detail + 3-step checkout + Game ID form
-│   │   ├── promo/page.js              # Promo page (API-driven)
+│   │   ├── product/[id]/page.js       # Product detail + 3-step checkout
+│   │   ├── promo/page.js              # Promo page
 │   │   ├── history/page.js            # Order search
-│   │   ├── account/page.js            # Login Google/Facebook + Profil
-│   │   ├── order/[id]/page.js         # Order tracking + Midtrans check
-│   │   ├── faq/page.js                # FAQ — accordion per kategori ✨
-│   │   ├── contact/page.js            # Contact — form + info kontak ✨
-│   │   ├── payment/finish/page.js     # Midtrans redirect sukses/gagal ✨
-│   │   ├── admin/                     # Admin dashboard (5 pages)
+│   │   ├── account/page.js            # Login + Profil
+│   │   ├── order/[id]/page.js         # Order tracking
+│   │   ├── faq/page.js                # FAQ
+│   │   ├── contact/page.js            # Contact
+│   │   ├── payment/finish/page.js     # Gateway redirect sukses/gagal
+│   │   ├── admin/                     # Admin dashboard
 │   │   │   ├── layout.js
 │   │   │   ├── page.js                # Dashboard overview
 │   │   │   ├── login/page.js
 │   │   │   ├── produk/page.js         # CRUD produk
 │   │   │   ├── pesanan/page.js        # Manajemen pesanan
-│   │   │   └── pengaturan/page.js     # Gateway settings
+│   │   │   ├── pengaturan/page.js     # Gateway settings (Midtrans, Pakasir, WAHA)
+│   │   │   ├── voucher/page.js        # Voucher management (CRUD + 1-click redeem)
+│   │   │   ├── profil/page.js         # Admin profile (ubah kunci)
+│   │   │   └── users/page.js          # User management
 │   │   └── api/
-│   │       ├── checkout/route.js      # Checkout + Game ID support ✨
-│   │       ├── webhook/midtrans/route.js
+│   │       ├── health/route.js        # Health check endpoint
+│   │       ├── checkout/route.js      # Checkout + Dual Gateway
+│   │       ├── gateway/
+│   │       │   └── status/route.js    # Gateway availability check
+│   │       ├── webhook/
+│   │       │   ├── midtrans/route.js  # Midtrans webhook (signature verified)
+│   │       │   └── pakasir/route.js   # Pakasir webhook (API-verified)
+│   │       ├── contact/route.js       # Contact form → WA group
 │   │       ├── products/route.js
 │   │       ├── categories/route.js
 │   │       ├── orders/[id]/route.js
 │   │       ├── orders/[id]/check/route.js
 │   │       ├── orders/search/route.js
-│   │       ├── auth/[...nextauth]/route.js  # NextAuth handler
-│   │       ├── user/orders/route.js   # User's orders
-│   │       └── admin/                 # Admin API (7 routes)
+│   │       ├── auth/[...nextauth]/route.js
+│   │       ├── user/orders/route.js
+│   │       └── admin/                 # Admin API (vouchers, stats, dll)
+├── public/
+│   ├── favicon/                       # Favicon + Web manifest
+│   ├── robots.txt                     # SEO — block admin/api routes
+│   └── sitemap.xml                    # SEO — public pages sitemap
 ├── .env.local                         # Environment variables
+├── .nvmrc                             # Node.js version lock (18)
 ├── deploy.sh                          # VPS deploy script
-└── telko.db                           # SQLite database
+└── telko.db                           # Backup SQLite database lama
 ```

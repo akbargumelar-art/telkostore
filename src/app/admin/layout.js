@@ -14,6 +14,7 @@ import {
   ChevronRight,
   User,
   Users,
+  Ticket,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -21,6 +22,7 @@ const navItems = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
   { href: "/admin/produk", label: "Produk", icon: Package },
   { href: "/admin/pesanan", label: "Pesanan", icon: ShoppingCart },
+  { href: "/admin/voucher", label: "Voucher", icon: Ticket },
   { href: "/admin/users", label: "Users", icon: Users },
   { href: "/admin/profil", label: "Profil", icon: User },
   { href: "/admin/pengaturan", label: "Pengaturan", icon: Settings },

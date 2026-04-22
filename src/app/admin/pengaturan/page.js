@@ -14,6 +14,7 @@ import {
   ToggleRight,
   Users,
   HelpCircle,
+  Wallet,
 } from "lucide-react";
 
 export default function AdminPengaturanPage() {
@@ -27,6 +28,9 @@ export default function AdminPengaturanPage() {
   const [midtrans, setMidtrans] = useState({
     serverKey: "", clientKey: "", isProduction: false, isActive: true,
   });
+  const [pakasir, setPakasir] = useState({
+    serverKey: "", clientKey: "", apiUrl: "https://app.pakasir.com", isProduction: false, isActive: false,
+  });
   const [waha, setWaha] = useState({
     apiUrl: "", serverKey: "", clientKey: "", sessionName: "", isActive: true,
   });
@@ -39,6 +43,7 @@ export default function AdminPengaturanPage() {
         setSettings(data.data);
         // Populate forms
         const mtSetting = data.data.find((s) => s.providerName === "midtrans");
+        const pkSetting = data.data.find((s) => s.providerName === "pakasir");
         const wahaSetting = data.data.find((s) => s.providerName === "waha");
         if (mtSetting) {
           setMidtrans({
@@ -46,6 +51,15 @@ export default function AdminPengaturanPage() {
             clientKey: mtSetting.clientKey || "",
             isProduction: mtSetting.isProduction || false,
             isActive: mtSetting.isActive ?? true,
+          });
+        }
+        if (pkSetting) {
+          setPakasir({
+            serverKey: pkSetting.serverKey || "",
+            clientKey: pkSetting.clientKey || "",
+            apiUrl: pkSetting.apiUrl || "https://app.pakasir.com",
+            isProduction: pkSetting.isProduction || false,
+            isActive: pkSetting.isActive ?? false,
           });
         }
         if (wahaSetting) {
@@ -191,6 +205,108 @@ export default function AdminPengaturanPage() {
           </div>
         </div>
 
+        {/* Pakasir Settings */}
+        <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+          <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-purple-50 flex items-center justify-center">
+              <Wallet size={20} className="text-purple-600" />
+            </div>
+            <div className="flex-1">
+              <h2 className="font-bold text-sm text-navy">Pakasir Payment Gateway</h2>
+              <p className="text-[11px] text-gray-400">
+                Konfigurasi API untuk pembayaran via <a href="https://pakasir.com" target="_blank" rel="noopener" className="text-purple-500 underline">pakasir.com</a>
+              </p>
+            </div>
+            <button
+              onClick={() => setPakasir({...pakasir, isActive: !pakasir.isActive})}
+              className={`flex items-center gap-1 text-xs font-bold px-3 py-1.5 rounded-lg transition-all ${
+                pakasir.isActive ? "bg-green-50 text-green-700" : "bg-gray-100 text-gray-500"
+              }`}
+            >
+              {pakasir.isActive ? <><ToggleRight size={14} /> Aktif</> : <><ToggleLeft size={14} /> Nonaktif</>}
+            </button>
+          </div>
+
+          <div className="p-5 space-y-4">
+            <div>
+              <label className="text-xs font-semibold text-gray-600 mb-1 block">API Key</label>
+              <input
+                type="text" value={pakasir.serverKey}
+                onChange={(e) => setPakasir({...pakasir, serverKey: e.target.value})}
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy font-mono"
+                placeholder="pakasir-api-key-xxxxx"
+              />
+              <div className="flex items-start gap-1.5 mt-1.5">
+                <HelpCircle size={11} className="text-gray-400 shrink-0 mt-0.5" />
+                <p className="text-[11px] text-gray-400">
+                  API Key dari dashboard Pakasir. Buat proyek baru di <code className="text-navy bg-navy/5 px-1 rounded">app.pakasir.com</code> untuk mendapatkan API Key.
+                </p>
+              </div>
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-gray-600 mb-1 block">Project Slug</label>
+              <input
+                type="text" value={pakasir.clientKey}
+                onChange={(e) => setPakasir({...pakasir, clientKey: e.target.value})}
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy font-mono"
+                placeholder="nama-proyek-slug"
+              />
+              <div className="flex items-start gap-1.5 mt-1.5">
+                <HelpCircle size={11} className="text-gray-400 shrink-0 mt-0.5" />
+                <p className="text-[11px] text-gray-400">
+                  Slug proyek Pakasir. Tertera di halaman detail proyek setelah dibuat.
+                </p>
+              </div>
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-gray-600 mb-1 block">API URL</label>
+              <input
+                type="text" value={pakasir.apiUrl}
+                onChange={(e) => setPakasir({...pakasir, apiUrl: e.target.value})}
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy font-mono"
+                placeholder="https://app.pakasir.com"
+              />
+            </div>
+            <div className="flex items-center gap-3">
+              <label className="flex items-center gap-2 text-sm cursor-pointer">
+                <input
+                  type="checkbox" checked={pakasir.isProduction}
+                  onChange={(e) => setPakasir({...pakasir, isProduction: e.target.checked})}
+                  className="rounded"
+                />
+                <span className="text-gray-600 font-medium">Mode Production</span>
+              </label>
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                pakasir.isProduction ? "bg-red-50 text-red-600" : "bg-yellow-50 text-yellow-700"
+              }`}>
+                {pakasir.isProduction ? "🔴 PRODUCTION" : "🟡 SANDBOX"}
+              </span>
+            </div>
+
+            {/* Webhook URL Info */}
+            <div className="bg-purple-50 border border-purple-100 rounded-xl p-3">
+              <p className="text-[11px] font-semibold text-purple-700 mb-1">📌 Webhook URL (atur di dashboard Pakasir)</p>
+              <code className="text-[11px] text-purple-600 bg-white px-2 py-1 rounded block break-all">
+                {typeof window !== "undefined" ? window.location.origin : "https://telko.store"}/api/webhook/pakasir
+              </code>
+            </div>
+
+            <button
+              onClick={() => handleSave("pakasir", {
+                serverKey: pakasir.serverKey,
+                clientKey: pakasir.clientKey,
+                apiUrl: pakasir.apiUrl,
+                isProduction: pakasir.isProduction,
+                isActive: pakasir.isActive,
+              })}
+              disabled={saving}
+              className="gradient-navy text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:opacity-95 disabled:opacity-50 flex items-center gap-2"
+            >
+              <Save size={14} /> Simpan Pakasir
+            </button>
+          </div>
+        </div>
+
         {/* WAHA Settings */}
         <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
           <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-3">
@@ -290,11 +406,15 @@ export default function AdminPengaturanPage() {
             </div>
             <div className="flex justify-between">
               <span className="text-gray-500">Database</span>
-              <span className="font-medium text-gray-800">SQLite (WAL mode)</span>
+              <span className="font-medium text-gray-800">MySQL (InnoDB)</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-500">Framework</span>
               <span className="font-medium text-gray-800">Next.js 15</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-500">Payment Gateways</span>
+              <span className="font-medium text-gray-800">Midtrans + Pakasir</span>
             </div>
           </div>
         </div>

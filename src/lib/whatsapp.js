@@ -330,3 +330,49 @@ export function buildGroupContactFormMsg(name, email, subject, message) {
 
   return msg;
 }
+
+// ==============================
+// MESSAGE TEMPLATES — VOUCHER
+// ==============================
+
+/**
+ * Build WhatsApp message for voucher code delivery (sent to buyer after payment)
+ * @param {object} order - Order data
+ * @param {object} voucher - Voucher code data { code, provider }
+ * @param {string} redeemInstructions - Provider-specific redeem instructions
+ */
+export function buildVoucherDeliveryMsg(order, voucher, redeemInstructions) {
+  let msg = `🎫 *Kode Voucher Kamu — Telko.Store*\n\n`;
+  msg += `📋 Invoice: ${order.id}\n`;
+  msg += `📦 Produk: ${order.productName}\n`;
+  msg += `📱 No. Tujuan: ${order.targetData || order.guestPhone}\n\n`;
+  msg += `🔑 *Kode Voucher:*\n`;
+  msg += `\`\`\`${voucher.code}\`\`\`\n\n`;
+  msg += `${redeemInstructions}\n\n`;
+  msg += `⚠️ *Penting:*\n`;
+  msg += `• Kode voucher hanya bisa digunakan 1x\n`;
+  msg += `• Redeem dalam waktu 24 jam\n`;
+  msg += `• Jika gagal, hubungi CS kami\n`;
+  msg += WA_FOOTER;
+
+  return msg;
+}
+
+/**
+ * Build group notification for voucher that needs admin redeem
+ * @param {object} order - Order data
+ * @param {object} voucher - Voucher code data { code, provider }
+ */
+export function buildGroupVoucherRedeemMsg(order, voucher) {
+  let msg = `🎫 *VOUCHER PERLU DIREDEEM — Telko.Store*\n\n`;
+  msg += `📋 Invoice: ${order.id}\n`;
+  msg += `📦 Produk: ${order.productName}\n`;
+  msg += `📱 No. Tujuan: ${order.targetData || order.guestPhone}\n`;
+  msg += `🏷️ Provider: ${(voucher.provider || "—").toUpperCase()}\n`;
+  msg += `🔑 Kode: *${voucher.code}*\n\n`;
+  msg += `⚡ Segera redeem di Admin Dashboard:\n`;
+  msg += `${process.env.NEXT_PUBLIC_BASE_URL}/admin/voucher\n\n`;
+  msg += `⏰ Waktu: ${formatDateWA(new Date().toISOString())}`;
+
+  return msg;
+}

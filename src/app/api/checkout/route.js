@@ -1,4 +1,4 @@
-// POST /api/checkout — Create order + Midtrans Snap Token
+// POST /api/checkout — Create order + Payment (Midtrans or Pakasir)
 import { NextResponse } from "next/server";
 import db from "@/db/index.js";
 import { products, orders } from "@/db/schema.js";
@@ -13,7 +13,9 @@ import {
   buildGroupNewOrderMsg,
 } from "@/lib/whatsapp";
 import { createSnapClient } from "@/lib/midtrans";
+import { createPakasirTransaction, isPakasirAvailable } from "@/lib/pakasir";
 import { checkoutLimiter } from "@/lib/rate-limit";
+import { scheduleNotification } from "@/lib/notification-scheduler";
 
 export async function POST(request) {
   // Rate limiting
@@ -29,7 +31,7 @@ export async function POST(request) {
   }
   try {
     const body = await request.json();
-    const { productId, phoneNumber, paymentMethod, gameData, targetData: customTargetData } = body;
+    const { productId, phoneNumber, paymentMethod, gameData, targetData: customTargetData, gateway } = body;
 
     // Validate input
     if (!productId || !phoneNumber) {
@@ -45,6 +47,20 @@ export async function POST(request) {
         { success: false, error: "Nomor HP harus nomor Indonesia yang valid (10-13 digit)" },
         { status: 400 }
       );
+    }
+
+    // Determine payment gateway (default: midtrans)
+    const selectedGateway = gateway === "pakasir" ? "pakasir" : "midtrans";
+
+    // If pakasir selected, verify it's available
+    if (selectedGateway === "pakasir") {
+      const pakasirReady = await isPakasirAvailable();
+      if (!pakasirReady) {
+        return NextResponse.json(
+          { success: false, error: "Pakasir belum dikonfigurasi. Silakan gunakan metode pembayaran lain." },
+          { status: 400 }
+        );
+      }
     }
 
     // Get product from DB
@@ -95,38 +111,7 @@ export async function POST(request) {
     const datePrefix = now.toISOString().slice(0, 10).replace(/-/g, "");
     const orderId = `INV-${datePrefix}-${nanoid(8).toUpperCase()}`;
     const guestToken = nanoid(32);
-    const midtransOrderId = `TELKO-${orderId}`;
-
-    // Create Midtrans Snap transaction
-    const snap = await createSnapClient();
-
-    const snapTransaction = await snap.createTransaction({
-      transaction_details: {
-        order_id: midtransOrderId,
-        gross_amount: product.price,
-      },
-      item_details: [
-        {
-          id: product.id,
-          name: product.name,
-          price: product.price,
-          quantity: 1,
-          category: product.categoryId,
-        },
-      ],
-      customer_details: {
-        phone: phoneNumber,
-      },
-      callbacks: {
-        finish: `${process.env.NEXT_PUBLIC_BASE_URL}/payment/finish?order_id=${midtransOrderId}&token=${guestToken}`,
-        error: `${process.env.NEXT_PUBLIC_BASE_URL}/payment/finish?order_id=${midtransOrderId}&token=${guestToken}&status=error`,
-        unfinish: `${process.env.NEXT_PUBLIC_BASE_URL}/payment/finish?order_id=${midtransOrderId}&token=${guestToken}&status=unfinish`,
-      },
-      expiry: {
-        unit: "hours",
-        duration: 24,
-      },
-    });
+    const externalOrderId = `TELKO-${orderId}`;
 
     // Build notes with game data if present
     let notes = null;
@@ -134,40 +119,133 @@ export async function POST(request) {
       notes = JSON.stringify(gameData);
     }
 
-    // [FIX 3.1] Wrap order creation + stock decrease in a database transaction
-    db.transaction((tx) => {
-      // [FIX 2.3] Atomic stock decrease with an in-DB stock guard
-      const stockUpdate = tx
-        .update(products)
-        .set({ stock: sql`${products.stock} - 1` })
-        .where(and(eq(products.id, product.id), gt(products.stock, 0)))
-        .returning({ id: products.id })
-        .all();
+    let paymentResult;
 
-      if (stockUpdate.length === 0) {
-        throw new Error("Stok produk habis");
-      }
+    if (selectedGateway === "pakasir") {
+      // ===== PAKASIR FLOW =====
+      const callbackUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/payment/finish?order_id=${externalOrderId}&token=${guestToken}&gateway=pakasir`;
 
-      tx.insert(orders).values({
-        id: orderId,
-        productId: product.id,
+      paymentResult = await createPakasirTransaction({
+        orderId: externalOrderId,
+        amount: product.price,
         productName: product.name,
-        productPrice: product.price,
-        guestPhone: phoneNumber,
-        guestToken: guestToken,
-        targetData: resolvedTargetData,
-        status: "pending",
-        paymentMethod: paymentMethod || null,
-        snapToken: snapTransaction.token,
-        snapRedirectUrl: snapTransaction.redirect_url,
-        midtransOrderId: midtransOrderId,
-        notes: notes,
-        createdAt: now.toISOString(),
-        updatedAt: now.toISOString(),
-      }).run();
-    });
+        customerPhone: phoneNumber,
+        callbackUrl,
+      });
 
-    // [FIX 8.1] Send enriched WhatsApp to buyer — order created
+      // Atomic stock decrease + order insert (MySQL async transaction)
+      await db.transaction(async (tx) => {
+        // Decrease stock with guard
+        await tx.update(products)
+          .set({ stock: sql`${products.stock} - 1` })
+          .where(and(eq(products.id, product.id), gt(products.stock, 0)));
+
+        // Verify stock was actually decreased
+        const [check] = await tx.select({ stock: products.stock })
+          .from(products)
+          .where(eq(products.id, product.id))
+          .limit(1);
+
+        if (!check || check.stock < 0) {
+          throw new Error("Stok produk habis");
+        }
+
+        await tx.insert(orders).values({
+          id: orderId,
+          productId: product.id,
+          productName: product.name,
+          productPrice: product.price,
+          guestPhone: phoneNumber,
+          guestToken: guestToken,
+          targetData: resolvedTargetData,
+          status: "pending",
+          paymentMethod: paymentMethod || null,
+          paymentGateway: "pakasir",
+          snapToken: null,
+          snapRedirectUrl: paymentResult.paymentUrl,
+          midtransOrderId: externalOrderId,
+          notes: notes,
+          createdAt: now.toISOString(),
+          updatedAt: now.toISOString(),
+        });
+      });
+
+    } else {
+      // ===== MIDTRANS FLOW =====
+      const snap = await createSnapClient();
+
+      const snapTransaction = await snap.createTransaction({
+        transaction_details: {
+          order_id: externalOrderId,
+          gross_amount: product.price,
+        },
+        item_details: [
+          {
+            id: product.id,
+            name: product.name,
+            price: product.price,
+            quantity: 1,
+            category: product.categoryId,
+          },
+        ],
+        customer_details: {
+          phone: phoneNumber,
+        },
+        callbacks: {
+          finish: `${process.env.NEXT_PUBLIC_BASE_URL}/payment/finish?order_id=${externalOrderId}&token=${guestToken}&gateway=midtrans`,
+          error: `${process.env.NEXT_PUBLIC_BASE_URL}/payment/finish?order_id=${externalOrderId}&token=${guestToken}&status=error&gateway=midtrans`,
+          unfinish: `${process.env.NEXT_PUBLIC_BASE_URL}/payment/finish?order_id=${externalOrderId}&token=${guestToken}&status=unfinish&gateway=midtrans`,
+        },
+        expiry: {
+          unit: "hours",
+          duration: 24,
+        },
+      });
+
+      paymentResult = {
+        paymentUrl: snapTransaction.redirect_url,
+        snapToken: snapTransaction.token,
+      };
+
+      // Atomic stock decrease + order insert (MySQL async transaction)
+      await db.transaction(async (tx) => {
+        // Decrease stock with guard
+        await tx.update(products)
+          .set({ stock: sql`${products.stock} - 1` })
+          .where(and(eq(products.id, product.id), gt(products.stock, 0)));
+
+        // Verify stock was actually decreased
+        const [check] = await tx.select({ stock: products.stock })
+          .from(products)
+          .where(eq(products.id, product.id))
+          .limit(1);
+
+        if (!check || check.stock < 0) {
+          throw new Error("Stok produk habis");
+        }
+
+        await tx.insert(orders).values({
+          id: orderId,
+          productId: product.id,
+          productName: product.name,
+          productPrice: product.price,
+          guestPhone: phoneNumber,
+          guestToken: guestToken,
+          targetData: resolvedTargetData,
+          status: "pending",
+          paymentMethod: paymentMethod || null,
+          paymentGateway: "midtrans",
+          snapToken: snapTransaction.token,
+          snapRedirectUrl: snapTransaction.redirect_url,
+          midtransOrderId: externalOrderId,
+          notes: notes,
+          createdAt: now.toISOString(),
+          updatedAt: now.toISOString(),
+        });
+      });
+    }
+
+    // Schedule delayed WA notification (only if still pending after 10s)
     const orderData = {
       id: orderId,
       productName: product.name,
@@ -177,32 +255,47 @@ export async function POST(request) {
       targetData: resolvedTargetData,
     };
 
-    try {
-      await sendWhatsAppNotification(
-        phoneNumber,
-        buildOrderCreatedMsg(orderData, product, snapTransaction.redirect_url, gameData)
-      );
-    } catch (waErr) {
-      console.error("WA buyer notification failed:", waErr.message);
-    }
+    scheduleNotification(orderId, 10_000, async () => {
+      const [latestOrder] = await db
+        .select()
+        .from(orders)
+        .where(eq(orders.id, orderId))
+        .limit(1);
 
-    // [FIX 8.2] Send WhatsApp to internal group
-    try {
-      await sendGroupNotification(
-        buildGroupNewOrderMsg(orderData, product)
-      );
-    } catch (waErr) {
-      console.error("WA group notification failed:", waErr.message);
-    }
+      if (!latestOrder || latestOrder.status !== "pending") {
+        console.log(
+          `Order notification skipped for ${orderId}; status: ${latestOrder?.status || "not found"}`
+        );
+        return;
+      }
+
+      try {
+        await sendWhatsAppNotification(
+          phoneNumber,
+          buildOrderCreatedMsg(orderData, product, paymentResult.paymentUrl, gameData)
+        );
+      } catch (waErr) {
+        console.error("WA buyer notification failed:", waErr.message);
+      }
+
+      try {
+        await sendGroupNotification(
+          buildGroupNewOrderMsg(orderData, product)
+        );
+      } catch (waErr) {
+        console.error("WA group notification failed:", waErr.message);
+      }
+    });
 
     return NextResponse.json({
       success: true,
       data: {
         orderId,
         guestToken,
-        snapToken: snapTransaction.token,
-        snapRedirectUrl: snapTransaction.redirect_url,
-        midtransOrderId,
+        snapToken: paymentResult.snapToken || null,
+        snapRedirectUrl: paymentResult.paymentUrl || paymentResult.snapRedirectUrl,
+        midtransOrderId: externalOrderId,
+        gateway: selectedGateway,
         product: {
           id: product.id,
           name: product.name,

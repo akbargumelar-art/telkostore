@@ -51,18 +51,27 @@ const statusMap = {
   },
 };
 
-function getPaymentStatus(statusCode, transactionStatus, customStatus) {
+function getPaymentStatus(statusCode, transactionStatus, customStatus, gateway) {
   // Handle custom status from our redirect callbacks
   if (customStatus === "error") return "failed";
   if (customStatus === "unfinish") return "unfinish";
 
+  // Midtrans status values
   if (transactionStatus === "settlement" || transactionStatus === "capture") return "success";
   if (transactionStatus === "pending") return "pending";
   if (["deny", "cancel", "expire", "failure"].includes(transactionStatus)) return "failed";
 
+  // Pakasir status values
+  if (transactionStatus === "completed" || transactionStatus === "paid") return "success";
+  if (["expired", "cancelled", "failed"].includes(transactionStatus)) return "failed";
+
   // Fallback: check status code
   if (statusCode === "200") return "success";
   if (statusCode === "201") return "pending";
+
+  // If coming from Pakasir redirect with no explicit status, check via API
+  if (gateway === "pakasir" && !transactionStatus && !customStatus) return "pending";
+
   return "pending"; // Default to pending instead of failed for ambiguous cases
 }
 
@@ -82,13 +91,14 @@ export default function PaymentFinishPage({ searchParams }) {
   const statusCode = getParam("status_code");
   const transactionStatus = getParam("transaction_status");
   const customStatus = getParam("status");
+  const gateway = getParam("gateway") || "midtrans";
 
   const [countdown, setCountdown] = useState(5);
   const [orderData, setOrderData] = useState(null);
   const [checking, setChecking] = useState(false);
 
   // Determine status from Midtrans params + custom status
-  const status = getPaymentStatus(statusCode, transactionStatus, customStatus);
+  const status = getPaymentStatus(statusCode, transactionStatus, customStatus, gateway);
   const config = statusMap[status] || statusMap.pending;
   const StatusIcon = config.icon;
 
@@ -227,7 +237,9 @@ export default function PaymentFinishPage({ searchParams }) {
         {/* Security badge */}
         <div className="flex items-center justify-center gap-2 mt-6 text-gray-400">
           <ShieldCheck size={14} />
-          <span className="text-[10px]">Transaksi aman & terenkripsi via Midtrans</span>
+          <span className="text-[10px]">
+            Transaksi aman & terenkripsi via {gateway === "pakasir" ? "Pakasir" : "Midtrans"}
+          </span>
         </div>
       </div>
     </div>

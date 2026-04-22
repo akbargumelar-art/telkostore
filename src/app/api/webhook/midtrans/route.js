@@ -12,8 +12,18 @@ import {
   buildPaymentFailedMsg,
   buildGroupPaymentSuccessMsg,
   buildGroupPaymentFailedMsg,
+  buildVoucherDeliveryMsg,
+  buildGroupVoucherRedeemMsg,
 } from "@/lib/whatsapp";
 import { verifySignature } from "@/lib/midtrans";
+import { cancelNotification } from "@/lib/notification-scheduler";
+import {
+  assignVoucherToOrder,
+  releaseVoucher,
+  isVoucherProduct,
+  getRedeemInstructions,
+  detectProviderFromPhone,
+} from "@/lib/voucher";
 
 // GET /api/webhook/midtrans — Health check for Midtrans URL verification
 export async function GET() {
@@ -85,6 +95,7 @@ export async function POST(request) {
       ["paid", "processing", "completed"].includes(order.status)
     ) {
       console.log(`⏭️ Webhook already processed for transaction: ${transaction_id}`);
+      cancelNotification(order.id);
       return NextResponse.json({ success: true, message: "Already processed" });
     }
 
@@ -173,9 +184,13 @@ export async function POST(request) {
       .set({ status: newStatus, ...statusUpdates })
       .where(eq(orders.id, order.id));
 
+    if (newStatus !== "pending") {
+      cancelNotification(order.id);
+    }
+
     // [FIX 8.1/8.2] Send WhatsApp notifications with enriched templates
     if ((newStatus === "paid" || newStatus === "completed") && !order.whatsappSent) {
-      // Notify buyer
+      // Notify buyer — payment success
       try {
         await sendWhatsAppNotification(
           order.guestPhone,
@@ -187,6 +202,39 @@ export async function POST(request) {
           .where(eq(orders.id, order.id));
       } catch (waErr) {
         console.error("WA buyer notification failed:", waErr.message);
+      }
+
+      // ===== VOUCHER AUTO-ASSIGN =====
+      try {
+        const isVoucher = await isVoucherProduct(order.productId);
+        if (isVoucher) {
+          const detectedProvider = detectProviderFromPhone(order.targetData || order.guestPhone);
+          const voucher = await assignVoucherToOrder(
+            order.id, order.productId, order.guestPhone, detectedProvider
+          );
+          if (voucher) {
+            // Send voucher code + redeem instructions to buyer
+            const instructions = getRedeemInstructions(
+              voucher.provider, voucher.code, order.targetData || order.guestPhone
+            );
+            await sendWhatsAppNotification(
+              order.guestPhone,
+              buildVoucherDeliveryMsg(order, voucher, instructions)
+            );
+            // Notify admin group for semi-auto redeem
+            await sendGroupNotification(
+              buildGroupVoucherRedeemMsg(order, voucher)
+            );
+            console.log(`🎫 Voucher ${voucher.code} assigned to order ${order.id}`);
+          } else {
+            console.warn(`⚠️ No available voucher for product ${order.productId}`);
+            await sendGroupNotification(
+              `⚠️ *STOK VOUCHER HABIS*\n\nProduk: ${order.productName}\nOrder: ${order.id}\nPembeli: ${order.guestPhone}\n\nSegera tambah kode voucher di Admin!`
+            );
+          }
+        }
+      } catch (voucherErr) {
+        console.error("Voucher auto-assign failed:", voucherErr.message);
       }
 
       // Notify internal group
@@ -215,6 +263,13 @@ export async function POST(request) {
         );
       } catch (waErr) {
         console.error("WA group notification failed:", waErr.message);
+      }
+
+      // Release any reserved voucher back to available
+      try {
+        await releaseVoucher(order.id);
+      } catch (vErr) {
+        console.error("Voucher release failed:", vErr.message);
       }
     }
 
