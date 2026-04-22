@@ -63,6 +63,14 @@ if grep -q "ganti-dengan-random" .env.local; then
 fi
 echo "   ✅ AUTH_SECRET configured"
 
+# Load .env.local into shell environment
+# (Node scripts like seed.mjs don't auto-load .env.local — that's a Next.js feature)
+echo "   📄 Loading .env.local into environment..."
+set -a
+source <(grep -v '^\s*#' .env.local | grep -v '^\s*$')
+set +a
+echo "   ✅ Environment variables loaded"
+
 echo ""
 
 # ===== STEP 1: BACKUP =====
