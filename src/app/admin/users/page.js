@@ -230,6 +230,17 @@ export default function AdminUsersPage() {
         </div>
       )}
 
+      <div className="mb-4 bg-blue-50 border border-blue-100 rounded-2xl p-4">
+        <p className="text-blue-900 text-sm font-semibold">
+          Role admin sekarang juga berlaku untuk login Google/Facebook.
+        </p>
+        <p className="text-blue-800 text-xs mt-1 leading-relaxed">
+          Jika user dibuat manual, ia tetap harus login dengan Google atau Facebook
+          memakai email yang sama. Opsi lama via kunci admin tetap tersedia di
+          /admin/login.
+        </p>
+      </div>
+
       {/* Search & Filter */}
       <div className="bg-white rounded-2xl border border-gray-100 p-4 mb-4 flex flex-col md:flex-row gap-3">
         <form onSubmit={handleSearch} className="flex-1 flex gap-2">
@@ -449,7 +460,9 @@ export default function AdminUsersPage() {
               </div>
               <div>
                 <h3 className="font-bold text-navy text-base">Tambah User Baru</h3>
-                <p className="text-gray-400 text-xs">Buat akun admin atau user manual</p>
+                <p className="text-gray-400 text-xs">
+                  Tetapkan role admin atau user untuk email OAuth yang akan dipakai login
+                </p>
               </div>
             </div>
 
@@ -509,7 +522,8 @@ export default function AdminUsersPage() {
                 <div className="bg-purple-50 border border-purple-200 rounded-xl p-3 flex items-start gap-2">
                   <ShieldCheck size={14} className="text-purple-600 mt-0.5 shrink-0" />
                   <p className="text-purple-700 text-xs">
-                    Admin dapat mengakses dashboard, melihat semua pesanan, dan mengubah status pesanan.
+                    Admin dapat masuk ke dashboard lewat Google/Facebook dengan email
+                    yang sama, atau memakai kunci admin di /admin/login.
                   </p>
                 </div>
               )}

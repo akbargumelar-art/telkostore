@@ -1,5 +1,5 @@
 // ==============================
-// TELKO.STORE — Middleware
+// TELKO.STORE - Middleware
 // Protect admin routes with JWT auth
 // ==============================
 
@@ -67,7 +67,9 @@ async function verifyJwtEdge(token, adminSecret) {
     if (mismatch !== 0) return false;
 
     // Decode payload and check expiry
-    const data = JSON.parse(atob(payload.replace(/-/g, "+").replace(/_/g, "/")));
+    const data = JSON.parse(
+      atob(payload.replace(/-/g, "+").replace(/_/g, "/"))
+    );
     const now = Math.floor(Date.now() / 1000);
     if (data.exp && data.exp < now) return false;
     if (data.role !== "admin") return false;
@@ -82,26 +84,30 @@ export async function middleware(request) {
   const { pathname } = request.nextUrl;
 
   // Only protect /admin/* and /api/admin/* routes (exclude login + auth endpoints)
-  const isAdminPage = pathname.startsWith("/admin") && !pathname.startsWith("/admin/login");
-  const isAdminApi = pathname.startsWith("/api/admin") && !pathname.startsWith("/api/admin/auth");
+  const isAdminPage =
+    pathname.startsWith("/admin") && !pathname.startsWith("/admin/login");
+  const isAdminApi =
+    pathname.startsWith("/api/admin") &&
+    !pathname.startsWith("/api/admin/auth");
 
   if (!isAdminPage && !isAdminApi) {
     return NextResponse.next();
   }
 
-  // Check for admin auth cookie (JWT)
   const adminToken = request.cookies.get("admin_token")?.value;
   const adminSecret = process.env.ADMIN_SECRET;
 
   if (!adminSecret) {
-    console.error("❌ ADMIN_SECRET not set in environment");
+    console.error("ADMIN_SECRET not set in environment");
     if (isAdminApi) {
-      return NextResponse.json({ success: false, error: "Server error" }, { status: 500 });
+      return NextResponse.json(
+        { success: false, error: "Server error" },
+        { status: 500 }
+      );
     }
     return NextResponse.redirect(new URL("/admin/login", request.url));
   }
 
-  // Verify JWT token
   const isValid = await verifyJwtEdge(adminToken, adminSecret);
 
   if (!isValid) {

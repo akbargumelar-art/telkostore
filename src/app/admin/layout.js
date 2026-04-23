@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { signOut } from "next-auth/react";
 import {
   LayoutDashboard,
   Package,
@@ -31,7 +32,6 @@ const navItems = [
 function SidebarContent({ pathname, onLogout }) {
   return (
     <>
-      {/* Logo */}
       <div className="px-5 py-5 border-b border-gray-100">
         <Link href="/admin" className="flex items-center gap-2.5">
           <div className="w-9 h-9 rounded-xl gradient-navy flex items-center justify-center">
@@ -46,10 +46,10 @@ function SidebarContent({ pathname, onLogout }) {
         </Link>
       </div>
 
-      {/* Nav Links */}
       <nav className="flex-1 px-3 py-4 space-y-1">
         {navItems.map((item) => {
-          const isActive = pathname === item.href ||
+          const isActive =
+            pathname === item.href ||
             (item.href !== "/admin" && pathname.startsWith(item.href));
           const Icon = item.icon;
           return (
@@ -70,7 +70,6 @@ function SidebarContent({ pathname, onLogout }) {
         })}
       </nav>
 
-      {/* Footer */}
       <div className="px-3 py-4 border-t border-gray-100 space-y-2">
         <Link
           href="/"
@@ -96,24 +95,30 @@ export default function AdminLayout({ children }) {
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  // Skip layout for login page
   if (pathname === "/admin/login") {
     return children;
   }
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    setSidebarOpen(false);
+
+    try {
+      await signOut({ redirect: false });
+    } catch {
+      // Ignore if there is no Auth.js session and continue clearing legacy cookie.
+    }
+
     document.cookie = "admin_token=; path=/; max-age=0";
     router.push("/admin/login");
+    router.refresh();
   };
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
-      {/* Desktop Sidebar */}
       <aside className="hidden md:flex w-60 bg-white border-r border-gray-100 flex-col fixed inset-y-0 left-0 z-30">
         <SidebarContent pathname={pathname} onLogout={handleLogout} />
       </aside>
 
-      {/* Mobile Sidebar Overlay */}
       {sidebarOpen && (
         <div className="md:hidden fixed inset-0 z-50">
           <div
@@ -132,9 +137,7 @@ export default function AdminLayout({ children }) {
         </div>
       )}
 
-      {/* Main Content */}
       <div className="flex-1 md:ml-60">
-        {/* Mobile Header */}
         <header className="md:hidden sticky top-0 z-20 bg-white border-b border-gray-100 px-4 py-3 flex items-center gap-3">
           <button
             onClick={() => setSidebarOpen(true)}
@@ -147,9 +150,7 @@ export default function AdminLayout({ children }) {
           </h1>
         </header>
 
-        <main className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto">
-          {children}
-        </main>
+        <main className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto">{children}</main>
       </div>
     </div>
   );
