@@ -228,75 +228,14 @@ async function checkPakasirStatus(order) {
 }
 
 // ===== DOKU Status Check =====
+// DOKU does not support manual status polling via API.
+// Status updates are delivered via webhook (/api/webhook/doku).
+// When user clicks "Cek Status", we return the current cached order.
 async function checkDokuStatus(order) {
-  let txDetail;
-  try {
-    txDetail = await checkDokuTransaction(order.midtransOrderId);
-  } catch (err) {
-    console.warn(`DOKU status check API failed: ${err.message}`);
-    // If DOKU status API fails, return cached order
-    return NextResponse.json({
-      success: true,
-      data: order,
-      message: "DOKU status check unavailable, returning cached status",
-    });
-  }
-
-  const status = txDetail.status;
-  const paymentMethod = txDetail.paymentMethod || "doku";
-  const now = new Date().toISOString();
-
-  let newStatus = order.status;
-  const statusUpdates = { updatedAt: now };
-
-  if (status === "SUCCESS" || status === "COMPLETED") {
-    const productResult = await db
-      .select()
-      .from(products)
-      .where(eq(products.id, order.productId))
-      .limit(1);
-    const productType = productResult[0]?.type || "virtual";
-
-    statusUpdates.paidAt = txDetail.completedAt || now;
-    statusUpdates.paymentMethod = paymentMethod;
-
-    if (productType === "virtual") {
-      newStatus = "completed";
-      statusUpdates.completedAt = now;
-    } else {
-      newStatus = "paid";
-    }
-  } else if (status === "FAILED" || status === "EXPIRED" || status === "DENIED") {
-    newStatus = "failed";
-
-    if (order.status !== "failed") {
-      try {
-        await db
-          .update(products)
-          .set({ stock: sql`stock + 1` })
-          .where(eq(products.id, order.productId));
-      } catch (stockErr) {
-        console.error("Stock rollback failed:", stockErr.message);
-      }
-    }
-  }
-
-  if (newStatus !== order.status) {
-    return await applyStatusUpdate(order, newStatus, statusUpdates, {
-      gateway: "doku",
-      paymentType: paymentMethod,
-      transactionId: order.midtransOrderId,
-      transactionStatus: status,
-      grossAmount: order.productPrice,
-      fraudStatus: null,
-      rawResponse: txDetail.rawResponse,
-    });
-  }
-
   return NextResponse.json({
     success: true,
     data: order,
-    message: "No status change",
+    message: "DOKU: status akan diperbarui otomatis via notifikasi",
   });
 }
 

@@ -294,68 +294,18 @@ export async function createDokuTransaction({
 
 /**
  * Check DOKU transaction status
- * GET {apiUrl}/orders/v1/status/{invoiceNumber}
  *
- * @param {string} invoiceNumber - External order ID (TELKO-INV-xxx)
- * @returns {object} Transaction status data
+ * DOKU does not provide a simple status-check API like Midtrans/Pakasir.
+ * Status updates are delivered via HTTP Notification (webhook).
+ * This function returns null to indicate manual check is not available.
+ *
+ * @param {string} invoiceNumber - External order ID
+ * @returns {null}
  */
 export async function checkDokuTransaction(invoiceNumber) {
-  const config = await resolveDokuConfig();
-
-  const requestId = crypto.randomUUID();
-  const timestamp = new Date().toISOString().split(".")[0] + "Z";
-  const target = `/orders/v1/status/${invoiceNumber}`;
-
-  // For GET requests, use empty string as body for signature
-  const bodyStr = "";
-  const digest = crypto.createHash("sha256").update(bodyStr).digest("base64");
-
-  const signature = generateDokuSignature(
-    config.clientId,
-    requestId,
-    timestamp,
-    target,
-    bodyStr,
-    config.secretKey
-  );
-
-  const res = await fetch(`${config.apiUrl}${target}`, {
-    method: "GET",
-    headers: {
-      "Client-Id": config.clientId,
-      "Request-Id": requestId,
-      "Request-Timestamp": timestamp,
-      "Signature": signature,
-    },
-  });
-
-  const responseText = await res.text();
-
-  if (!res.ok) {
-    console.error(`❌ DOKU status check error [${res.status}]:`, responseText);
-    throw new Error(`DOKU status check failed: ${res.status}`);
-  }
-
-  let data;
-  try {
-    data = JSON.parse(responseText);
-  } catch {
-    throw new Error("DOKU status check returned invalid JSON");
-  }
-
-  // Extract transaction status from response
-  const txStatus =
-    data?.transaction?.status ||
-    data?.transaction_status ||
-    data?.status ||
-    null;
-
-  return {
-    status: txStatus,
-    paymentMethod: data?.transaction?.payment_method || data?.channel?.id || "doku",
-    completedAt: data?.transaction?.date || null,
-    rawResponse: data,
-  };
+  // DOKU relies on webhook notifications for status updates.
+  // Manual polling is not supported via their Checkout API.
+  return null;
 }
 
 /**
