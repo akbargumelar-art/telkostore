@@ -1,5 +1,5 @@
 // POST /api/orders/[id]/check — Check payment status & sync order
-// Supports both Midtrans and Pakasir gateways
+// Supports Midtrans, Pakasir, and DOKU gateways
 import { NextResponse } from "next/server";
 import db from "@/db/index.js";
 import { orders, payments, products } from "@/db/schema.js";
@@ -7,6 +7,7 @@ import { eq, and, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { createCoreClient } from "@/lib/midtrans";
 import { checkPakasirTransaction } from "@/lib/pakasir";
+import { checkDokuTransaction } from "@/lib/doku";
 import {
   sendWhatsAppNotification,
   sendGroupNotification,
@@ -70,6 +71,8 @@ export async function POST(request, { params }) {
     try {
       if (gateway === "pakasir") {
         return await checkPakasirStatus(order);
+      } else if (gateway === "doku") {
+        return await checkDokuStatus(order);
       } else {
         return await checkMidtransStatus(order);
       }
@@ -214,6 +217,79 @@ async function checkPakasirStatus(order) {
       grossAmount: order.productPrice,
       fraudStatus: null,
       rawResponse: txDetail,
+    });
+  }
+
+  return NextResponse.json({
+    success: true,
+    data: order,
+    message: "No status change",
+  });
+}
+
+// ===== DOKU Status Check =====
+async function checkDokuStatus(order) {
+  let txDetail;
+  try {
+    txDetail = await checkDokuTransaction(order.midtransOrderId);
+  } catch (err) {
+    console.warn(`DOKU status check API failed: ${err.message}`);
+    // If DOKU status API fails, return cached order
+    return NextResponse.json({
+      success: true,
+      data: order,
+      message: "DOKU status check unavailable, returning cached status",
+    });
+  }
+
+  const status = txDetail.status;
+  const paymentMethod = txDetail.paymentMethod || "doku";
+  const now = new Date().toISOString();
+
+  let newStatus = order.status;
+  const statusUpdates = { updatedAt: now };
+
+  if (status === "SUCCESS" || status === "COMPLETED") {
+    const productResult = await db
+      .select()
+      .from(products)
+      .where(eq(products.id, order.productId))
+      .limit(1);
+    const productType = productResult[0]?.type || "virtual";
+
+    statusUpdates.paidAt = txDetail.completedAt || now;
+    statusUpdates.paymentMethod = paymentMethod;
+
+    if (productType === "virtual") {
+      newStatus = "completed";
+      statusUpdates.completedAt = now;
+    } else {
+      newStatus = "paid";
+    }
+  } else if (status === "FAILED" || status === "EXPIRED" || status === "DENIED") {
+    newStatus = "failed";
+
+    if (order.status !== "failed") {
+      try {
+        await db
+          .update(products)
+          .set({ stock: sql`stock + 1` })
+          .where(eq(products.id, order.productId));
+      } catch (stockErr) {
+        console.error("Stock rollback failed:", stockErr.message);
+      }
+    }
+  }
+
+  if (newStatus !== order.status) {
+    return await applyStatusUpdate(order, newStatus, statusUpdates, {
+      gateway: "doku",
+      paymentType: paymentMethod,
+      transactionId: order.midtransOrderId,
+      transactionStatus: status,
+      grossAmount: order.productPrice,
+      fraudStatus: null,
+      rawResponse: txDetail.rawResponse,
     });
   }
 
