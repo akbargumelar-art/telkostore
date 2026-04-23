@@ -17,19 +17,19 @@ import {
   Users,
   Ticket,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
-const navItems = [
-  { href: "/control", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/control/produk", label: "Produk", icon: Package },
-  { href: "/control/pesanan", label: "Pesanan", icon: ShoppingCart },
-  { href: "/control/voucher", label: "Voucher", icon: Ticket },
-  { href: "/control/users", label: "Users", icon: Users },
-  { href: "/control/profil", label: "Profil", icon: User },
-  { href: "/control/pengaturan", label: "Pengaturan", icon: Settings },
+const allNavItems = [
+  { href: "/control", label: "Dashboard", icon: LayoutDashboard, superadminOnly: false },
+  { href: "/control/produk", label: "Produk", icon: Package, superadminOnly: false },
+  { href: "/control/pesanan", label: "Pesanan", icon: ShoppingCart, superadminOnly: false },
+  { href: "/control/voucher", label: "Voucher", icon: Ticket, superadminOnly: false },
+  { href: "/control/users", label: "Users", icon: Users, superadminOnly: true },
+  { href: "/control/profil", label: "Profil", icon: User, superadminOnly: false },
+  { href: "/control/pengaturan", label: "Pengaturan", icon: Settings, superadminOnly: true },
 ];
 
-function SidebarContent({ pathname, onLogout }) {
+function SidebarContent({ pathname, onLogout, navItems }) {
   return (
     <>
       <div className="px-5 py-5 border-b border-gray-100">
@@ -94,10 +94,29 @@ export default function ControlLayout({ children }) {
   const pathname = usePathname();
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [adminType, setAdminType] = useState(null);
+
+  useEffect(() => {
+    if (pathname === "/control/login") return;
+
+    fetch("/api/admin/me")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success) {
+          setAdminType(data.adminType);
+        }
+      })
+      .catch(() => {});
+  }, [pathname]);
 
   if (pathname === "/control/login") {
     return children;
   }
+
+  // Filter nav items based on admin type
+  const navItems = adminType === "superadmin" || adminType === null
+    ? allNavItems
+    : allNavItems.filter((item) => !item.superadminOnly);
 
   const handleLogout = async () => {
     setSidebarOpen(false);
@@ -116,7 +135,7 @@ export default function ControlLayout({ children }) {
   return (
     <div className="min-h-screen bg-gray-50 flex">
       <aside className="hidden md:flex w-60 bg-white border-r border-gray-100 flex-col fixed inset-y-0 left-0 z-30">
-        <SidebarContent pathname={pathname} onLogout={handleLogout} />
+        <SidebarContent pathname={pathname} onLogout={handleLogout} navItems={navItems} />
       </aside>
 
       {sidebarOpen && (
@@ -132,7 +151,7 @@ export default function ControlLayout({ children }) {
             >
               <X size={16} />
             </button>
-            <SidebarContent pathname={pathname} onLogout={handleLogout} />
+            <SidebarContent pathname={pathname} onLogout={handleLogout} navItems={navItems} />
           </aside>
         </div>
       )}
@@ -155,3 +174,4 @@ export default function ControlLayout({ children }) {
     </div>
   );
 }
+

@@ -8,13 +8,14 @@ import { NextResponse } from "next/server";
 /**
  * Lightweight JWT verification for Edge Runtime (middleware).
  * We cannot import Node.js crypto here, so we use the Web Crypto API.
+ * Returns the JWT payload if valid, or null if invalid.
  */
 async function verifyJwtEdge(token, adminSecret) {
-  if (!token || typeof token !== "string") return false;
+  if (!token || typeof token !== "string") return null;
 
   try {
     const parts = token.split(".");
-    if (parts.length !== 3) return false;
+    if (parts.length !== 3) return null;
 
     const [header, payload, signature] = parts;
 
@@ -59,25 +60,36 @@ async function verifyJwtEdge(token, adminSecret) {
       .replace(/=+$/, "");
 
     // Constant-time comparison
-    if (signature.length !== expectedSig.length) return false;
+    if (signature.length !== expectedSig.length) return null;
     let mismatch = 0;
     for (let i = 0; i < signature.length; i++) {
       mismatch |= signature.charCodeAt(i) ^ expectedSig.charCodeAt(i);
     }
-    if (mismatch !== 0) return false;
+    if (mismatch !== 0) return null;
 
     // Decode payload and check expiry
     const data = JSON.parse(
       atob(payload.replace(/-/g, "+").replace(/_/g, "/"))
     );
     const now = Math.floor(Date.now() / 1000);
-    if (data.exp && data.exp < now) return false;
-    if (data.role !== "admin") return false;
+    if (data.exp && data.exp < now) return null;
+    if (data.role !== "admin") return null;
 
-    return true;
+    return data;
   } catch {
-    return false;
+    return null;
   }
+}
+
+// Routes restricted to superadmin only
+const SUPERADMIN_ONLY_PAGES = ["/control/users", "/control/pengaturan"];
+const SUPERADMIN_ONLY_API = ["/api/admin/users", "/api/admin/settings"];
+
+function isSuperadminOnlyRoute(pathname) {
+  return (
+    SUPERADMIN_ONLY_PAGES.some((p) => pathname === p || pathname.startsWith(p + "/")) ||
+    SUPERADMIN_ONLY_API.some((p) => pathname === p || pathname.startsWith(p + "/"))
+  );
 }
 
 export async function middleware(request) {
@@ -108,9 +120,9 @@ export async function middleware(request) {
     return NextResponse.redirect(new URL("/control/login", request.url));
   }
 
-  const isValid = await verifyJwtEdge(adminToken, adminSecret);
+  const tokenData = await verifyJwtEdge(adminToken, adminSecret);
 
-  if (!isValid) {
+  if (!tokenData) {
     if (isAdminApi) {
       return NextResponse.json(
         { success: false, error: "Unauthorized" },
@@ -120,9 +132,26 @@ export async function middleware(request) {
     return NextResponse.redirect(new URL("/control/login", request.url));
   }
 
-  return NextResponse.next();
+  // Check superadmin-only routes
+  const adminType = tokenData.adminType || "superadmin"; // legacy tokens default to superadmin
+  if (adminType !== "superadmin" && isSuperadminOnlyRoute(pathname)) {
+    if (isAdminApi) {
+      return NextResponse.json(
+        { success: false, error: "Akses ditolak. Hanya superadmin yang dapat mengakses fitur ini." },
+        { status: 403 }
+      );
+    }
+    // Redirect non-superadmin to dashboard when trying to access restricted pages
+    return NextResponse.redirect(new URL("/control", request.url));
+  }
+
+  // Pass adminType to pages via response header
+  const response = NextResponse.next();
+  response.headers.set("x-admin-type", adminType);
+  return response;
 }
 
 export const config = {
   matcher: ["/control/:path*", "/api/admin/:path*"],
 };
+

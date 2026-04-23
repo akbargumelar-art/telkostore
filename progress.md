@@ -4,6 +4,67 @@
 
 ## ✅ Apa yang sudah selesai dilakukan
 
+### 22. Update Lengkap 23 April 2026 - Auth, Control Panel, Payment Sync, dan Auto-Redeem
+
+#### a. Payment Gateway dan Sinkronisasi Status
+- Menyelesaikan integrasi 3 gateway: Midtrans, Pakasir, dan DOKU dengan auto-routing checkout.
+- Memperbaiki DOKU checkout, response parsing, debug logging, dan webhook-only status handling agar tidak spam error dari polling API yang tidak didukung.
+- Menambahkan fallback payment reconciliation untuk order `pending`, termasuk script `npm run payments:reconcile`.
+- Sinkronisasi payment sekarang dapat melepas voucher yang sudah `reserved` jika payment berubah ke status gagal/cancel/expired.
+- Deploy script diperbaiki agar health check membaca `PORT` / `NEXT_PUBLIC_BASE_URL` dari env, bukan hardcoded ke port app lain.
+
+#### b. Auth User, Admin, dan Control Panel
+- Login admin via Google/Facebook diaktifkan dan diarahkan agar hanya email dengan role `admin` yang bisa masuk control panel.
+- Perbaikan runtime env Auth.js di VPS: membaca env OAuth saat runtime, mendukung `.env.local`, dan memaksa canonical URL ke `https://telko.store`.
+- Header publik sekarang menyesuaikan status login: user login melihat state akun, bukan tombol `Masuk` berulang.
+- Jalur admin dipindahkan dari `/admin` ke `/control` agar lebih tidak umum, dengan middleware proteksi tetap aktif.
+- Login `/control/login` ditambah mode username/email + password khusus admin.
+- Admin yang dibuat dari halaman user bisa login memakai email admin dan password default.
+- Password default admin baru diset ke `telko.store@2026` dan disimpan sebagai hash, bukan plaintext.
+- Deploy script menjalankan migrasi/backfill untuk kolom `password_hash` agar admin lama juga bisa memakai password default.
+
+#### c. Voucher Fulfillment dan Notifikasi
+- Fulfillment voucher dipusatkan di `src/lib/voucher.js` agar assign voucher, kirim kode, dan trigger auto-redeem konsisten di semua jalur.
+- Trigger auto-redeem diperluas dari webhook saja menjadi payment webhook sukses, cek status pembayaran, update status admin, dan bulk update order.
+- Pelanggan tetap menerima kode voucher dan instruksi redeem via WhatsApp walaupun auto-redeem berjalan di background.
+- Jika auto-redeem gagal, grup admin menerima notifikasi berisi invoice, produk, nomor tujuan, provider, kode voucher, dan alasan gagal.
+
+#### d. Auto-Redeem by.U
+- Live redeem by.U diuji dengan nomor `085168822280` dan kode `28124507492165775`.
+- Ditemukan flow by.U bukan sekali klik, tetapi bertahap: isi nomor/kode, klik `Tukar`, fetch detail paket, centang persetujuan, lalu klik `Tukar` final.
+- Engine by.U diperbarui agar mengikuti seluruh flow sampai endpoint final `POST https://pidaw-app.cx.byu.id/v1/vouchers/redeem`.
+- Parser by.U diperketat agar tidak salah membaca response banner maintenance, file JS, atau JSON translation sebagai hasil redeem.
+
+#### e. Auto-Redeem Simpati/Telkomsel
+- Live redeem Simpati diuji dengan nomor `081285755557`.
+- Engine Telkomsel diperbarui agar membaca response langsung dari `POST /api/voucher/redeem`, bukan hanya teks halaman.
+- Error Telkomsel seperti `VoucherAlreadyUsed` / code `15` sekarang diterjemahkan menjadi `voucher sudah terpakai`.
+- Flow form Telkomsel diperkuat: memilih `Voucher Fisik`, timeout selector lebih panjang, pencarian field voucher lebih fleksibel, dan soft reload sekali jika form telat render.
+- Bug `Telkomsel redeem gagal: success` diperbaiki. Payload Telkomsel dengan `message` atau `description` bernilai `success` sekarang dianggap berhasil.
+
+#### f. UI dan Asset
+- Icon kategori `Voucher Internet` diganti memakai SVG `public/icons/voucher-internet.svg`.
+- Komponen reusable `src/components/CategoryIcon.js` dibuat agar icon khusus bisa tampil konsisten tanpa mengubah data kategori/database.
+- Icon baru dipasang di homepage, tab kategori mobile, sidebar desktop, kartu produk, dan header detail produk.
+
+#### g. Verifikasi dan Deploy
+- `npm run build` sudah dijalankan dan lolos pada rangkaian perubahan utama.
+- Semua perubahan terbaru sudah dipush ke GitHub `main`.
+- Commit penting hari ini: `d15deff`, `bba75e3`, `d353766`, `910ff11`, `d49fd88`, `0a18b15`, `fe3c4fc`, `2241341`, `9cc862a`, `35d420b`, `0045e77`.
+
+#### h. Catatan Operasional
+- VPS update standar:
+  ```bash
+  cd /var/www/telkostore
+  git pull origin main
+  bash deploy.sh
+  ```
+- Untuk auto-redeem otomatis tanpa menunggu user membuka halaman, cron reconciliation tetap disarankan:
+  ```bash
+  */5 * * * * cd /var/www/telkostore && npm run payments:reconcile >> /var/log/telkostore-reconcile.log 2>&1
+  ```
+- Jika ada invoice lama yang sudah sukses redeem sebelum parser diperbaiki tetapi masih tertandai gagal, cek kuota/voucher di provider lalu update status order/voucher dari control panel.
+
 ### 20. Pemisahan Alur Produk & Manajemen Admin (23 April 2026) 📦
 
 #### a. Alur Manual Non-Voucher (3 Gateway Selaras)

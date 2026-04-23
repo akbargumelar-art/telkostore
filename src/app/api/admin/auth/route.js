@@ -111,7 +111,11 @@ export async function POST(request) {
       );
     }
 
-    const token = createAdminToken();
+    // Determine admin type: superadmin (env-configured) vs admin (DB user)
+    const isSuperadmin = isConfiguredAdminIdentifier(identifier) && isGlobalPasswordValid;
+    const adminType = isSuperadmin ? "superadmin" : "admin";
+
+    const token = createAdminToken(adminType);
 
     const response = NextResponse.json({ success: true });
     response.cookies.set("admin_token", token, {

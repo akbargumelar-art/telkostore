@@ -20,7 +20,7 @@ export const POST = auth(async (request) => {
   }
 
   const response = NextResponse.json({ success: true });
-  response.cookies.set("admin_token", createAdminToken(), {
+  response.cookies.set("admin_token", createAdminToken("admin"), {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
