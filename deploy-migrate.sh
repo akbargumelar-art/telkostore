@@ -151,11 +151,32 @@ else
 fi
 echo ""
 
+# Resolve health check target from env when possible
+APP_PORT="${PORT:-}"
+BASE_URL="${NEXT_PUBLIC_BASE_URL:-}"
+
+if [ -z "$APP_PORT" ] && [ -f ".env.local" ]; then
+  APP_PORT=$(awk -F= '/^PORT=/{print $2}' .env.local | tail -n 1 | tr -d '"' | tr -d "'")
+fi
+
+if [ -z "$BASE_URL" ] && [ -f ".env.local" ]; then
+  BASE_URL=$(awk -F= '/^NEXT_PUBLIC_BASE_URL=/{print substr($0, index($0, "=") + 1)}' .env.local | tail -n 1 | tr -d '"' | tr -d "'")
+fi
+
+if [ -n "$APP_PORT" ]; then
+  HEALTH_URL="http://127.0.0.1:${APP_PORT}/api/health"
+elif [ -n "$BASE_URL" ]; then
+  HEALTH_URL="${BASE_URL%/}/api/health"
+else
+  HEALTH_URL="http://127.0.0.1:3000/api/health"
+fi
+
 # ===== STEP 8: HEALTH CHECK =====
 echo "🏥 Step 8: Health check..."
 sleep 3  # Wait for app to start
 
-HEALTH=$(curl -s http://localhost:3000/api/health 2>/dev/null || echo '{"status":"unreachable"}')
+echo "   Checking: $HEALTH_URL"
+HEALTH=$(curl -fsS --max-time 10 "$HEALTH_URL" 2>/dev/null || echo '{"status":"unreachable"}')
 echo "   Response: $HEALTH"
 
 if echo "$HEALTH" | grep -q '"status":"ok"'; then
