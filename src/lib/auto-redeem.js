@@ -295,8 +295,15 @@ function detectTelkomselTrackedResponse(tracked) {
     const payload = tryParseJson(entry.bodyText);
     const data = payload?.data || payload || {};
     const code = String(data?.code || payload?.code || "").trim();
+    const message = String(payload?.message || data?.message || "").trim();
     const description = String(data?.description || payload?.description || "").trim();
+    const normalizedMessage = normalizeText(message);
     const normalizedDescription = normalizeText(description);
+    const looksSuccessful =
+      normalizedMessage === "success" ||
+      normalizedDescription === "success" ||
+      normalizedMessage === "berhasil" ||
+      normalizedDescription === "berhasil";
 
     if (code === "15" || normalizedDescription.includes("alreadyused")) {
       return {
@@ -322,8 +329,8 @@ function detectTelkomselTrackedResponse(tracked) {
     if (
       entry.status < 400 &&
       payload &&
-      (payload.success === true || payload.status === true) &&
-      !code &&
+      ((payload.success === true || payload.status === true) || looksSuccessful) &&
+      !["15"].includes(code) &&
       !responseTextLooksFailed(entry.bodyText)
     ) {
       return {
