@@ -54,11 +54,14 @@ function createResponseTracker(page, matcher) {
   const handler = async (response) => {
     try {
       const url = response.url();
-      const method = response.request().method();
-      if (!matcher(url, method)) return;
-
+      const request = response.request();
+      const method = request.method();
+      const resourceType = request.resourceType();
       const headers = response.headers();
       const contentType = String(headers["content-type"] || headers["Content-Type"] || "");
+
+      if (!matcher(url, method, resourceType, contentType)) return;
+
       let bodyText = "";
 
       if (contentType.includes("application/json")) {
@@ -71,7 +74,9 @@ function createResponseTracker(page, matcher) {
       tracked.push({
         url,
         method,
+        resourceType,
         status: response.status(),
+        contentType,
         bodyText: bodyText.slice(0, 4000),
       });
     } catch {
@@ -87,6 +92,19 @@ function createResponseTracker(page, matcher) {
       page.off("response", handler);
     },
   };
+}
+
+function responseTextLooksLikeAsset(text) {
+  const haystack = normalizeText(text);
+  return [
+    "copyright (c)",
+    "react-dom",
+    "react.production",
+    "__webpack_require__",
+    "sourcemappingurl=",
+    "use strict",
+    "window.__",
+  ].some((needle) => haystack.includes(needle));
 }
 
 function responseTextLooksSuccessful(text) {
@@ -128,6 +146,10 @@ function responseTextLooksFailed(text) {
 
 function detectTrackedResponseResult(tracked) {
   for (const entry of tracked.slice().reverse()) {
+    if (responseTextLooksLikeAsset(entry.bodyText)) {
+      continue;
+    }
+
     if (entry.status >= 400) {
       return {
         success: false,
@@ -160,31 +182,119 @@ function getTrackerSummary(tracked) {
     .join(" | ");
 }
 
-async function clickButtonByText(page, labels) {
-  const labelSet = labels.map((label) => normalizeText(label));
-  const buttons = await page.$$("button");
+async function clickButtonByText(page, labels, options = {}) {
+  const { exact = false, preferLast = false } = options;
+  return page.evaluate((rawLabels, exactMatch, preferLastMatch) => {
+    const normalize = (value) =>
+      String(value || "")
+        .replace(/\s+/g, " ")
+        .trim()
+        .toLowerCase();
 
-  for (const button of buttons) {
-    const meta = await page.evaluate(
-      (element) => ({
-        text: element.textContent || "",
-        disabled: Boolean(
-          element.disabled || element.getAttribute("aria-disabled") === "true"
-        ),
-      }),
-      button
+    const labelSet = rawLabels.map((label) => normalize(label));
+    const buttons = Array.from(document.querySelectorAll("button"))
+      .map((button) => {
+        const rect = button.getBoundingClientRect();
+        const style = window.getComputedStyle(button);
+        return {
+          button,
+          text: normalize(button.textContent || ""),
+          disabled:
+            Boolean(button.disabled) ||
+            button.getAttribute("aria-disabled") === "true",
+          visible:
+            rect.width > 0 &&
+            rect.height > 0 &&
+            style.display !== "none" &&
+            style.visibility !== "hidden" &&
+            style.opacity !== "0",
+          top: rect.top,
+        };
+      })
+      .filter((candidate) => candidate.text && candidate.visible);
+
+    const matches = buttons.filter((candidate) => {
+      if (candidate.disabled) return false;
+
+      return labelSet.some((label) =>
+        exactMatch ? candidate.text === label : candidate.text.includes(label)
+      );
+    });
+
+    if (!matches.length) {
+      return null;
+    }
+
+    matches.sort((left, right) =>
+      preferLastMatch ? right.top - left.top : left.top - right.top
     );
 
-    const text = normalizeText(meta.text);
-    if (!text || meta.disabled) continue;
+    const target = matches[0];
+    target.button.scrollIntoView({ block: "center", inline: "center" });
+    target.button.click();
+    return target.text;
+  }, labels, exact, preferLast);
+}
 
-    if (labelSet.some((label) => text.includes(label))) {
-      await button.click();
-      return text;
+async function clickLabelByText(page, labels) {
+  return page.evaluate((rawLabels) => {
+    const normalize = (value) =>
+      String(value || "")
+        .replace(/\s+/g, " ")
+        .trim()
+        .toLowerCase();
+
+    const labelSet = rawLabels.map((label) => normalize(label));
+    const labelsInPage = Array.from(document.querySelectorAll("label"));
+
+    for (const label of labelsInPage) {
+      const text = normalize(label.textContent || "");
+      const rect = label.getBoundingClientRect();
+      const style = window.getComputedStyle(label);
+
+      if (
+        !text ||
+        rect.width <= 0 ||
+        rect.height <= 0 ||
+        style.display === "none" ||
+        style.visibility === "hidden" ||
+        style.opacity === "0"
+      ) {
+        continue;
+      }
+
+      if (labelSet.some((candidate) => text.includes(candidate))) {
+        label.scrollIntoView({ block: "center", inline: "center" });
+        label.click();
+        return text;
+      }
     }
-  }
 
-  return null;
+    return null;
+  }, labels);
+}
+
+function filterByUTerminalResponses(tracked) {
+  return tracked.filter((entry) => {
+    const url = normalizeText(entry.url);
+    return ![
+      "global_config",
+      "maintenancebanner/status",
+      "localisation/language/keys",
+      "localisation/languages",
+      "msisdn/validation",
+      "vouchers/fetch-product",
+      "product-variants",
+    ].some((needle) => url.includes(needle));
+  });
+}
+
+function hasByUConfirmationStep(text) {
+  const haystack = normalizeText(text);
+  return (
+    haystack.includes("yakin mau tukar paket") &&
+    haystack.includes("saya setuju untuk mengaktifkan kuota")
+  );
 }
 
 export async function isPuppeteerAvailable() {
@@ -439,16 +549,27 @@ async function redeemTelkomsel(browser, phone, code) {
 
 async function redeemByU(browser, phone, code) {
   const page = await browser.newPage();
-  const tracker = createResponseTracker(page, (url, method) => {
+  const tracker = createResponseTracker(page, (url, method, resourceType) => {
     const normalizedUrl = normalizeText(url);
     if (!["GET", "POST", "PUT", "PATCH"].includes(method)) return false;
+    if (!["xhr", "fetch", "document"].includes(resourceType)) return false;
+    if (
+      ![
+        "voucher",
+        "redeem",
+        "tkr",
+        "claim",
+        "activate",
+        "activation",
+      ].some((keyword) => normalizedUrl.includes(keyword))
+    ) {
+      return false;
+    }
 
     return (
-      normalizedUrl.includes("byu.id") ||
+      normalizedUrl.includes("pidaw-app.cx.byu.id") ||
       normalizedUrl.includes("pidaw-webfront.cx.byu.id") ||
-      normalizedUrl.includes("voucher") ||
-      normalizedUrl.includes("redeem") ||
-      normalizedUrl.includes("tkr")
+      normalizedUrl.includes("byu.id")
     );
   });
 
@@ -529,22 +650,9 @@ async function redeemByU(browser, phone, code) {
 
   await wait(1500);
 
-  let submitBtn = null;
-  try {
-    const buttons = await page.$$("button");
-    for (const btn of buttons) {
-      const text = await page.evaluate((el) => el.textContent?.trim(), btn);
-      if (text && text.toLowerCase().includes("tukar")) {
-        const isDisabled = await page.evaluate((el) => el.disabled, btn);
-        if (!isDisabled) {
-          submitBtn = btn;
-          break;
-        }
-      }
-    }
-  } catch {}
+  let clickedSubmit = await clickButtonByText(page, ["tukar"], { exact: true });
 
-  if (!submitBtn) {
+  if (!clickedSubmit) {
     tracker.detach();
     return {
       success: false,
@@ -553,27 +661,85 @@ async function redeemByU(browser, phone, code) {
     };
   }
 
-  console.log("Clicking byU Tukar button...");
-  await submitBtn.click();
-  await wait(SUBMIT_WAIT);
+  console.log(`Clicking byU submit button: ${clickedSubmit}`);
+  await wait(4_000);
 
-  const followUpButton = await clickButtonByText(page, [
-    "aktifkan paket",
-    "aktifkan",
-    "lanjut",
-    "konfirmasi",
-    "ya, lanjut",
-    "ok",
-  ]);
+  let pageText = await getBodyText(page);
+
+  if (!hasByUConfirmationStep(pageText) && page.url().includes("msisdn=")) {
+    const secondSubmit = await clickButtonByText(page, ["tukar"], { exact: true });
+    if (secondSubmit) {
+      console.log(`Clicking byU confirmation trigger: ${secondSubmit}`);
+      await wait(5_000);
+      pageText = await getBodyText(page);
+    }
+  }
+
+  if (hasByUConfirmationStep(pageText)) {
+    const agreementLabel = await clickLabelByText(page, ["saya setuju untuk mengaktifkan kuota"]);
+    if (agreementLabel) {
+      console.log(`byU agreement checked: ${agreementLabel}`);
+      await wait(1_500);
+    }
+
+    clickedSubmit = await clickButtonByText(page, ["tukar"], {
+      exact: true,
+      preferLast: true,
+    });
+
+    if (!clickedSubmit) {
+      tracker.detach();
+      return {
+        success: false,
+        message: "byU: halaman konfirmasi muncul tetapi tombol Tukar final belum aktif",
+        fallback: true,
+      };
+    }
+
+    console.log(`Clicking byU final confirm button: ${clickedSubmit}`);
+    await wait(SUBMIT_WAIT);
+    pageText = await getBodyText(page);
+  }
+
+  const followUpButton = await clickButtonByText(
+    page,
+    ["aktifkan paket", "aktifkan", "lanjut", "konfirmasi", "ya, lanjut", "ok"],
+    { preferLast: true }
+  );
 
   if (followUpButton) {
     console.log(`byU follow-up button clicked: ${followUpButton}`);
     await wait(FOLLOW_UP_WAIT);
+    pageText = await getBodyText(page);
   }
 
-  const pageText = await getBodyText(page);
-  const trackedResult = detectTrackedResponseResult(tracker.tracked);
-  const trackerSummary = getTrackerSummary(tracker.tracked);
+  await page
+    .waitForFunction(
+      () => {
+        const text = String(document.body?.innerText || "").toLowerCase();
+        return [
+          "berhasil",
+          "sukses",
+          "success",
+          "paket aktif",
+          "kuota aktif",
+          "gagal",
+          "tidak valid",
+          "sudah digunakan",
+          "expired",
+          "maaf",
+        ].some((needle) => text.includes(needle));
+      },
+      { timeout: 10_000 }
+    )
+    .catch(() => null);
+
+  pageText = await getBodyText(page);
+  const byUTerminalResponses = filterByUTerminalResponses(tracker.tracked);
+  const trackedResult = detectTrackedResponseResult(byUTerminalResponses);
+  const trackerSummary = getTrackerSummary(
+    byUTerminalResponses.length ? byUTerminalResponses : tracker.tracked
+  );
   tracker.detach();
 
   if (trackedResult?.success) {
