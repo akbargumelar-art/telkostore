@@ -1,10 +1,9 @@
 // ==============================
-// TELKO.STORE — Auto-Redeem Engine (Puppeteer)
+// TELKO.STORE - Auto-Redeem Engine (Puppeteer)
 // Automates voucher redemption on Telkomsel & byU websites
 // Falls back to semi-auto if automation fails
 // ==============================
 
-// Puppeteer is loaded dynamically to avoid breaking builds
 let _puppeteer = null;
 let _puppeteerLoaded = false;
 
@@ -21,39 +20,185 @@ async function loadPuppeteer() {
 
 const REDEEM_URLS = {
   simpati: "https://www.telkomsel.com/shops/voucher/redeem",
-  byu: "https://pidaw-webfront.cx.byu.id/web/tkr-voucher",
+  byu: "https://www.byu.id/v2/tkr-voucher",
 };
 
-// Timeouts
 const PAGE_LOAD_TIMEOUT = 30_000;
-const INPUT_DELAY = 100; // ms between keystrokes (human-like)
-const SUBMIT_WAIT = 10_000; // wait for response after submit
+const INPUT_DELAY = 100;
+const SUBMIT_WAIT = 10_000;
+const FOLLOW_UP_WAIT = 8_000;
 const MAX_RETRIES = 2;
 
-/**
- * Check if Puppeteer is available
- */
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function normalizeText(text) {
+  return String(text || "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+async function getBodyText(page) {
+  try {
+    return await page.evaluate(() => document.body?.innerText || "");
+  } catch {
+    return "";
+  }
+}
+
+function createResponseTracker(page, matcher) {
+  const tracked = [];
+
+  const handler = async (response) => {
+    try {
+      const url = response.url();
+      const method = response.request().method();
+      if (!matcher(url, method)) return;
+
+      const headers = response.headers();
+      const contentType = String(headers["content-type"] || headers["Content-Type"] || "");
+      let bodyText = "";
+
+      if (contentType.includes("application/json")) {
+        const jsonBody = await response.json().catch(() => null);
+        bodyText = jsonBody ? JSON.stringify(jsonBody) : "";
+      } else {
+        bodyText = await response.text().catch(() => "");
+      }
+
+      tracked.push({
+        url,
+        method,
+        status: response.status(),
+        bodyText: bodyText.slice(0, 4000),
+      });
+    } catch {
+      // Ignore tracker parsing issues.
+    }
+  };
+
+  page.on("response", handler);
+
+  return {
+    tracked,
+    detach() {
+      page.off("response", handler);
+    },
+  };
+}
+
+function responseTextLooksSuccessful(text) {
+  const haystack = normalizeText(text);
+  return [
+    "berhasil",
+    "sukses",
+    "success",
+    "voucher aktif",
+    "redeem berhasil",
+    "tukar berhasil",
+    "selamat",
+    "paket aktif",
+    "kuota aktif",
+    "kuota utama",
+  ].some((needle) => haystack.includes(needle));
+}
+
+function responseTextLooksFailed(text) {
+  const haystack = normalizeText(text);
+  return [
+    "gagal",
+    "failed",
+    "tidak valid",
+    "invalid",
+    "sudah digunakan",
+    "already used",
+    "expired",
+    "kedaluwarsa",
+    "tidak ditemukan",
+    "not found",
+    "nomor tidak sesuai",
+    "nomor bukan byu",
+    "terjadi kesalahan",
+    "coba lagi",
+    "maaf",
+  ].some((needle) => haystack.includes(needle));
+}
+
+function detectTrackedResponseResult(tracked) {
+  for (const entry of tracked.slice().reverse()) {
+    if (entry.status >= 400) {
+      return {
+        success: false,
+        message: `HTTP ${entry.status} dari ${entry.url}`,
+      };
+    }
+
+    if (responseTextLooksSuccessful(entry.bodyText) && !responseTextLooksFailed(entry.bodyText)) {
+      return {
+        success: true,
+        message: `Respons sukses terdeteksi dari ${entry.url}`,
+      };
+    }
+
+    if (responseTextLooksFailed(entry.bodyText)) {
+      return {
+        success: false,
+        message: entry.bodyText.slice(0, 200),
+      };
+    }
+  }
+
+  return null;
+}
+
+function getTrackerSummary(tracked) {
+  return tracked
+    .slice(-3)
+    .map((entry) => `${entry.method} ${entry.status} ${entry.url}`)
+    .join(" | ");
+}
+
+async function clickButtonByText(page, labels) {
+  const labelSet = labels.map((label) => normalizeText(label));
+  const buttons = await page.$$("button");
+
+  for (const button of buttons) {
+    const meta = await page.evaluate(
+      (element) => ({
+        text: element.textContent || "",
+        disabled: Boolean(
+          element.disabled || element.getAttribute("aria-disabled") === "true"
+        ),
+      }),
+      button
+    );
+
+    const text = normalizeText(meta.text);
+    if (!text || meta.disabled) continue;
+
+    if (labelSet.some((label) => text.includes(label))) {
+      await button.click();
+      return text;
+    }
+  }
+
+  return null;
+}
+
 export async function isPuppeteerAvailable() {
   const pup = await loadPuppeteer();
   return pup !== null;
 }
 
-/**
- * Auto-redeem a voucher code on the provider's website
- * 
- * @param {string} provider - "simpati" or "byu"
- * @param {string} code - Voucher code (16-17 digits)
- * @param {string} phone - Target phone number (08xxx format)
- * @param {number} [retryCount=0] - Internal retry counter
- * @returns {Promise<{ success: boolean, message: string, fallback?: boolean }>}
- */
 export async function autoRedeemVoucher(provider, code, phone, retryCount = 0) {
   const puppeteer = await loadPuppeteer();
 
   if (!puppeteer) {
     return {
       success: false,
-      message: "Puppeteer not installed — falling back to semi-auto",
+      message: "Puppeteer not installed - falling back to semi-auto",
       fallback: true,
     };
   }
@@ -66,15 +211,15 @@ export async function autoRedeemVoucher(provider, code, phone, retryCount = 0) {
     };
   }
 
-  // Normalize phone: ensure 08xxx format
   const normalizedPhone = phone.replace(/^(\+62|62)/, "0").replace(/\D/g, "");
 
-  console.log(`🤖 Auto-redeem starting: provider=${provider}, phone=${normalizedPhone}, code=${code.substring(0, 4)}****`);
+  console.log(
+    `Auto-redeem starting: provider=${provider}, phone=${normalizedPhone}, code=${code.substring(0, 4)}****`
+  );
 
   let browser = null;
 
   try {
-    // Launch headless Chrome
     browser = await puppeteer.launch({
       headless: "new",
       args: [
@@ -89,27 +234,22 @@ export async function autoRedeemVoucher(provider, code, phone, retryCount = 0) {
       timeout: PAGE_LOAD_TIMEOUT,
     });
 
-    let result;
-
     if (provider === "byu") {
-      result = await redeemByU(browser, normalizedPhone, code);
-    } else {
-      // Default: Telkomsel/Simpati
-      result = await redeemTelkomsel(browser, normalizedPhone, code);
+      return await redeemByU(browser, normalizedPhone, code);
     }
 
-    return result;
+    return await redeemTelkomsel(browser, normalizedPhone, code);
   } catch (err) {
-    console.error(`❌ Auto-redeem error (attempt ${retryCount + 1}):`, err.message);
+    console.error(`Auto-redeem error (attempt ${retryCount + 1}):`, err.message);
 
-    // Retry logic
     if (retryCount < MAX_RETRIES) {
-      console.log(`🔄 Retrying auto-redeem (${retryCount + 1}/${MAX_RETRIES})...`);
+      console.log(`Retrying auto-redeem (${retryCount + 1}/${MAX_RETRIES})...`);
       if (browser) {
-        try { await browser.close(); } catch {}
+        try {
+          await browser.close();
+        } catch {}
       }
-      // Wait a bit before retry
-      await new Promise((r) => setTimeout(r, 2000));
+      await wait(2000);
       return autoRedeemVoucher(provider, code, phone, retryCount + 1);
     }
 
@@ -120,39 +260,29 @@ export async function autoRedeemVoucher(provider, code, phone, retryCount = 0) {
     };
   } finally {
     if (browser) {
-      try { await browser.close(); } catch {}
+      try {
+        await browser.close();
+      } catch {}
     }
   }
 }
 
-/**
- * Redeem on Telkomsel website
- * URL: https://www.telkomsel.com/shops/voucher/redeem
- * 
- * Form fields:
- *   - Phone: input[placeholder="Masukan Nomor Telkomsel Anda"] or input[aria-label="MSISDN"]
- *   - Voucher: input[placeholder="Masukkan Kode Voucher"]
- *   - Submit: button.btn-primary-submit (text "Redeem")
- */
 async function redeemTelkomsel(browser, phone, code) {
   const page = await browser.newPage();
-  
-  // Set viewport and user agent
+
   await page.setViewport({ width: 1024, height: 768 });
   await page.setUserAgent(
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
   );
 
-  console.log("📱 Navigating to Telkomsel redeem page...");
+  console.log("Navigating to Telkomsel redeem page...");
   await page.goto(REDEEM_URLS.simpati, {
     waitUntil: "networkidle2",
     timeout: PAGE_LOAD_TIMEOUT,
   });
 
-  // Wait for Angular SPA to render the form
-  console.log("⏳ Waiting for form to load...");
-  
-  // Try multiple selectors for phone input
+  console.log("Waiting for Telkomsel form to load...");
+
   const phoneSelectors = [
     'input[aria-label="MSISDN"]',
     'input[placeholder="Masukan Nomor Telkomsel Anda"]',
@@ -165,7 +295,7 @@ async function redeemTelkomsel(browser, phone, code) {
     try {
       phoneInput = await page.waitForSelector(sel, { timeout: 10_000 });
       if (phoneInput) {
-        console.log(`✅ Phone input found: ${sel}`);
+        console.log(`Telkomsel phone input found: ${sel}`);
         break;
       }
     } catch {}
@@ -174,20 +304,17 @@ async function redeemTelkomsel(browser, phone, code) {
   if (!phoneInput) {
     return {
       success: false,
-      message: "Telkomsel: Phone input field not found — page structure may have changed",
+      message: "Telkomsel: Phone input field not found - page structure may have changed",
       fallback: true,
     };
   }
 
-  // Type phone number
-  await phoneInput.click({ clickCount: 3 }); // select all existing text
+  await phoneInput.click({ clickCount: 3 });
   await phoneInput.type(phone, { delay: INPUT_DELAY });
-  console.log(`📞 Phone entered: ${phone}`);
+  console.log(`Telkomsel phone entered: ${phone}`);
 
-  // Wait a moment for validation
-  await new Promise((r) => setTimeout(r, 1000));
+  await wait(1000);
 
-  // Find voucher code input
   const voucherSelectors = [
     'input[placeholder="Masukkan Kode Voucher"]',
     'input[formcontrolname="voucher"]',
@@ -199,7 +326,7 @@ async function redeemTelkomsel(browser, phone, code) {
     try {
       voucherInput = await page.waitForSelector(sel, { timeout: 5_000 });
       if (voucherInput) {
-        console.log(`✅ Voucher input found: ${sel}`);
+        console.log(`Telkomsel voucher input found: ${sel}`);
         break;
       }
     } catch {}
@@ -208,26 +335,20 @@ async function redeemTelkomsel(browser, phone, code) {
   if (!voucherInput) {
     return {
       success: false,
-      message: "Telkomsel: Voucher input field not found — page structure may have changed",
+      message: "Telkomsel: Voucher input field not found - page structure may have changed",
       fallback: true,
     };
   }
 
-  // Type voucher code
   await voucherInput.click({ clickCount: 3 });
   await voucherInput.type(code, { delay: INPUT_DELAY });
-  console.log(`🔑 Voucher code entered: ${code.substring(0, 4)}****`);
+  console.log(`Telkomsel voucher entered: ${code.substring(0, 4)}****`);
 
-  // Wait for form validation
-  await new Promise((r) => setTimeout(r, 1500));
+  await wait(1500);
 
-  // Find and click submit button
-  const submitSelectors = [
-    'button.btn-primary-submit',
-    'button:not([disabled])',
-  ];
-
+  const submitSelectors = ['button.btn-primary-submit', 'button:not([disabled])'];
   let submitBtn = null;
+
   for (const sel of submitSelectors) {
     try {
       const buttons = await page.$$(sel);
@@ -248,21 +369,17 @@ async function redeemTelkomsel(browser, phone, code) {
   if (!submitBtn) {
     return {
       success: false,
-      message: "Telkomsel: Submit button not found or disabled — check phone/voucher format",
+      message: "Telkomsel: Submit button not found or disabled - check phone/voucher format",
       fallback: true,
     };
   }
 
-  console.log("🚀 Clicking Redeem button...");
+  console.log("Clicking Telkomsel Redeem button...");
   await submitBtn.click();
+  await wait(SUBMIT_WAIT);
 
-  // Wait for response
-  await new Promise((r) => setTimeout(r, SUBMIT_WAIT));
+  const pageText = await getBodyText(page);
 
-  // Check for success/error messages
-  const pageText = await page.evaluate(() => document.body?.innerText || "");
-
-  // Detect success indicators
   const successPatterns = [
     /berhasil/i,
     /sukses/i,
@@ -287,11 +404,11 @@ async function redeemTelkomsel(browser, phone, code) {
     /nomor.*tidak.*terdaftar/i,
   ];
 
-  const isSuccess = successPatterns.some((p) => p.test(pageText));
-  const isError = errorPatterns.some((p) => p.test(pageText));
+  const isSuccess = successPatterns.some((pattern) => pattern.test(pageText));
+  const isError = errorPatterns.some((pattern) => pattern.test(pageText));
 
   if (isSuccess && !isError) {
-    console.log("✅ Telkomsel auto-redeem SUCCESS!");
+    console.log("Telkomsel auto-redeem SUCCESS");
     return {
       success: true,
       message: `Voucher berhasil di-redeem otomatis ke ${phone} via Telkomsel`,
@@ -299,11 +416,12 @@ async function redeemTelkomsel(browser, phone, code) {
   }
 
   if (isError) {
-    // Extract error message
-    const errorMatch = pageText.match(/(gagal|failed|tidak valid|invalid|sudah digunakan|expired|kedaluwarsa|salah|tidak ditemukan)[^\n]*/i);
+    const errorMatch = pageText.match(
+      /(gagal|failed|tidak valid|invalid|sudah digunakan|expired|kedaluwarsa|salah|tidak ditemukan)[^\n]*/i
+    );
     const errorDetail = errorMatch ? errorMatch[0].trim().substring(0, 200) : "Unknown error";
-    
-    console.error(`❌ Telkomsel auto-redeem FAILED: ${errorDetail}`);
+
+    console.error(`Telkomsel auto-redeem FAILED: ${errorDetail}`);
     return {
       success: false,
       message: `Telkomsel redeem gagal: ${errorDetail}`,
@@ -311,43 +429,42 @@ async function redeemTelkomsel(browser, phone, code) {
     };
   }
 
-  // Ambiguous result — treat as failure, fallback to manual
-  console.warn("⚠️ Telkomsel auto-redeem: ambiguous result, falling back to semi-auto");
+  console.warn("Telkomsel auto-redeem ambiguous, falling back to semi-auto");
   return {
     success: false,
-    message: "Telkomsel redeem: hasil tidak jelas — perlu verifikasi manual",
+    message: "Telkomsel redeem: hasil tidak jelas - perlu verifikasi manual",
     fallback: true,
   };
 }
 
-/**
- * Redeem on byU website
- * URL: https://pidaw-webfront.cx.byu.id/web/tkr-voucher
- * 
- * Form fields:
- *   - Phone: input#byuNumber
- *   - Voucher: input#byuVoucher
- *   - Submit: button with text "Tukar" (class bg-sky-500 when active)
- */
 async function redeemByU(browser, phone, code) {
   const page = await browser.newPage();
+  const tracker = createResponseTracker(page, (url, method) => {
+    const normalizedUrl = normalizeText(url);
+    if (!["GET", "POST", "PUT", "PATCH"].includes(method)) return false;
 
-  // Set viewport and user agent
+    return (
+      normalizedUrl.includes("byu.id") ||
+      normalizedUrl.includes("pidaw-webfront.cx.byu.id") ||
+      normalizedUrl.includes("voucher") ||
+      normalizedUrl.includes("redeem") ||
+      normalizedUrl.includes("tkr")
+    );
+  });
+
   await page.setViewport({ width: 1024, height: 768 });
   await page.setUserAgent(
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
   );
 
-  console.log("📱 Navigating to byU redeem page...");
+  console.log("Navigating to byU redeem page...");
   await page.goto(REDEEM_URLS.byu, {
     waitUntil: "networkidle2",
     timeout: PAGE_LOAD_TIMEOUT,
   });
 
-  // Wait for React SPA to render
-  console.log("⏳ Waiting for form to load...");
+  console.log("Waiting for byU form to load...");
 
-  // Wait for phone input
   const phoneSelectors = [
     "input#byuNumber",
     'input[aria-label="Nomor By.U"]',
@@ -359,29 +476,27 @@ async function redeemByU(browser, phone, code) {
     try {
       phoneInput = await page.waitForSelector(sel, { timeout: 10_000 });
       if (phoneInput) {
-        console.log(`✅ Phone input found: ${sel}`);
+        console.log(`byU phone input found: ${sel}`);
         break;
       }
     } catch {}
   }
 
   if (!phoneInput) {
+    tracker.detach();
     return {
       success: false,
-      message: "byU: Phone input field not found — page structure may have changed",
+      message: "byU: Phone input field not found - page structure may have changed",
       fallback: true,
     };
   }
 
-  // Type phone number
   await phoneInput.click({ clickCount: 3 });
   await phoneInput.type(phone, { delay: INPUT_DELAY });
-  console.log(`📞 Phone entered: ${phone}`);
+  console.log(`byU phone entered: ${phone}`);
 
-  // Wait for validation
-  await new Promise((r) => setTimeout(r, 1000));
+  await wait(1000);
 
-  // Find voucher input
   const voucherSelectors = [
     "input#byuVoucher",
     'input[aria-label="Kode Voucher"]',
@@ -393,29 +508,27 @@ async function redeemByU(browser, phone, code) {
     try {
       voucherInput = await page.waitForSelector(sel, { timeout: 5_000 });
       if (voucherInput) {
-        console.log(`✅ Voucher input found: ${sel}`);
+        console.log(`byU voucher input found: ${sel}`);
         break;
       }
     } catch {}
   }
 
   if (!voucherInput) {
+    tracker.detach();
     return {
       success: false,
-      message: "byU: Voucher input field not found — page structure may have changed",
+      message: "byU: Voucher input field not found - page structure may have changed",
       fallback: true,
     };
   }
 
-  // Type voucher code
   await voucherInput.click({ clickCount: 3 });
   await voucherInput.type(code, { delay: INPUT_DELAY });
-  console.log(`🔑 Voucher code entered: ${code.substring(0, 4)}****`);
+  console.log(`byU voucher entered: ${code.substring(0, 4)}****`);
 
-  // Wait for button to become enabled
-  await new Promise((r) => setTimeout(r, 1500));
+  await wait(1500);
 
-  // Find submit button
   let submitBtn = null;
   try {
     const buttons = await page.$$("button");
@@ -432,23 +545,54 @@ async function redeemByU(browser, phone, code) {
   } catch {}
 
   if (!submitBtn) {
+    tracker.detach();
     return {
       success: false,
-      message: "byU: Submit button not found or disabled — check phone/voucher format",
+      message: "byU: Submit button not found or disabled - check phone/voucher format",
       fallback: true,
     };
   }
 
-  console.log("🚀 Clicking Tukar button...");
+  console.log("Clicking byU Tukar button...");
   await submitBtn.click();
+  await wait(SUBMIT_WAIT);
 
-  // Wait for response (byU shows modal)
-  await new Promise((r) => setTimeout(r, SUBMIT_WAIT));
+  const followUpButton = await clickButtonByText(page, [
+    "aktifkan paket",
+    "aktifkan",
+    "lanjut",
+    "konfirmasi",
+    "ya, lanjut",
+    "ok",
+  ]);
 
-  // Check for success/error on page
-  const pageText = await page.evaluate(() => document.body?.innerText || "");
+  if (followUpButton) {
+    console.log(`byU follow-up button clicked: ${followUpButton}`);
+    await wait(FOLLOW_UP_WAIT);
+  }
 
-  // Detect success indicators
+  const pageText = await getBodyText(page);
+  const trackedResult = detectTrackedResponseResult(tracker.tracked);
+  const trackerSummary = getTrackerSummary(tracker.tracked);
+  tracker.detach();
+
+  if (trackedResult?.success) {
+    console.log("byU auto-redeem SUCCESS via network response");
+    return {
+      success: true,
+      message: trackedResult.message,
+    };
+  }
+
+  if (trackedResult && !trackedResult.success) {
+    console.error(`byU auto-redeem FAILED via network response: ${trackedResult.message}`);
+    return {
+      success: false,
+      message: `byU redeem gagal: ${trackedResult.message.substring(0, 200)}`,
+      fallback: true,
+    };
+  }
+
   const successPatterns = [
     /berhasil/i,
     /sukses/i,
@@ -456,6 +600,8 @@ async function redeemByU(browser, phone, code) {
     /voucher.*aktif/i,
     /tukar.*berhasil/i,
     /selamat/i,
+    /paket.*aktif/i,
+    /kuota.*aktif/i,
   ];
 
   const errorPatterns = [
@@ -472,13 +618,14 @@ async function redeemByU(browser, phone, code) {
     /salah/i,
     /nomor.*bukan.*byu/i,
     /maaf/i,
+    /terjadi.*kesalahan/i,
   ];
 
-  const isSuccess = successPatterns.some((p) => p.test(pageText));
-  const isError = errorPatterns.some((p) => p.test(pageText));
+  const isSuccess = successPatterns.some((pattern) => pattern.test(pageText));
+  const isError = errorPatterns.some((pattern) => pattern.test(pageText));
 
   if (isSuccess && !isError) {
-    console.log("✅ byU auto-redeem SUCCESS!");
+    console.log("byU auto-redeem SUCCESS");
     return {
       success: true,
       message: `Voucher berhasil di-redeem otomatis ke ${phone} via byU`,
@@ -486,10 +633,12 @@ async function redeemByU(browser, phone, code) {
   }
 
   if (isError) {
-    const errorMatch = pageText.match(/(gagal|failed|tidak valid|invalid|sudah digunakan|expired|kedaluwarsa|salah|maaf|bukan.*byu)[^\n]*/i);
+    const errorMatch = pageText.match(
+      /(gagal|failed|tidak valid|invalid|sudah digunakan|expired|kedaluwarsa|salah|maaf|bukan.*byu|terjadi.*kesalahan)[^\n]*/i
+    );
     const errorDetail = errorMatch ? errorMatch[0].trim().substring(0, 200) : "Unknown error";
-    
-    console.error(`❌ byU auto-redeem FAILED: ${errorDetail}`);
+
+    console.error(`byU auto-redeem FAILED: ${errorDetail}`);
     return {
       success: false,
       message: `byU redeem gagal: ${errorDetail}`,
@@ -497,10 +646,12 @@ async function redeemByU(browser, phone, code) {
     };
   }
 
-  console.warn("⚠️ byU auto-redeem: ambiguous result, falling back to semi-auto");
+  console.warn("byU auto-redeem ambiguous, falling back to semi-auto");
   return {
     success: false,
-    message: "byU redeem: hasil tidak jelas — perlu verifikasi manual",
+    message:
+      "byU redeem: hasil tidak jelas - perlu verifikasi manual" +
+      (trackerSummary ? ` (${trackerSummary})` : ""),
     fallback: true,
   };
 }
