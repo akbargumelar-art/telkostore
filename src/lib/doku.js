@@ -208,32 +208,29 @@ export async function createDokuTransaction({
   const timestamp = new Date().toISOString().split(".")[0] + "Z";
   const target = "/checkout/v1/payment";
 
+  // DOKU Checkout API — minimal required payload
+  // Docs: order.amount + order.invoice_number are mandatory
   const payload = {
     order: {
-      invoice_number: orderId,
       amount: Math.round(amount),
-      line_items: [
-        {
-          name: productName.substring(0, 50),
-          price: Math.round(amount),
-          quantity: 1,
-        },
-      ],
+      invoice_number: orderId,
       callback_url: callbackUrl,
-      ...(failedUrl && { failed_url: failedUrl }),
       auto_redirect: true,
+    },
+    payment: {
+      payment_due_date: 1440, // 24 hours in minutes
     },
     customer: {
       id: customerPhone,
       name: customerPhone,
       phone: customerPhone,
     },
-    payment: {
-      payment_due_date: 1440, // 24 hours in minutes
-    },
   };
 
   const bodyStr = JSON.stringify(payload);
+
+  console.log(`🔷 DOKU creating payment: ${orderId}, Rp${amount}, env: ${config.isProduction ? "PROD" : "SANDBOX"}`);
+
   const signature = generateDokuSignature(
     config.clientId,
     requestId,
@@ -252,29 +249,39 @@ export async function createDokuTransaction({
       "Client-Id": config.clientId,
       "Request-Id": requestId,
       "Request-Timestamp": timestamp,
-      Signature: signature,
-      Digest: digest,
+      "Signature": signature,
+      "Digest": digest,
     },
     body: bodyStr,
   });
 
+  const responseText = await res.text();
+
   if (!res.ok) {
-    const errorText = await res.text();
-    console.error(`DOKU API error: ${res.status}`, errorText);
-    throw new Error(`DOKU payment creation failed: ${res.status}`);
+    console.error(`❌ DOKU API error [${res.status}]:`, responseText);
+    console.error(`❌ DOKU request: Client-Id=${config.clientId}, Target=${config.apiUrl}${target}`);
+    throw new Error(`DOKU payment creation failed: ${res.status} — ${responseText.substring(0, 200)}`);
   }
 
-  const data = await res.json();
+  let data;
+  try {
+    data = JSON.parse(responseText);
+  } catch {
+    console.error("❌ DOKU response not JSON:", responseText);
+    throw new Error("DOKU returned invalid JSON response");
+  }
 
-  // DOKU response contains payment.url for redirect
+  console.log("🔷 DOKU response:", JSON.stringify(data).substring(0, 500));
+
+  // DOKU response: { payment: { url: "https://..." }, order: {...} }
   const paymentUrl =
-    data?.response?.payment?.url ||
     data?.payment?.url ||
+    data?.response?.payment?.url ||
     data?.url ||
     null;
 
   if (!paymentUrl) {
-    console.error("DOKU response missing payment URL:", JSON.stringify(data));
+    console.error("❌ DOKU response missing payment URL:", JSON.stringify(data));
     throw new Error("DOKU payment URL not found in response");
   }
 
