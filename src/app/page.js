@@ -10,9 +10,12 @@ import CategoryIcon from "@/components/CategoryIcon";
 import { ArrowRight, Sparkles, TrendingUp, Filter } from "lucide-react";
 import Link from "next/link";
 
+const isProductAvailable = (product) => Number(product.stock ?? 0) > 0;
+
 export default function HomePage() {
   const [activeCategory, setActiveCategory] = useState("all");
   const [activeValidity, setActiveValidity] = useState("all");
+  const [stockFilter, setStockFilter] = useState("all");
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [flashSaleProducts, setFlashSaleProducts] = useState([]);
@@ -55,7 +58,9 @@ export default function HomePage() {
   // Get unique validity values for current category
   const validityOptions = useMemo(() => {
     if (activeCategory === "all") return [];
-    const categoryProducts = products.filter((p) => p.categoryId === activeCategory);
+    const categoryProducts = products
+      .filter((p) => p.categoryId === activeCategory)
+      .filter((p) => stockFilter !== "available" || isProductAvailable(p));
     const validities = [...new Set(categoryProducts.map((p) => p.validity).filter(Boolean))];
     // Sort by number of days
     return validities.sort((a, b) => {
@@ -63,7 +68,16 @@ export default function HomePage() {
       const numB = parseInt(b) || 0;
       return numA - numB;
     });
-  }, [activeCategory, products]);
+  }, [activeCategory, products, stockFilter]);
+
+  useEffect(() => {
+    if (
+      activeValidity !== "all" &&
+      !validityOptions.includes(activeValidity)
+    ) {
+      setActiveValidity("all");
+    }
+  }, [activeValidity, validityOptions]);
 
   const filteredProducts = useMemo(() => {
     let result = products;
@@ -73,8 +87,11 @@ export default function HomePage() {
     if (activeValidity !== "all") {
       result = result.filter((p) => p.validity === activeValidity);
     }
+    if (stockFilter === "available") {
+      result = result.filter(isProductAvailable);
+    }
     return result;
-  }, [activeCategory, activeValidity, products]);
+  }, [activeCategory, activeValidity, products, stockFilter]);
 
   const availableProductCount = useMemo(
     () => filteredProducts.filter((p) => Number(p.stock ?? 0) > 0).length,
@@ -82,7 +99,20 @@ export default function HomePage() {
   );
 
   const getProductsByCategory = (catId) =>
-    products.filter((p) => p.categoryId === catId);
+    products
+      .filter((p) => p.categoryId === catId)
+      .filter((p) => stockFilter !== "available" || isProductAvailable(p));
+
+  const visibleFlashSaleProducts = useMemo(
+    () =>
+      flashSaleProducts
+        .filter(
+          (p) =>
+            activeCategory === "all" || p.categoryId === activeCategory
+        )
+        .filter((p) => stockFilter !== "available" || isProductAvailable(p)),
+    [activeCategory, flashSaleProducts, stockFilter]
+  );
 
   const activeCategoryData = categories.find((c) => c.id === activeCategory);
 
@@ -124,6 +154,30 @@ export default function HomePage() {
           onCategoryChange={setActiveCategory}
           categories={categories}
         />
+
+        {/* Stock filter */}
+        <div className="flex gap-1.5 overflow-x-auto hide-scrollbar px-4 pb-2.5">
+          <button
+            onClick={() => setStockFilter("all")}
+            className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+              stockFilter === "all"
+                ? "bg-navy text-white"
+                : "bg-white text-gray-500 border border-gray-200"
+            }`}
+          >
+            Semua stok
+          </button>
+          <button
+            onClick={() => setStockFilter("available")}
+            className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+              stockFilter === "available"
+                ? "bg-navy text-white"
+                : "bg-white text-gray-500 border border-gray-200"
+            }`}
+          >
+            Stok tersedia
+          </button>
+        </div>
 
         {/* Validity sub-filter (shows when category has validity options) */}
         {validityOptions.length > 0 && (
@@ -170,19 +224,11 @@ export default function HomePage() {
             <BannerSlider onCategoryChange={setActiveCategory} />
 
             {/* Flash Sale Section */}
-            {(activeCategory === "all" ||
-              flashSaleProducts.some(
-                (p) => p.categoryId === activeCategory
-              )) && (
+            {visibleFlashSaleProducts.length > 0 && (
               <section className="mt-4 md:mt-6">
                 <FlashSaleBanner />
                 <div className="mt-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
-                  {flashSaleProducts
-                    .filter(
-                      (p) =>
-                        activeCategory === "all" ||
-                        p.categoryId === activeCategory
-                    )
+                  {visibleFlashSaleProducts
                     .slice(0, 4)
                     .map((product, i) => (
                       <ProductCard
@@ -254,6 +300,33 @@ export default function HomePage() {
                 </div>
               </div>
 
+              {/* Desktop: Stock filter chips */}
+              <div className="hidden md:flex gap-2 mb-4 flex-wrap">
+                <span className="text-xs text-gray-400 font-medium self-center mr-1 flex items-center gap-1">
+                  <Filter size={12} /> Stok:
+                </span>
+                <button
+                  onClick={() => setStockFilter("all")}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                    stockFilter === "all"
+                      ? "bg-navy text-white"
+                      : "bg-white text-gray-500 border border-gray-200 hover:border-gray-300"
+                  }`}
+                >
+                  Semua stok
+                </button>
+                <button
+                  onClick={() => setStockFilter("available")}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                    stockFilter === "available"
+                      ? "bg-navy text-white"
+                      : "bg-white text-gray-500 border border-gray-200 hover:border-gray-300"
+                  }`}
+                >
+                  Stok tersedia
+                </button>
+              </div>
+
               {/* Desktop: Validity filter chips */}
               {validityOptions.length > 0 && (
                 <div className="hidden md:flex gap-2 mb-4 flex-wrap">
@@ -288,45 +361,53 @@ export default function HomePage() {
 
               {/* Category Sub-sections for "All" view */}
               {activeCategory === "all" ? (
-                <div className="space-y-8">
-                  {categories.map((cat) => {
-                    const catProducts = getProductsByCategory(cat.id);
-                    if (catProducts.length === 0) return null;
-                    return (
-                      <div key={cat.id}>
-                        <div className="flex items-center justify-between mb-3">
-                          <h3 className="font-bold text-sm text-gray-700 flex items-center gap-2">
-                            <CategoryIcon
-                              categoryId={cat.id}
-                              icon={cat.icon}
-                              alt={cat.name}
-                              size={20}
-                            />
-                            {cat.name}
-                            <span className="text-[11px] font-normal text-gray-400">
-                              ({catProducts.length})
-                            </span>
-                          </h3>
-                          <button
-                            onClick={() => setActiveCategory(cat.id)}
-                            className="text-tred text-xs font-semibold hover:underline flex items-center gap-1"
-                          >
-                            Lihat semua <ArrowRight size={12} />
-                          </button>
+                filteredProducts.length > 0 ? (
+                  <div className="space-y-8">
+                    {categories.map((cat) => {
+                      const catProducts = getProductsByCategory(cat.id);
+                      if (catProducts.length === 0) return null;
+                      return (
+                        <div key={cat.id}>
+                          <div className="flex items-center justify-between mb-3">
+                            <h3 className="font-bold text-sm text-gray-700 flex items-center gap-2">
+                              <CategoryIcon
+                                categoryId={cat.id}
+                                icon={cat.icon}
+                                alt={cat.name}
+                                size={20}
+                              />
+                              {cat.name}
+                              <span className="text-[11px] font-normal text-gray-400">
+                                ({catProducts.length})
+                              </span>
+                            </h3>
+                            <button
+                              onClick={() => setActiveCategory(cat.id)}
+                              className="text-tred text-xs font-semibold hover:underline flex items-center gap-1"
+                            >
+                              Lihat semua <ArrowRight size={12} />
+                            </button>
+                          </div>
+                          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
+                            {catProducts.slice(0, 4).map((product, i) => (
+                              <ProductCard
+                                key={product.id}
+                                product={product}
+                                index={i}
+                              />
+                            ))}
+                          </div>
                         </div>
-                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
-                          {catProducts.slice(0, 4).map((product, i) => (
-                            <ProductCard
-                              key={product.id}
-                              product={product}
-                              index={i}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-center py-12">
+                    <p className="text-gray-400 text-sm">
+                      Tidak ada produk dengan stok tersedia
+                    </p>
+                  </div>
+                )
               ) : (
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
                   {filteredProducts.length > 0 ? (
@@ -335,7 +416,11 @@ export default function HomePage() {
                     ))
                   ) : (
                     <div className="col-span-full text-center py-12">
-                      <p className="text-gray-400 text-sm">Tidak ada produk ditemukan</p>
+                      <p className="text-gray-400 text-sm">
+                        {stockFilter === "available"
+                          ? "Tidak ada produk dengan stok tersedia"
+                          : "Tidak ada produk ditemukan"}
+                      </p>
                     </div>
                   )}
                 </div>
