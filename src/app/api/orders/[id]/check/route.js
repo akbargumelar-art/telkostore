@@ -17,6 +17,7 @@ import {
   buildGroupPaymentFailedMsg,
 } from "@/lib/whatsapp";
 import { cancelNotification } from "@/lib/notification-scheduler";
+import { isVoucherProduct, ensureVoucherFulfillment } from "@/lib/voucher";
 
 export async function POST(request, { params }) {
   try {
@@ -112,11 +113,14 @@ async function checkMidtransStatus(order) {
         .where(eq(products.id, order.productId))
         .limit(1);
       const productType = productResult[0]?.type || "virtual";
+      const voucherProduct = await isVoucherProduct(order.productId);
 
       statusUpdates.paidAt = now;
       statusUpdates.paymentMethod = payment_type;
 
-      if (productType === "virtual") {
+      if (voucherProduct) {
+        newStatus = "paid";
+      } else if (productType === "virtual") {
         newStatus = "completed";
         statusUpdates.completedAt = now;
       } else {
@@ -183,11 +187,14 @@ async function checkPakasirStatus(order) {
       .where(eq(products.id, order.productId))
       .limit(1);
     const productType = productResult[0]?.type || "virtual";
+    const voucherProduct = await isVoucherProduct(order.productId);
 
     statusUpdates.paidAt = txDetail.completed_at || now;
     statusUpdates.paymentMethod = paymentMethod;
 
-    if (productType === "virtual") {
+    if (voucherProduct) {
+      newStatus = "paid";
+    } else if (productType === "virtual") {
       newStatus = "completed";
       statusUpdates.completedAt = now;
     } else {
@@ -263,6 +270,14 @@ async function applyStatusUpdate(order, newStatus, statusUpdates, paymentData) {
     createdAt: now,
   });
 
+  const [updatedOrder] = await db
+    .select()
+    .from(orders)
+    .where(eq(orders.id, order.id))
+    .limit(1);
+
+  const currentOrder = updatedOrder || { ...order, status: newStatus, ...statusUpdates };
+
   if (newStatus !== "pending") {
     cancelNotification(order.id);
   }
@@ -289,6 +304,26 @@ async function applyStatusUpdate(order, newStatus, statusUpdates, paymentData) {
     } catch (waErr) {
       console.error("WA group notification failed:", waErr.message);
     }
+
+    if (updatedOrder) {
+      currentOrder.whatsappSent = true;
+    }
+
+    try {
+      await ensureVoucherFulfillment(
+        currentOrder,
+        {
+          sendWA: sendWhatsAppNotification,
+          sendGroup: sendGroupNotification,
+        },
+        {
+          sendVoucherMessage: true,
+          retryFailedAutoRedeem: true,
+        }
+      );
+    } catch (voucherErr) {
+      console.error("Voucher fulfillment failed:", voucherErr.message);
+    }
   } else if (newStatus === "failed") {
     try {
       await sendWhatsAppNotification(
@@ -306,18 +341,27 @@ async function applyStatusUpdate(order, newStatus, statusUpdates, paymentData) {
     } catch (waErr) {
       console.error("WA group notification failed:", waErr.message);
     }
+  } else if (newStatus === "completed" || newStatus === "paid") {
+    try {
+      await ensureVoucherFulfillment(
+        currentOrder,
+        {
+          sendWA: sendWhatsAppNotification,
+          sendGroup: sendGroupNotification,
+        },
+        {
+          sendVoucherMessage: true,
+          retryFailedAutoRedeem: true,
+        }
+      );
+    } catch (voucherErr) {
+      console.error("Voucher fulfillment failed:", voucherErr.message);
+    }
   }
-
-  // Return updated order
-  const [updatedOrder] = await db
-    .select()
-    .from(orders)
-    .where(eq(orders.id, order.id))
-    .limit(1);
 
   return NextResponse.json({
     success: true,
-    data: updatedOrder,
+    data: currentOrder,
     message: `Status updated: ${order.status} → ${newStatus}`,
   });
 }

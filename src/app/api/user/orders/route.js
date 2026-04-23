@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import db from "@/db/index.js";
 import { orders } from "@/db/schema.js";
 import { eq, desc } from "drizzle-orm";
+import { reconcileVisiblePendingOrders } from "@/lib/payment-reconciliation";
 
 export async function GET() {
   try {
@@ -25,7 +26,12 @@ export async function GET() {
       .orderBy(desc(orders.createdAt))
       .limit(20);
 
-    return NextResponse.json({ success: true, data: userOrders });
+    const syncedOrders = await reconcileVisiblePendingOrders(userOrders, {
+      source: "user_orders",
+      limit: 5,
+    });
+
+    return NextResponse.json({ success: true, data: syncedOrders });
   } catch (error) {
     console.error("GET /api/user/orders error:", error);
     return NextResponse.json(

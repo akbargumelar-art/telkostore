@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import db from "@/db/index.js";
 import { orders, payments } from "@/db/schema.js";
 import { eq } from "drizzle-orm";
+import { reconcileOrderPaymentStatus } from "@/lib/payment-reconciliation";
 
 export async function GET(request, { params }) {
   try {
@@ -41,6 +42,12 @@ export async function GET(request, { params }) {
       );
     }
 
+    const syncResult = await reconcileOrderPaymentStatus(order, {
+      source: "order_detail",
+      limit: 1,
+    });
+    const currentOrder = syncResult.order || order;
+
     // Get payment history
     const paymentHistory = await db
       .select()
@@ -50,17 +57,17 @@ export async function GET(request, { params }) {
     return NextResponse.json({
       success: true,
       data: {
-        id: order.id,
-        productName: order.productName,
-        productPrice: order.productPrice,
-        targetData: order.targetData,
-        status: order.status,
-        paymentMethod: order.paymentMethod,
-        guestPhone: order.guestPhone,
-        snapRedirectUrl: order.snapRedirectUrl,
-        createdAt: order.createdAt,
-        paidAt: order.paidAt,
-        completedAt: order.completedAt,
+        id: currentOrder.id,
+        productName: currentOrder.productName,
+        productPrice: currentOrder.productPrice,
+        targetData: currentOrder.targetData,
+        status: currentOrder.status,
+        paymentMethod: currentOrder.paymentMethod,
+        guestPhone: currentOrder.guestPhone,
+        snapRedirectUrl: currentOrder.snapRedirectUrl,
+        createdAt: currentOrder.createdAt,
+        paidAt: currentOrder.paidAt,
+        completedAt: currentOrder.completedAt,
         payments: paymentHistory.map((p) => ({
           paymentType: p.paymentType,
           transactionStatus: p.transactionStatus,

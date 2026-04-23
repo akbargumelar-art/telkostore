@@ -3,6 +3,9 @@ import { NextResponse } from "next/server";
 import db from "@/db/index.js";
 import { orders } from "@/db/schema.js";
 import { eq, like, or, sql, desc } from "drizzle-orm";
+import { reconcileVisiblePendingOrders } from "@/lib/payment-reconciliation";
+import { ensureVoucherFulfillment } from "@/lib/voucher";
+import { sendWhatsAppNotification, sendGroupNotification } from "@/lib/whatsapp";
 
 export async function GET(request) {
   try {
@@ -41,6 +44,11 @@ export async function GET(request) {
       .limit(limit)
       .offset(offset);
 
+    const syncedOrders = await reconcileVisiblePendingOrders(result, {
+      source: "control_orders",
+      limit: Math.min(limit, 10),
+    });
+
     // Count total
     let countQuery = db.select({ total: sql`COUNT(*)` }).from(orders);
     if (conditions.length === 1) {
@@ -52,7 +60,7 @@ export async function GET(request) {
 
     return NextResponse.json({
       success: true,
-      data: result,
+      data: syncedOrders,
       pagination: {
         page,
         limit,
@@ -105,6 +113,33 @@ export async function PUT(request) {
         .update(orders)
         .set(updates)
         .where(eq(orders.id, orderId));
+
+      if (["paid", "processing", "completed"].includes(status)) {
+        try {
+          const [updatedOrder] = await db
+            .select()
+            .from(orders)
+            .where(eq(orders.id, orderId))
+            .limit(1);
+
+          if (updatedOrder) {
+            await ensureVoucherFulfillment(
+              updatedOrder,
+              {
+                sendWA: sendWhatsAppNotification,
+                sendGroup: sendGroupNotification,
+              },
+              {
+                sendVoucherMessage: true,
+                retryFailedAutoRedeem: true,
+                forceAutoRedeem: status === "processing" || status === "completed",
+              }
+            );
+          }
+        } catch (voucherErr) {
+          console.error(`Bulk voucher fulfillment failed for ${orderId}:`, voucherErr.message);
+        }
+      }
 
       updated++;
     }

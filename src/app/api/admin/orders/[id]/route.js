@@ -10,6 +10,7 @@ import {
   buildOrderProcessingMsg,
   formatRupiahServer,
 } from "@/lib/whatsapp";
+import { ensureVoucherFulfillment } from "@/lib/voucher";
 
 export async function GET(request, { params }) {
   try {
@@ -58,6 +59,14 @@ export async function PUT(request, { params }) {
     }
 
     if (notes !== undefined) updateData.notes = notes;
+
+    await db.update(orders).set(updateData).where(eq(orders.id, id));
+
+    const [updatedOrder] = await db
+      .select()
+      .from(orders)
+      .where(eq(orders.id, id))
+      .limit(1);
 
     // Send WhatsApp notifications based on status change
     if (status === "completed" && order.status !== "completed") {
@@ -113,7 +122,29 @@ export async function PUT(request, { params }) {
       }
     }
 
-    await db.update(orders).set(updateData).where(eq(orders.id, id));
+    if (
+      updatedOrder &&
+      status &&
+      status !== order.status &&
+      ["paid", "processing", "completed"].includes(status)
+    ) {
+      try {
+        await ensureVoucherFulfillment(
+          updatedOrder,
+          {
+            sendWA: sendWhatsAppNotification,
+            sendGroup: sendGroupNotification,
+          },
+          {
+            sendVoucherMessage: true,
+            retryFailedAutoRedeem: true,
+            forceAutoRedeem: status === "processing" || status === "completed",
+          }
+        );
+      } catch (voucherErr) {
+        console.error("Voucher fulfillment failed:", voucherErr.message);
+      }
+    }
 
     return NextResponse.json({
       success: true,

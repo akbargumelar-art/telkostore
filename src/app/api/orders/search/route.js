@@ -2,7 +2,8 @@
 import { NextResponse } from "next/server";
 import db from "@/db/index.js";
 import { orders } from "@/db/schema.js";
-import { eq, or, like, desc } from "drizzle-orm";
+import { or, like, desc } from "drizzle-orm";
+import { reconcileVisiblePendingOrders } from "@/lib/payment-reconciliation";
 
 export async function GET(request) {
   try {
@@ -20,13 +21,17 @@ export async function GET(request) {
     const result = await db
       .select({
         id: orders.id,
+        productId: orders.productId,
         productName: orders.productName,
         productPrice: orders.productPrice,
         guestPhone: orders.guestPhone,
         targetData: orders.targetData,
         status: orders.status,
         paymentMethod: orders.paymentMethod,
+        paymentGateway: orders.paymentGateway,
+        midtransOrderId: orders.midtransOrderId,
         guestToken: orders.guestToken,
+        whatsappSent: orders.whatsappSent,
         createdAt: orders.createdAt,
         paidAt: orders.paidAt,
         completedAt: orders.completedAt,
@@ -42,23 +47,38 @@ export async function GET(request) {
       .orderBy(desc(orders.createdAt))
       .limit(20);
 
+    const syncedResult = await reconcileVisiblePendingOrders(result, {
+      source: "order_search",
+      limit: 5,
+    });
+
     const normalizedQuery = query.replace(/\D/g, "");
 
-    // Mask sensitive fields — only return the access token for an exact phone lookup.
-    const safeResult = result.map(({ guestToken, guestPhone, ...rest }) => {
-      const normalizedPhone = (guestPhone || "").replace(/\D/g, "");
-      const canOpenDetail =
-        normalizedQuery.length >= 10 && normalizedQuery === normalizedPhone;
+    // Mask sensitive fields - only return the access token for an exact phone lookup.
+    const safeResult = syncedResult.map(
+      ({
+        guestToken,
+        guestPhone,
+        paymentGateway,
+        midtransOrderId,
+        whatsappSent,
+        productId,
+        ...rest
+      }) => {
+        const normalizedPhone = (guestPhone || "").replace(/\D/g, "");
+        const canOpenDetail =
+          normalizedQuery.length >= 10 && normalizedQuery === normalizedPhone;
 
-      return {
-        ...rest,
-        guestPhone: guestPhone
-          ? `${guestPhone.slice(0, 4)}****${guestPhone.slice(-3)}`
-          : "—",
-        guestToken: canOpenDetail ? guestToken : null,
-        detailAvailable: canOpenDetail,
-      };
-    });
+        return {
+          ...rest,
+          guestPhone: guestPhone
+            ? `${guestPhone.slice(0, 4)}****${guestPhone.slice(-3)}`
+            : "—",
+          guestToken: canOpenDetail ? guestToken : null,
+          detailAvailable: canOpenDetail,
+        };
+      }
+    );
 
     return NextResponse.json({
       success: true,

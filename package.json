@@ -15,7 +15,8 @@
     "db:seed": "node src/db/seed.mjs",
     "db:studio": "drizzle-kit studio",
     "db:migrate-data": "node src/db/migrate-sqlite-to-mysql.mjs",
-    "db:migrate-admin-password": "node src/db/migrate-add-admin-password.mjs"
+    "db:migrate-admin-password": "node src/db/migrate-add-admin-password.mjs",
+    "payments:reconcile": "node src/scripts/reconcile-pending-payments.mjs"
   },
   "dependencies": {
     "class-variance-authority": "^0.7.1",

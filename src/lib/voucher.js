@@ -7,6 +7,7 @@ import db from "@/db/index.js";
 import { voucherCodes, products, orders } from "@/db/schema.js";
 import { eq, and, sql, count } from "drizzle-orm";
 import { nanoid } from "nanoid";
+import { buildVoucherDeliveryMsg } from "@/lib/whatsapp";
 
 const MAX_ASSIGN_RETRIES = 3;
 
@@ -263,6 +264,124 @@ export async function isVoucherProduct(productId) {
   return product?.categoryId === "voucher-internet";
 }
 
+function shouldAttemptAutoRedeem(voucher, options = {}) {
+  if (!voucher || voucher.status !== "reserved") return false;
+  if (options.forceAutoRedeem) return true;
+
+  const lastResponse = voucher.redeemResponse || "";
+  if (!lastResponse) return true;
+  if (lastResponse.startsWith("AUTO_REDEEM_IN_PROGRESS")) return false;
+  if (lastResponse.startsWith("Auto-redeem gagal:")) {
+    return Boolean(options.retryFailedAutoRedeem);
+  }
+
+  return false;
+}
+
+async function markVoucherAutoRedeemInProgress(voucherId) {
+  const now = new Date().toISOString();
+  await db
+    .update(voucherCodes)
+    .set({
+      redeemResponse: `AUTO_REDEEM_IN_PROGRESS:${now}`,
+      updatedAt: now,
+    })
+    .where(eq(voucherCodes.id, voucherId));
+}
+
+/**
+ * Ensure a paid voucher-internet order has an assigned code and can start auto-redeem.
+ * This keeps voucher fulfillment consistent across webhook, manual check, and admin flows.
+ */
+export async function ensureVoucherFulfillment(order, callbacks = {}, options = {}) {
+  const { sendWA, sendGroup } = callbacks;
+
+  if (!(await isVoucherProduct(order.productId))) {
+    return {
+      isVoucher: false,
+      voucher: null,
+      assigned: false,
+      autoRedeemTriggered: false,
+      skippedReason: "not_voucher_product",
+    };
+  }
+
+  let voucher = await getVoucherByOrderId(order.id);
+  let assigned = false;
+
+  if (!voucher) {
+    const detectedProvider = detectProviderFromPhone(order.targetData || order.guestPhone);
+    voucher = await assignVoucherToOrder(
+      order.id,
+      order.productId,
+      order.guestPhone,
+      detectedProvider
+    );
+
+    if (!voucher) {
+      if (sendGroup && options.notifyWhenOutOfStock !== false) {
+        try {
+          await sendGroup(
+            `⚠️ *STOK VOUCHER HABIS*\n\nProduk: ${order.productName}\nOrder: ${order.id}\nPembeli: ${order.guestPhone}\n\nSegera tambah kode voucher di Admin!`
+          );
+        } catch (waErr) {
+          console.error("WA voucher out-of-stock notification failed:", waErr.message);
+        }
+      }
+
+      return {
+        isVoucher: true,
+        voucher: null,
+        assigned: false,
+        autoRedeemTriggered: false,
+        skippedReason: "voucher_unavailable",
+      };
+    }
+
+    assigned = true;
+  }
+
+  if (assigned && sendWA && options.sendVoucherMessage !== false) {
+    try {
+      const instructions = getRedeemInstructions(
+        voucher.provider,
+        voucher.code,
+        order.targetData || order.guestPhone
+      );
+      await sendWA(
+        order.guestPhone,
+        buildVoucherDeliveryMsg(order, voucher, instructions)
+      );
+    } catch (waErr) {
+      console.error("WA voucher delivery notification failed:", waErr.message);
+    }
+  }
+
+  let autoRedeemTriggered = false;
+  if (options.triggerAutoRedeem !== false && shouldAttemptAutoRedeem(voucher, options)) {
+    await markVoucherAutoRedeemInProgress(voucher.id);
+    autoRedeemTriggered = true;
+
+    autoRedeemAndComplete(
+      order,
+      {
+        ...voucher,
+        redeemResponse: `AUTO_REDEEM_IN_PROGRESS:${new Date().toISOString()}`,
+      },
+      callbacks
+    ).catch((err) => {
+      console.error("Auto-redeem background error:", err.message);
+    });
+  }
+
+  return {
+    isVoucher: true,
+    voucher,
+    assigned,
+    autoRedeemTriggered,
+  };
+}
+
 /**
  * Auto-redeem a voucher via Puppeteer and complete the order if successful.
  * Falls back to semi-auto (admin manual redeem via dashboard) if auto-redeem fails.
@@ -277,6 +396,7 @@ export async function isVoucherProduct(productId) {
  */
 export async function autoRedeemAndComplete(order, voucher, callbacks = {}) {
   const { sendWA, sendGroup } = callbacks;
+  const now = new Date().toISOString();
 
   // Dynamic import to avoid breaking builds when puppeteer is not installed
   let autoRedeemVoucher, isPuppeteerAvailable;
@@ -286,6 +406,13 @@ export async function autoRedeemAndComplete(order, voucher, callbacks = {}) {
     isPuppeteerAvailable = autoRedeemModule.isPuppeteerAvailable;
   } catch (importErr) {
     console.warn("⚠️ auto-redeem.js module not available, falling back to semi-auto:", importErr.message);
+    await db
+      .update(voucherCodes)
+      .set({
+        redeemResponse: `Auto-redeem gagal: module error (${importErr.message})`,
+        updatedAt: now,
+      })
+      .where(eq(voucherCodes.id, voucher.id));
     // Send fallback notification to admin group
     if (sendGroup) {
       try {
@@ -308,6 +435,13 @@ export async function autoRedeemAndComplete(order, voucher, callbacks = {}) {
   const puppeteerReady = await isPuppeteerAvailable();
   if (!puppeteerReady) {
     console.warn("⚠️ Puppeteer not installed — falling back to semi-auto redeem");
+    await db
+      .update(voucherCodes)
+      .set({
+        redeemResponse: "Auto-redeem gagal: Puppeteer belum terpasang di server",
+        updatedAt: now,
+      })
+      .where(eq(voucherCodes.id, voucher.id));
     // Send fallback notification to admin group
     if (sendGroup) {
       try {
@@ -428,6 +562,14 @@ export async function autoRedeemAndComplete(order, voucher, callbacks = {}) {
     }
   } catch (err) {
     console.error(`❌ Auto-redeem unexpected error for order ${order.id}:`, err.message);
+
+    await db
+      .update(voucherCodes)
+      .set({
+        redeemResponse: `Auto-redeem gagal: ${err.message}`,
+        updatedAt: new Date().toISOString(),
+      })
+      .where(eq(voucherCodes.id, voucher.id));
 
     // Notify admin group about unexpected error
     if (sendGroup) {
