@@ -77,6 +77,8 @@ export async function POST(request) {
       const matchingAdmins = await db
         .select({
           id: users.id,
+          name: users.name,
+          email: users.email,
           passwordHash: users.passwordHash,
         })
         .from(users)
@@ -114,8 +116,9 @@ export async function POST(request) {
     // Determine admin type: superadmin (env-configured) vs admin (DB user)
     const isSuperadmin = isConfiguredAdminIdentifier(identifier) && isGlobalPasswordValid;
     const adminType = isSuperadmin ? "superadmin" : "admin";
+    const tokenIdentifier = adminUser?.id || identifier;
 
-    const token = createAdminToken(adminType);
+    const token = createAdminToken(adminType, tokenIdentifier);
 
     const response = NextResponse.json({ success: true });
     response.cookies.set("admin_token", token, {

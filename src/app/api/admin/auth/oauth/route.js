@@ -20,7 +20,7 @@ export const POST = auth(async (request) => {
   }
 
   const response = NextResponse.json({ success: true });
-  response.cookies.set("admin_token", createAdminToken("admin"), {
+  response.cookies.set("admin_token", createAdminToken("admin", session.user.id || ""), {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
@@ -30,3 +30,4 @@ export const POST = auth(async (request) => {
 
   return response;
 });
+

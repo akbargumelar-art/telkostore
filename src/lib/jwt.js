@@ -38,10 +38,11 @@ function getSigningSecret() {
 
 /**
  * Create a signed JWT token for admin session.
- * Payload: { role: "admin", adminType: "superadmin"|"admin", iat, exp }
+ * Payload: { role: "admin", adminType: "superadmin"|"admin", sub, iat, exp }
  * @param {"superadmin"|"admin"} [adminType="superadmin"] - The admin type level
+ * @param {string} [identifier] - The admin's user ID (DB) or username (env)
  */
-export function createAdminToken(adminType = "superadmin") {
+export function createAdminToken(adminType = "superadmin", identifier = "") {
   const secret = getSigningSecret();
   const now = Math.floor(Date.now() / 1000);
 
@@ -50,6 +51,7 @@ export function createAdminToken(adminType = "superadmin") {
     JSON.stringify({
       role: "admin",
       adminType: adminType || "superadmin",
+      sub: identifier || "",
       iat: now,
       exp: now + TOKEN_EXPIRY_SECONDS,
     })
