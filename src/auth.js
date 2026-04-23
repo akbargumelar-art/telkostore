@@ -6,10 +6,25 @@
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
 import Facebook from "next-auth/providers/facebook";
+import { loadEnvConfig } from "@next/env";
 import db from "@/db/index.js";
 import { users } from "@/db/schema.js";
 import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
+
+loadEnvConfig(process.cwd());
+
+if (!process.env.AUTH_URL && process.env.NEXT_PUBLIC_BASE_URL) {
+  process.env.AUTH_URL = process.env.NEXT_PUBLIC_BASE_URL;
+}
+
+if (!process.env.NEXTAUTH_URL && process.env.NEXT_PUBLIC_BASE_URL) {
+  process.env.NEXTAUTH_URL = process.env.NEXT_PUBLIC_BASE_URL;
+}
+
+if (!process.env.AUTH_TRUST_HOST) {
+  process.env.AUTH_TRUST_HOST = "true";
+}
 
 function getProviderCredentials() {
   return {
