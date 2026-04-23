@@ -3,70 +3,146 @@
 // Auth.js v5 (NextAuth) + Google & Facebook
 // ==============================
 
+import fs from "node:fs";
+import path from "node:path";
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
 import Facebook from "next-auth/providers/facebook";
-import { loadEnvConfig } from "@next/env";
 import db from "@/db/index.js";
 import { users } from "@/db/schema.js";
 import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
-loadEnvConfig(process.cwd());
+function parseEnvFile(filePath) {
+  if (!fs.existsSync(filePath)) {
+    return {};
+  }
 
-if (!process.env.AUTH_URL && process.env.NEXT_PUBLIC_BASE_URL) {
-  process.env.AUTH_URL = process.env.NEXT_PUBLIC_BASE_URL;
+  const content = fs.readFileSync(filePath, "utf8");
+  const values = {};
+
+  for (const rawLine of content.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) continue;
+
+    const separatorIndex = line.indexOf("=");
+    if (separatorIndex === -1) continue;
+
+    const key = line.slice(0, separatorIndex).trim();
+    let value = line.slice(separatorIndex + 1).trim();
+
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+
+    values[key] = value;
+  }
+
+  return values;
 }
 
-if (!process.env.NEXTAUTH_URL && process.env.NEXT_PUBLIC_BASE_URL) {
-  process.env.NEXTAUTH_URL = process.env.NEXT_PUBLIC_BASE_URL;
+function loadRuntimeEnvFallback() {
+  const mode = process.env.NODE_ENV === "production" ? "production" : "development";
+  const projectRoot = process.cwd();
+  const fileOrder = [
+    `.env.${mode}.local`,
+    ".env.local",
+    `.env.${mode}`,
+    ".env",
+  ];
+
+  const merged = {};
+
+  for (const fileName of fileOrder) {
+    const filePath = path.join(projectRoot, fileName);
+    const parsed = parseEnvFile(filePath);
+
+    for (const [key, value] of Object.entries(parsed)) {
+      if (!(key in merged)) {
+        merged[key] = value;
+      }
+    }
+  }
+
+  return merged;
+}
+
+const runtimeEnvFallback = loadRuntimeEnvFallback();
+
+function getEnvValue(name) {
+  return process.env[name] || runtimeEnvFallback[name] || "";
+}
+
+const canonicalBaseUrl =
+  getEnvValue("NEXT_PUBLIC_BASE_URL") ||
+  getEnvValue("AUTH_URL") ||
+  getEnvValue("NEXTAUTH_URL");
+
+if (canonicalBaseUrl) {
+  process.env.AUTH_URL = canonicalBaseUrl;
+  process.env.NEXTAUTH_URL = canonicalBaseUrl;
 }
 
 if (!process.env.AUTH_TRUST_HOST) {
-  process.env.AUTH_TRUST_HOST = "true";
+  process.env.AUTH_TRUST_HOST = getEnvValue("AUTH_TRUST_HOST") || "true";
 }
 
 function getProviderCredentials() {
   return {
-    googleClientId:
-      process.env.GOOGLE_CLIENT_ID || process.env.AUTH_GOOGLE_ID || "",
+    googleClientId: getEnvValue("GOOGLE_CLIENT_ID") || getEnvValue("AUTH_GOOGLE_ID"),
     googleClientSecret:
-      process.env.GOOGLE_CLIENT_SECRET || process.env.AUTH_GOOGLE_SECRET || "",
+      getEnvValue("GOOGLE_CLIENT_SECRET") || getEnvValue("AUTH_GOOGLE_SECRET"),
     facebookClientId:
-      process.env.FACEBOOK_CLIENT_ID || process.env.AUTH_FACEBOOK_ID || "",
+      getEnvValue("FACEBOOK_CLIENT_ID") || getEnvValue("AUTH_FACEBOOK_ID"),
     facebookClientSecret:
-      process.env.FACEBOOK_CLIENT_SECRET ||
-      process.env.AUTH_FACEBOOK_SECRET ||
-      "",
+      getEnvValue("FACEBOOK_CLIENT_SECRET") ||
+      getEnvValue("AUTH_FACEBOOK_SECRET"),
   };
 }
 
+function logProviderStateOnce(credentials) {
+  if (globalThis.__telkoAuthProviderStateLogged) {
+    return;
+  }
+
+  globalThis.__telkoAuthProviderStateLogged = true;
+
+  console.info("[auth] runtime config", {
+    cwd: process.cwd(),
+    authUrl: process.env.AUTH_URL,
+    nextAuthUrl: process.env.NEXTAUTH_URL,
+    hasGoogleClientId: Boolean(credentials.googleClientId),
+    hasGoogleClientSecret: Boolean(credentials.googleClientSecret),
+    hasFacebookClientId: Boolean(credentials.facebookClientId),
+    hasFacebookClientSecret: Boolean(credentials.facebookClientSecret),
+  });
+}
+
 function buildProviders() {
-  const {
-    googleClientId,
-    googleClientSecret,
-    facebookClientId,
-    facebookClientSecret,
-  } = getProviderCredentials();
+  const credentials = getProviderCredentials();
+  logProviderStateOnce(credentials);
 
   const providers = [];
 
-  if (googleClientId && googleClientSecret) {
+  if (credentials.googleClientId && credentials.googleClientSecret) {
     providers.push(
       Google({
-        clientId: googleClientId,
-        clientSecret: googleClientSecret,
+        clientId: credentials.googleClientId,
+        clientSecret: credentials.googleClientSecret,
       })
     );
   } else {
     console.warn("[auth] Google OAuth disabled: missing client ID or secret");
   }
 
-  if (facebookClientId && facebookClientSecret) {
+  if (credentials.facebookClientId && credentials.facebookClientSecret) {
     providers.push(
       Facebook({
-        clientId: facebookClientId,
-        clientSecret: facebookClientSecret,
+        clientId: credentials.facebookClientId,
+        clientSecret: credentials.facebookClientSecret,
       })
     );
   } else {
@@ -81,6 +157,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth(() => ({
   pages: {
     signIn: "/account",
   },
+  trustHost: true,
   session: {
     strategy: "jwt",
   },
