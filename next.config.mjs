@@ -1,5 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Packages that should not be bundled by Next.js (native/binary deps)
+  serverExternalPackages: ["puppeteer", "puppeteer-core", "mysql2"],
   // Security headers
   async headers() {
     return [

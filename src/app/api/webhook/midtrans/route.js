@@ -23,6 +23,7 @@ import {
   isVoucherProduct,
   getRedeemInstructions,
   detectProviderFromPhone,
+  autoRedeemAndComplete,
 } from "@/lib/voucher";
 
 // GET /api/webhook/midtrans — Health check for Midtrans URL verification
@@ -129,6 +130,7 @@ export async function POST(request) {
     // Determine new order status
     let newStatus = order.status;
     let statusUpdates = { updatedAt: now };
+    let isVoucher = false;
 
     if (transaction_status === "capture" || transaction_status === "settlement") {
       if (fraud_status === "accept" || !fraud_status) {
@@ -136,22 +138,18 @@ export async function POST(request) {
         statusUpdates.paidAt = now;
         statusUpdates.paymentMethod = payment_type;
 
-        // [FIX 2.2] Separate flow for virtual vs fisik products
-        // Fetch product to check type
-        const productResult = await db
-          .select()
-          .from(products)
-          .where(eq(products.id, order.productId))
-          .limit(1);
-        const productType = productResult[0]?.type || "virtual";
+        // Check if this is a voucher product (auto-complete only for voucher)
+        try {
+          isVoucher = await isVoucherProduct(order.productId);
+        } catch { isVoucher = false; }
 
-        if (productType === "virtual") {
-          // Virtual products: auto-complete (simulate fulfillment)
-          // In production, this would call Digipos/provider API
-          newStatus = "completed";
-          statusUpdates.completedAt = now;
+        if (isVoucher) {
+          // Voucher products: stay at "paid", auto-redeem will complete if successful
+          // If auto-redeem fails, admin can manually redeem via /admin/voucher
+          newStatus = "paid";
         } else {
-          // Fisik products: stay at "paid", admin will process manually
+          // Non-voucher products (virtual & fisik): stay at "paid"
+          // Admin will manually process -> completed via dashboard
           newStatus = "paid";
         }
       }
@@ -204,16 +202,15 @@ export async function POST(request) {
         console.error("WA buyer notification failed:", waErr.message);
       }
 
-      // ===== VOUCHER AUTO-ASSIGN =====
-      try {
-        const isVoucher = await isVoucherProduct(order.productId);
-        if (isVoucher) {
+      // ===== VOUCHER AUTO-ASSIGN + AUTO-REDEEM (only for voucher products) =====
+      if (isVoucher) {
+        try {
           const detectedProvider = detectProviderFromPhone(order.targetData || order.guestPhone);
           const voucher = await assignVoucherToOrder(
             order.id, order.productId, order.guestPhone, detectedProvider
           );
           if (voucher) {
-            // Send voucher code + redeem instructions to buyer
+            // Send voucher code + instructions to buyer immediately
             const instructions = getRedeemInstructions(
               voucher.provider, voucher.code, order.targetData || order.guestPhone
             );
@@ -221,27 +218,35 @@ export async function POST(request) {
               order.guestPhone,
               buildVoucherDeliveryMsg(order, voucher, instructions)
             );
-            // Notify admin group for semi-auto redeem
-            await sendGroupNotification(
-              buildGroupVoucherRedeemMsg(order, voucher)
-            );
             console.log(`🎫 Voucher ${voucher.code} assigned to order ${order.id}`);
+
+            // Fire-and-forget: attempt auto-redeem via Puppeteer
+            // If auto-redeem succeeds → order auto-completes + buyer gets notified
+            // If auto-redeem fails → falls back to semi-auto (admin dashboard)
+            autoRedeemAndComplete(order, voucher, {
+              sendWA: sendWhatsAppNotification,
+              sendGroup: sendGroupNotification,
+            }).catch((err) => {
+              console.error("Auto-redeem background error:", err.message);
+            });
           } else {
             console.warn(`⚠️ No available voucher for product ${order.productId}`);
             await sendGroupNotification(
               `⚠️ *STOK VOUCHER HABIS*\n\nProduk: ${order.productName}\nOrder: ${order.id}\nPembeli: ${order.guestPhone}\n\nSegera tambah kode voucher di Admin!`
             );
           }
+        } catch (voucherErr) {
+          console.error("Voucher auto-assign failed:", voucherErr.message);
         }
-      } catch (voucherErr) {
-        console.error("Voucher auto-assign failed:", voucherErr.message);
       }
 
-      // Notify internal group
+      // Notify internal group — with action prompt for non-voucher
       try {
-        await sendGroupNotification(
-          buildGroupPaymentSuccessMsg(order, payment_type)
-        );
+        let groupMsg = buildGroupPaymentSuccessMsg(order, payment_type);
+        if (!isVoucher) {
+          groupMsg += `\n\n⚡ *AKSI DIPERLUKAN:*\nProduk ini perlu diproses manual oleh admin.\n🔗 ${process.env.NEXT_PUBLIC_BASE_URL}/admin/pesanan`;
+        }
+        await sendGroupNotification(groupMsg);
       } catch (waErr) {
         console.error("WA group notification failed:", waErr.message);
       }

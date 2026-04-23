@@ -12,9 +12,14 @@ import {
   ShoppingBag,
   Mail,
   Calendar,
-  Shield,
   ShieldCheck,
   UserCog,
+  UserPlus,
+  X,
+  Phone,
+  Clock,
+  Package,
+  Eye,
 } from "lucide-react";
 
 function formatDate(dateStr) {
@@ -34,6 +39,15 @@ function formatRupiah(n) {
 const providerBadge = {
   google: "bg-blue-50 text-blue-700",
   facebook: "bg-indigo-50 text-indigo-700",
+  manual: "bg-emerald-50 text-emerald-700",
+};
+
+const statusConfig = {
+  pending: { bg: "bg-yellow-50", text: "text-yellow-700", icon: Clock, label: "Menunggu" },
+  paid: { bg: "bg-blue-50", text: "text-blue-700", icon: CheckCircle2, label: "Dibayar" },
+  processing: { bg: "bg-orange-50", text: "text-orange-700", icon: Package, label: "Proses" },
+  completed: { bg: "bg-green-50", text: "text-green-700", icon: CheckCircle2, label: "Selesai" },
+  failed: { bg: "bg-red-50", text: "text-red-700", icon: AlertCircle, label: "Gagal" },
 };
 
 export default function AdminUsersPage() {
@@ -45,9 +59,19 @@ export default function AdminUsersPage() {
   const [userOrders, setUserOrders] = useState([]);
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [success, setSuccess] = useState("");
+  const [error, setError] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const [togglingRole, setTogglingRole] = useState(null);
+  const [updatingOrder, setUpdatingOrder] = useState(null);
+
+  // Create user modal
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [newUser, setNewUser] = useState({ name: "", email: "", phone: "", role: "admin" });
+
+  const showSuccess = (msg) => { setSuccess(msg); setTimeout(() => setSuccess(""), 3000); };
+  const showError = (msg) => { setError(msg); setTimeout(() => setError(""), 4000); };
 
   const fetchUsers = async () => {
     try {
@@ -72,23 +96,15 @@ export default function AdminUsersPage() {
   };
 
   const handleSelectUser = async (user) => {
-    if (selectedUser?.id === user.id) {
-      setSelectedUser(null);
-      return;
-    }
+    if (selectedUser?.id === user.id) { setSelectedUser(null); return; }
     setSelectedUser(user);
     setLoadingOrders(true);
     try {
       const res = await fetch(`/api/admin/users/${user.id}`);
       const data = await res.json();
-      if (data.success) {
-        setUserOrders(data.data.orders || []);
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoadingOrders(false);
-    }
+      if (data.success) setUserOrders(data.data.orders || []);
+    } catch (err) { console.error(err); }
+    finally { setLoadingOrders(false); }
   };
 
   const handleDelete = async (userId) => {
@@ -97,18 +113,14 @@ export default function AdminUsersPage() {
       const res = await fetch(`/api/admin/users/${userId}`, { method: "DELETE" });
       const data = await res.json();
       if (data.success) {
-        setSuccess("User berhasil dihapus");
-        setTimeout(() => setSuccess(""), 3000);
+        showSuccess("User berhasil dihapus");
         setDeleteConfirm(null);
         setSelectedUser(null);
         setLoading(true);
         fetchUsers();
       }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setDeleting(false);
-    }
+    } catch (err) { console.error(err); }
+    finally { setDeleting(false); }
   };
 
   const handleToggleRole = async (userId, currentRole) => {
@@ -122,16 +134,56 @@ export default function AdminUsersPage() {
       });
       const data = await res.json();
       if (data.success) {
-        setSuccess(`Role diubah menjadi ${newRole}`);
-        setTimeout(() => setSuccess(""), 3000);
+        showSuccess(`Role diubah menjadi ${newRole}`);
         setLoading(true);
         fetchUsers();
       }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setTogglingRole(null);
-    }
+    } catch (err) { console.error(err); }
+    finally { setTogglingRole(null); }
+  };
+
+  const handleCreateUser = async (e) => {
+    e.preventDefault();
+    setCreating(true);
+    try {
+      const res = await fetch("/api/admin/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newUser),
+      });
+      const data = await res.json();
+      if (data.success) {
+        showSuccess(data.message);
+        setShowCreateModal(false);
+        setNewUser({ name: "", email: "", phone: "", role: "admin" });
+        setLoading(true);
+        fetchUsers();
+      } else {
+        showError(data.error || "Gagal membuat user");
+      }
+    } catch (err) { showError("Terjadi kesalahan"); }
+    finally { setCreating(false); }
+  };
+
+  const handleUpdateOrderStatus = async (orderId, newStatus) => {
+    setUpdatingOrder(orderId);
+    try {
+      const res = await fetch(`/api/admin/orders/${orderId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        showSuccess(`Pesanan ${orderId} → ${newStatus}`);
+        if (selectedUser) {
+          const r = await fetch(`/api/admin/users/${selectedUser.id}`);
+          const d = await r.json();
+          if (d.success) setUserOrders(d.data.orders || []);
+        }
+      }
+    } catch (err) { console.error(err); }
+    finally { setUpdatingOrder(null); }
   };
 
   const filteredUsers = filterRole === "all" ? users : users.filter((u) => (u.role || "user") === filterRole);
@@ -148,23 +200,37 @@ export default function AdminUsersPage() {
             {filteredUsers.length} user terdaftar{filterRole !== "all" ? ` (${filterRole})` : ""}
           </p>
         </div>
-        <button
-          onClick={() => { setLoading(true); fetchUsers(); }}
-          className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 self-start"
-        >
-          <RefreshCw size={14} /> Refresh
-        </button>
+        <div className="flex gap-2 self-start">
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl gradient-navy text-white text-sm font-bold hover:opacity-90 shadow-md transition-all"
+          >
+            <UserPlus size={14} /> Tambah Admin
+          </button>
+          <button
+            onClick={() => { setLoading(true); fetchUsers(); }}
+            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50"
+          >
+            <RefreshCw size={14} /> Refresh
+          </button>
+        </div>
       </div>
 
-      {/* Success */}
+      {/* Alerts */}
       {success && (
-        <div className="mb-4 bg-green-50 border border-green-200 rounded-xl p-3 flex items-center gap-2">
+        <div className="mb-4 bg-green-50 border border-green-200 rounded-xl p-3 flex items-center gap-2 animate-fade-in">
           <CheckCircle2 size={14} className="text-green-600" />
           <p className="text-green-700 text-sm font-medium">{success}</p>
         </div>
       )}
+      {error && (
+        <div className="mb-4 bg-red-50 border border-red-200 rounded-xl p-3 flex items-center gap-2 animate-fade-in">
+          <AlertCircle size={14} className="text-red-600" />
+          <p className="text-red-600 text-sm font-medium">{error}</p>
+        </div>
+      )}
 
-      {/* Search */}
+      {/* Search & Filter */}
       <div className="bg-white rounded-2xl border border-gray-100 p-4 mb-4 flex flex-col md:flex-row gap-3">
         <form onSubmit={handleSearch} className="flex-1 flex gap-2">
           <div className="relative flex-1">
@@ -207,15 +273,10 @@ export default function AdminUsersPage() {
                     className="w-full text-left px-4 md:px-5 py-3 md:py-4 flex items-center gap-3 md:gap-4 hover:bg-gray-50 transition-colors"
                   >
                     {user.image ? (
-                      <img
-                        src={user.image}
-                        alt={user.name}
-                        className="w-10 h-10 rounded-full border border-gray-200 shrink-0"
-                        referrerPolicy="no-referrer"
-                      />
+                      <img src={user.image} alt={user.name} className="w-10 h-10 rounded-full border border-gray-200 shrink-0" referrerPolicy="no-referrer" />
                     ) : (
-                      <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center shrink-0">
-                        <Users size={16} className="text-gray-400" />
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${userRole === "admin" ? "bg-purple-100" : "bg-gray-100"}`}>
+                        {userRole === "admin" ? <ShieldCheck size={16} className="text-purple-600" /> : <Users size={16} className="text-gray-400" />}
                       </div>
                     )}
                     <div className="flex-1 min-w-0">
@@ -240,10 +301,7 @@ export default function AdminUsersPage() {
                         <span className="text-[11px] text-gray-400 hidden md:inline">{formatDate(user.createdAt)}</span>
                       </div>
                     </div>
-                    <ChevronRight
-                      size={16}
-                      className={`text-gray-300 shrink-0 transition-transform ${isExpanded ? "rotate-90" : ""}`}
-                    />
+                    <ChevronRight size={16} className={`text-gray-300 shrink-0 transition-transform ${isExpanded ? "rotate-90" : ""}`} />
                   </button>
 
                   {/* Expanded Detail */}
@@ -270,7 +328,7 @@ export default function AdminUsersPage() {
                           </div>
                         </div>
 
-                        {/* User Orders */}
+                        {/* User Orders with Action */}
                         <div className="border-t border-gray-100 pt-3">
                           <h4 className="text-xs font-bold text-gray-600 mb-2 flex items-center gap-1">
                             <ShoppingBag size={12} /> Pesanan ({userOrders.length})
@@ -282,19 +340,62 @@ export default function AdminUsersPage() {
                           ) : userOrders.length === 0 ? (
                             <p className="text-gray-400 text-xs text-center py-4">Belum ada pesanan</p>
                           ) : (
-                            <div className="space-y-1.5 max-h-40 overflow-y-auto">
-                              {userOrders.map((order) => (
-                                <div key={order.id} className="flex items-center justify-between text-xs bg-gray-50 rounded-lg px-3 py-2">
-                                  <div>
-                                    <p className="font-medium text-gray-800">{order.productName}</p>
-                                    <p className="text-gray-400">{order.id}</p>
+                            <div className="space-y-2 max-h-80 overflow-y-auto">
+                              {userOrders.map((order) => {
+                                const sc = statusConfig[order.status] || statusConfig.pending;
+                                const StatusIcon = sc.icon;
+                                const isUpdating = updatingOrder === order.id;
+                                return (
+                                  <div key={order.id} className="bg-gray-50 rounded-xl p-3 space-y-2">
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex-1 min-w-0">
+                                        <p className="font-semibold text-xs text-gray-800 truncate">{order.productName}</p>
+                                        <div className="flex items-center gap-2 mt-0.5">
+                                          <span className="text-[10px] text-gray-400 font-mono">{order.id}</span>
+                                          <span className="text-gray-300">•</span>
+                                          <span className="text-[10px] text-gray-400">{formatDate(order.createdAt)}</span>
+                                        </div>
+                                      </div>
+                                      <div className="text-right shrink-0 ml-2">
+                                        <p className="font-bold text-xs text-navy">{formatRupiah(order.productPrice)}</p>
+                                        <span className={`inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full ${sc.bg} ${sc.text}`}>
+                                          <StatusIcon size={8} /> {sc.label}
+                                        </span>
+                                      </div>
+                                    </div>
+                                    {/* Order details */}
+                                    <div className="grid grid-cols-2 gap-1 text-[10px]">
+                                      <div className="flex items-center gap-1 text-gray-500">
+                                        <Phone size={9} /> {order.guestPhone}
+                                      </div>
+                                      <div className="flex items-center gap-1 text-gray-500">
+                                        <Eye size={9} /> {order.targetData || "—"}
+                                      </div>
+                                    </div>
+                                    {/* Status action buttons */}
+                                    <div className="flex flex-wrap gap-1 pt-1 border-t border-gray-200/60">
+                                      {["paid", "processing", "completed", "failed"].map((s) => {
+                                        const cfg = statusConfig[s];
+                                        const isCurrent = order.status === s;
+                                        return (
+                                          <button
+                                            key={s}
+                                            onClick={() => !isCurrent && handleUpdateOrderStatus(order.id, s)}
+                                            disabled={isCurrent || isUpdating}
+                                            className={`text-[9px] font-bold px-2 py-1 rounded-md transition-all ${
+                                              isCurrent
+                                                ? `${cfg.bg} ${cfg.text} ring-1 ring-current/30`
+                                                : "bg-white text-gray-400 hover:bg-gray-100 border border-gray-200"
+                                            } disabled:opacity-50`}
+                                          >
+                                            {isUpdating && !isCurrent ? "..." : cfg.label}
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
                                   </div>
-                                  <div className="text-right">
-                                    <p className="font-bold text-navy">{formatRupiah(order.productPrice)}</p>
-                                    <p className="text-gray-400 capitalize">{order.status}</p>
-                                  </div>
-                                </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           )}
                         </div>
@@ -333,6 +434,108 @@ export default function AdminUsersPage() {
           </div>
         )}
       </div>
+
+      {/* Create User Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-xl relative">
+            <button onClick={() => setShowCreateModal(false)} className="absolute top-4 right-4 w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center hover:bg-gray-200 transition-colors">
+              <X size={16} />
+            </button>
+
+            <div className="flex items-center gap-3 mb-5">
+              <div className="w-10 h-10 rounded-xl gradient-navy flex items-center justify-center">
+                <UserPlus size={18} className="text-white" />
+              </div>
+              <div>
+                <h3 className="font-bold text-navy text-base">Tambah User Baru</h3>
+                <p className="text-gray-400 text-xs">Buat akun admin atau user manual</p>
+              </div>
+            </div>
+
+            <form onSubmit={handleCreateUser} className="space-y-4">
+              <div>
+                <label className="text-xs font-semibold text-gray-700 mb-1 block">Nama Lengkap *</label>
+                <input
+                  type="text" required value={newUser.name}
+                  onChange={(e) => setNewUser({ ...newUser, name: e.target.value })}
+                  placeholder="Nama lengkap"
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy focus:ring-2 focus:ring-navy/10"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-gray-700 mb-1 block">Email *</label>
+                <input
+                  type="email" required value={newUser.email}
+                  onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
+                  placeholder="email@contoh.com"
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy focus:ring-2 focus:ring-navy/10"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-gray-700 mb-1 block">No. HP</label>
+                <input
+                  type="tel" value={newUser.phone}
+                  onChange={(e) => setNewUser({ ...newUser, phone: e.target.value })}
+                  placeholder="08xxxxxxxxxx"
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy focus:ring-2 focus:ring-navy/10"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-gray-700 mb-1 block">Role</label>
+                <div className="flex gap-2">
+                  {[
+                    { value: "admin", label: "Admin", icon: ShieldCheck, color: "purple" },
+                    { value: "user", label: "User", icon: Users, color: "blue" },
+                  ].map((opt) => (
+                    <button
+                      key={opt.value} type="button"
+                      onClick={() => setNewUser({ ...newUser, role: opt.value })}
+                      className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold border-2 transition-all ${
+                        newUser.role === opt.value
+                          ? opt.color === "purple"
+                            ? "border-purple-400 bg-purple-50 text-purple-700"
+                            : "border-blue-400 bg-blue-50 text-blue-700"
+                          : "border-gray-200 text-gray-500 hover:border-gray-300"
+                      }`}
+                    >
+                      <opt.icon size={14} /> {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {newUser.role === "admin" && (
+                <div className="bg-purple-50 border border-purple-200 rounded-xl p-3 flex items-start gap-2">
+                  <ShieldCheck size={14} className="text-purple-600 mt-0.5 shrink-0" />
+                  <p className="text-purple-700 text-xs">
+                    Admin dapat mengakses dashboard, melihat semua pesanan, dan mengubah status pesanan.
+                  </p>
+                </div>
+              )}
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button" onClick={() => setShowCreateModal(false)}
+                  className="flex-1 py-2.5 border-2 border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit" disabled={creating}
+                  className="flex-1 py-2.5 gradient-navy text-white rounded-xl text-sm font-bold hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {creating ? (
+                    <><div className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin"></div> Membuat...</>
+                  ) : (
+                    <><UserPlus size={14} /> Buat User</>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Delete Confirm Modal */}
       {deleteConfirm && (

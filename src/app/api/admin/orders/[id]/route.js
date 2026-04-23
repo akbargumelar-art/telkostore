@@ -5,8 +5,10 @@ import { orders } from "@/db/schema.js";
 import { eq } from "drizzle-orm";
 import {
   sendWhatsAppNotification,
+  sendGroupNotification,
   buildOrderCompletedMsg,
   buildOrderProcessingMsg,
+  formatRupiahServer,
 } from "@/lib/whatsapp";
 
 export async function GET(request, { params }) {
@@ -57,20 +59,58 @@ export async function PUT(request, { params }) {
 
     if (notes !== undefined) updateData.notes = notes;
 
-    // Send WhatsApp based on status change
+    // Send WhatsApp notifications based on status change
     if (status === "completed" && order.status !== "completed") {
-      await sendWhatsAppNotification(
-        order.guestPhone,
-        buildOrderCompletedMsg(order)
-      );
-      updateData.whatsappSent = true;
+      // Notify buyer — order completed (Notif #3 untuk pelanggan)
+      try {
+        await sendWhatsAppNotification(
+          order.guestPhone,
+          buildOrderCompletedMsg(order)
+        );
+        updateData.whatsappSent = true;
+      } catch (waErr) {
+        console.error("WA buyer (completed) notification failed:", waErr.message);
+      }
+
+      // Notify admin group — order completed
+      try {
+        await sendGroupNotification(
+          `✅ *PESANAN SELESAI — Telko.Store*\n\n` +
+          `📋 Invoice: ${order.id}\n` +
+          `📦 Produk: ${order.productName}\n` +
+          `💰 Total: ${formatRupiahServer(order.productPrice)}\n` +
+          `📱 Pembeli: ${order.guestPhone}\n\n` +
+          `✅ Status telah diubah ke *Selesai* oleh admin.`
+        );
+      } catch (waErr) {
+        console.error("WA group (completed) notification failed:", waErr.message);
+      }
     }
 
     if (status === "processing" && order.status !== "processing") {
-      await sendWhatsAppNotification(
-        order.guestPhone,
-        buildOrderProcessingMsg(order)
-      );
+      // Notify buyer — order processing
+      try {
+        await sendWhatsAppNotification(
+          order.guestPhone,
+          buildOrderProcessingMsg(order)
+        );
+      } catch (waErr) {
+        console.error("WA buyer (processing) notification failed:", waErr.message);
+      }
+
+      // Notify admin group — order being processed
+      try {
+        await sendGroupNotification(
+          `📦 *PESANAN DIPROSES — Telko.Store*\n\n` +
+          `📋 Invoice: ${order.id}\n` +
+          `📦 Produk: ${order.productName}\n` +
+          `💰 Total: ${formatRupiahServer(order.productPrice)}\n` +
+          `📱 Pembeli: ${order.guestPhone}\n\n` +
+          `⏳ Status telah diubah ke *Diproses* oleh admin.`
+        );
+      } catch (waErr) {
+        console.error("WA group (processing) notification failed:", waErr.message);
+      }
     }
 
     await db.update(orders).set(updateData).where(eq(orders.id, id));

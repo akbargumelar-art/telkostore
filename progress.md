@@ -4,6 +4,72 @@
 
 ## ✅ Apa yang sudah selesai dilakukan
 
+### 20. Pemisahan Alur Produk & Manajemen Admin (23 April 2026) 📦
+
+#### a. Alur Manual Non-Voucher (3 Gateway Selaras)
+- **Webhook Midtrans, Pakasir, & DOKU**: Ketiga webhook diperbarui agar produk *selain voucher internet* berhenti di status `paid` (tidak auto-complete). Hanya produk voucher internet yang auto-complete + auto-assign kode.
+- **Fix DOKU Webhook**: Sebelumnya DOKU menggunakan logika `productType === "virtual"` yang auto-complete semua produk virtual. Sekarang menggunakan `isVoucherProduct()` — konsisten dengan Midtrans & Pakasir.
+
+#### b. Alur Proses Manual (Non-Voucher)
+1. **Pelanggan checkout & bayar** → Notifikasi WA #1 ("Pesanan Dibuat") dikirim otomatis
+2. **Webhook terima pembayaran** → Status order berubah ke `paid` → Notifikasi WA #2 ("Pembayaran Berhasil") ke pelanggan + Notifikasi "AKSI DIPERLUKAN" ke WA Grup Admin dengan tautan ke dashboard
+3. **Admin ubah status di dashboard** (`paid` → `processing` → `completed`) → Setiap perubahan mengirim notifikasi WA ke pelanggan DAN ke WA Grup Admin
+4. **Status `completed`** → Notifikasi WA #3 ("Pesanan Selesai") dikirim otomatis ke pelanggan
+
+#### c. 3 Notifikasi WhatsApp untuk Pelanggan
+| # | Trigger | Template | Keterangan |
+|---|---------|----------|------------|
+| 1 | Checkout (10s delay) | `buildOrderCreatedMsg()` | Pesanan dibuat + link bayar |
+| 2 | Webhook payment success | `buildPaymentSuccessMsg()` | Pembayaran berhasil |
+| 3 | Admin ubah ke `completed` | `buildOrderCompletedMsg()` | Pesanan selesai |
+
+#### d. Notifikasi WA Grup Admin (Lengkap)
+- **Pesanan Baru**: Saat pelanggan checkout
+- **Pembayaran Diterima + AKSI DIPERLUKAN**: Saat webhook terima pembayaran (non-voucher)
+- **Pesanan Diproses**: Saat admin ubah status ke `processing`
+- **Pesanan Selesai**: Saat admin ubah status ke `completed`
+- **Pembayaran Gagal**: Saat webhook terima status gagal/expired
+
+#### e. Error Handling Ditingkatkan
+- Semua notifikasi WA di admin order API dibungkus `try/catch` agar kegagalan kirim WA tidak menggagalkan update status.
+- Notifikasi grup admin ditambahkan pada setiap perubahan status (sebelumnya hanya ke pelanggan).
+
+#### f. Manajemen Admin Lainnya
+- **Pembuatan Admin Manual**: Menambahkan form modal di `/admin/users` untuk membuat akun Admin/User secara manual (tanpa perlu OAuth).
+- **Eksekusi Pesanan via User Profile**: Pada detail profil pengguna di halaman kelola User, admin dapat melihat riwayat pesanan user dan langsung mengubah status pesanan dari sana.
+
+### 21. Auto-Redeem Voucher via Puppeteer (23 April 2026) 🤖
+
+#### a. Engine Auto-Redeem (`src/lib/auto-redeem.js`)
+- **Puppeteer Headless Chrome**: Mengotomasi browser tanpa GUI untuk redeem voucher di website Telkomsel dan byU.
+- **Telkomsel Flow**: Navigasi ke `telkomsel.com/shops/voucher/redeem` → isi nomor HP + kode voucher → klik Redeem → deteksi hasil (sukses/gagal).
+- **byU Flow**: Navigasi ke `pidaw-webfront.cx.byu.id/web/tkr-voucher` → isi nomor HP + kode voucher → klik Tukar → deteksi hasil (sukses/gagal).
+- **Multiple Selector Fallback**: Mencoba beberapa CSS selector berbeda untuk setiap field input, sehingga jika website berubah struktur, masih ada fallback.
+- **Retry Logic**: Maksimal 3 kali percobaan dengan delay 2 detik antar retry.
+- **Human-like Typing**: Delay 100ms antar keystroke untuk menghindari deteksi bot.
+
+#### b. Orchestrator (`autoRedeemAndComplete()` di `src/lib/voucher.js`)
+- **Dynamic Import**: Puppeteer di-import secara dinamis agar build tidak error jika puppeteer belum di-install.
+- **Fire-and-Forget**: Auto-redeem berjalan di background (non-blocking), tidak menghambat response webhook.
+- **Alur Sukses**: Jika auto-redeem berhasil → voucher di-mark `redeemed` → order di-set `completed` → notifikasi WA ke pelanggan ("Voucher Berhasil Diaktifkan") + notifikasi ke grup admin.
+- **Alur Gagal (Fallback ke Semi-Auto)**: Jika auto-redeem gagal → voucher tetap `reserved` → notifikasi ke grup admin "AUTO-REDEEM GAGAL — Perlu Redeem Manual" + link ke `/admin/voucher`.
+
+#### c. Integrasi Webhook (3 Gateway)
+- Ketiga webhook (Midtrans, Pakasir, DOKU) telah diintegrasikan dengan auto-redeem.
+- Alur setelah payment confirmed untuk voucher:
+  1. Assign voucher dari DB → status `reserved`
+  2. Kirim kode + instruksi redeem ke pelanggan via WA (langsung)
+  3. Trigger auto-redeem via Puppeteer (background)
+  4. Jika sukses → order complete + notif WA ke pelanggan
+  5. Jika gagal → notif ke admin grup untuk manual redeem
+
+#### d. Konfigurasi
+- **`next.config.mjs`**: Ditambahkan `puppeteer` dan `puppeteer-core` ke `serverExternalPackages` agar tidak di-bundle oleh Next.js.
+- **Dependency**: `npm install puppeteer` — perlu dijalankan di server production. Chromium akan otomatis diunduh.
+- **VPS Requirement**: Server production memerlukan Chrome/Chromium headless. Pastikan dependency sistem tersedia (`libx11`, `libnss3`, dll untuk Linux).
+
+
+
 ### 1. Sistem Desain & Layout (Frontend)
 - **Tema & Warna**: Menggunakan sistem warna kustom (`tred`, `navy`, `success`, `gold`) terintegrasi penuh pada Tailwind v4.
 - **Responsivitas**: Tampilan Mobile-first (mirip aplikasi) dengan *sticky header* dan *floating bottom nav*, serta tampilan Desktop dua kolom pada halaman utama.

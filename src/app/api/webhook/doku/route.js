@@ -36,6 +36,7 @@ import {
   isVoucherProduct,
   getRedeemInstructions,
   detectProviderFromPhone,
+  autoRedeemAndComplete,
 } from "@/lib/voucher";
 
 // GET — Health check for DOKU URL verification
@@ -143,6 +144,7 @@ export async function POST(request) {
     // ===== 6. Determine new order status =====
     let newStatus = order.status;
     let statusUpdates = { updatedAt: now };
+    let isVoucher = false;
 
     // DOKU status mapping: SUCCESS = paid, FAILED/EXPIRED = failed
     if (transactionStatus === "SUCCESS" || transactionStatus === "COMPLETED") {
@@ -150,17 +152,19 @@ export async function POST(request) {
       statusUpdates.paidAt = transactionDate || now;
       statusUpdates.paymentMethod = channelId || "doku";
 
-      // Check product type for auto-complete
-      const productResult = await db
-        .select()
-        .from(products)
-        .where(eq(products.id, order.productId))
-        .limit(1);
-      const productType = productResult[0]?.type || "virtual";
+      // Check if this is a voucher product (auto-complete only for voucher)
+      try {
+        isVoucher = await isVoucherProduct(order.productId);
+      } catch { isVoucher = false; }
 
-      if (productType === "virtual") {
-        newStatus = "completed";
-        statusUpdates.completedAt = now;
+      if (isVoucher) {
+        // Voucher products: stay at "paid", auto-redeem will complete if successful
+        // If auto-redeem fails, admin can manually redeem via /admin/voucher
+        newStatus = "paid";
+      } else {
+        // Non-voucher products (virtual & fisik): stay at "paid"
+        // Admin will manually process -> completed via dashboard
+        newStatus = "paid";
       }
     } else if (
       transactionStatus === "FAILED" ||
@@ -196,6 +200,7 @@ export async function POST(request) {
 
     // ===== 8. WhatsApp notifications =====
     if ((newStatus === "paid" || newStatus === "completed") && !order.whatsappSent) {
+      // Notify buyer — payment success
       try {
         await sendWhatsAppNotification(
           order.guestPhone,
@@ -209,15 +214,15 @@ export async function POST(request) {
         console.error("WA buyer notification failed:", waErr.message);
       }
 
-      // ===== VOUCHER AUTO-ASSIGN =====
-      try {
-        const isVoucher = await isVoucherProduct(order.productId);
-        if (isVoucher) {
+      // ===== VOUCHER AUTO-ASSIGN + AUTO-REDEEM (only for voucher products) =====
+      if (isVoucher) {
+        try {
           const detectedProvider = detectProviderFromPhone(order.targetData || order.guestPhone);
           const voucher = await assignVoucherToOrder(
             order.id, order.productId, order.guestPhone, detectedProvider
           );
           if (voucher) {
+            // Send voucher code + instructions to buyer immediately
             const instructions = getRedeemInstructions(
               voucher.provider, voucher.code, order.targetData || order.guestPhone
             );
@@ -225,25 +230,33 @@ export async function POST(request) {
               order.guestPhone,
               buildVoucherDeliveryMsg(order, voucher, instructions)
             );
-            await sendGroupNotification(
-              buildGroupVoucherRedeemMsg(order, voucher)
-            );
             console.log(`🎫 Voucher ${voucher.code} assigned to order ${order.id}`);
+
+            // Fire-and-forget: attempt auto-redeem via Puppeteer
+            autoRedeemAndComplete(order, voucher, {
+              sendWA: sendWhatsAppNotification,
+              sendGroup: sendGroupNotification,
+            }).catch((err) => {
+              console.error("Auto-redeem background error:", err.message);
+            });
           } else {
             console.warn(`⚠️ No available voucher for product ${order.productId}`);
             await sendGroupNotification(
               `⚠️ *STOK VOUCHER HABIS*\n\nProduk: ${order.productName}\nOrder: ${order.id}\nPembeli: ${order.guestPhone}\n\nSegera tambah kode voucher di Admin!`
             );
           }
+        } catch (voucherErr) {
+          console.error("Voucher auto-assign failed:", voucherErr.message);
         }
-      } catch (voucherErr) {
-        console.error("Voucher auto-assign failed:", voucherErr.message);
       }
 
+      // Notify internal group — with action prompt for non-voucher
       try {
-        await sendGroupNotification(
-          buildGroupPaymentSuccessMsg(order, channelId || "doku")
-        );
+        let groupMsg = buildGroupPaymentSuccessMsg(order, channelId || "doku");
+        if (!isVoucher) {
+          groupMsg += `\n\n⚡ *AKSI DIPERLUKAN:*\nProduk ini perlu diproses manual oleh admin.\n🔗 ${process.env.NEXT_PUBLIC_BASE_URL}/admin/pesanan`;
+        }
+        await sendGroupNotification(groupMsg);
       } catch (waErr) {
         console.error("WA group notification failed:", waErr.message);
       }

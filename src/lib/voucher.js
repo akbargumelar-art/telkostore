@@ -262,3 +262,189 @@ export async function isVoucherProduct(productId) {
 
   return product?.categoryId === "voucher-internet";
 }
+
+/**
+ * Auto-redeem a voucher via Puppeteer and complete the order if successful.
+ * Falls back to semi-auto (admin manual redeem via dashboard) if auto-redeem fails.
+ * 
+ * This function is called asynchronously AFTER the payment success WA notification.
+ * It does NOT block the webhook response.
+ * 
+ * @param {object} order - Order data
+ * @param {object} voucher - Assigned voucher { id, code, provider }
+ * @param {object} callbacks - { sendWA, sendGroup } notification functions
+ * @returns {Promise<{ autoRedeemed: boolean, message: string }>}
+ */
+export async function autoRedeemAndComplete(order, voucher, callbacks = {}) {
+  const { sendWA, sendGroup } = callbacks;
+
+  // Dynamic import to avoid breaking builds when puppeteer is not installed
+  let autoRedeemVoucher, isPuppeteerAvailable;
+  try {
+    const autoRedeemModule = await import("@/lib/auto-redeem.js");
+    autoRedeemVoucher = autoRedeemModule.autoRedeemVoucher;
+    isPuppeteerAvailable = autoRedeemModule.isPuppeteerAvailable;
+  } catch (importErr) {
+    console.warn("⚠️ auto-redeem.js module not available, falling back to semi-auto:", importErr.message);
+    // Send fallback notification to admin group
+    if (sendGroup) {
+      try {
+        await sendGroup(
+          `🎫 *VOUCHER PERLU DIREDEEM — Telko.Store*\n\n` +
+          `📋 Invoice: ${order.id}\n` +
+          `📦 Produk: ${order.productName}\n` +
+          `📱 No. Tujuan: ${order.targetData || order.guestPhone}\n` +
+          `🏷️ Provider: ${(voucher.provider || "—").toUpperCase()}\n` +
+          `🔑 Kode: *${voucher.code}*\n\n` +
+          `⚠️ Auto-redeem tidak tersedia (module error)\n` +
+          `⚡ Redeem manual diperlukan:\n` +
+          `${process.env.NEXT_PUBLIC_BASE_URL}/admin/voucher`
+        );
+      } catch {}
+    }
+    return { autoRedeemed: false, message: "Auto-redeem module not available" };
+  }
+
+  const puppeteerReady = await isPuppeteerAvailable();
+  if (!puppeteerReady) {
+    console.warn("⚠️ Puppeteer not installed — falling back to semi-auto redeem");
+    // Send fallback notification to admin group
+    if (sendGroup) {
+      try {
+        await sendGroup(
+          `🎫 *VOUCHER PERLU DIREDEEM — Telko.Store*\n\n` +
+          `📋 Invoice: ${order.id}\n` +
+          `📦 Produk: ${order.productName}\n` +
+          `📱 No. Tujuan: ${order.targetData || order.guestPhone}\n` +
+          `🏷️ Provider: ${(voucher.provider || "—").toUpperCase()}\n` +
+          `🔑 Kode: *${voucher.code}*\n\n` +
+          `⚠️ Puppeteer belum di-install di server\n` +
+          `⚡ Redeem manual diperlukan:\n` +
+          `${process.env.NEXT_PUBLIC_BASE_URL}/admin/voucher`
+        );
+      } catch {}
+    }
+    return { autoRedeemed: false, message: "Puppeteer not installed" };
+  }
+
+  const provider = voucher.provider || "simpati";
+  const targetPhone = order.targetData || order.guestPhone;
+
+  console.log(`🤖 Attempting auto-redeem: order=${order.id}, provider=${provider}, voucher=${voucher.code?.substring(0, 4)}****`);
+
+  try {
+    const result = await autoRedeemVoucher(provider, voucher.code, targetPhone);
+
+    if (result.success) {
+      // ✅ Auto-redeem succeeded — mark voucher as redeemed and complete order
+      console.log(`✅ Auto-redeem SUCCESS for order ${order.id}: ${result.message}`);
+
+      await markVoucherRedeemed(voucher.id, `Auto-redeem berhasil: ${result.message}`);
+
+      // Complete the order
+      const now = new Date().toISOString();
+      await db
+        .update(orders)
+        .set({
+          status: "completed",
+          completedAt: now,
+          updatedAt: now,
+          notes: `Voucher ${voucher.code} auto-redeemed berhasil`,
+        })
+        .where(eq(orders.id, order.id));
+
+      // Notify buyer — voucher redeemed & order completed
+      if (sendWA) {
+        try {
+          await sendWA(
+            order.guestPhone,
+            `🎉 *Voucher Berhasil Diaktifkan — Telko.Store*\n\n` +
+            `📋 Invoice: ${order.id}\n` +
+            `📦 Produk: ${order.productName}\n` +
+            `📱 No. Tujuan: ${targetPhone}\n\n` +
+            `✅ Kode voucher sudah *otomatis di-redeem* ke nomor ${targetPhone}.\n` +
+            `Kuota akan masuk dalam beberapa menit.\n\n` +
+            `Terima kasih telah berbelanja di Telko.Store 🙏\n` +
+            `\n—————————————————\nTelko.Store — Pulsa & Paket Data Murah\n💬 CS: wa.me/6281285755557\n🌐 telko.store`
+          );
+        } catch (waErr) {
+          console.error("WA auto-redeem success notification failed:", waErr.message);
+        }
+      }
+
+      // Notify admin group
+      if (sendGroup) {
+        try {
+          await sendGroup(
+            `🤖 *AUTO-REDEEM BERHASIL — Telko.Store*\n\n` +
+            `📋 Invoice: ${order.id}\n` +
+            `📦 Produk: ${order.productName}\n` +
+            `📱 No. Tujuan: ${targetPhone}\n` +
+            `🏷️ Provider: ${provider.toUpperCase()}\n` +
+            `🔑 Kode: ${voucher.code}\n\n` +
+            `✅ Voucher otomatis di-redeem dan pesanan selesai.`
+          );
+        } catch (waErr) {
+          console.error("WA group auto-redeem notification failed:", waErr.message);
+        }
+      }
+
+      return { autoRedeemed: true, message: result.message };
+    } else {
+      // ❌ Auto-redeem failed — fall back to semi-auto
+      console.warn(`⚠️ Auto-redeem FAILED for order ${order.id}: ${result.message}`);
+
+      // Update voucher with failure details but keep as "reserved" (not "failed")
+      // so admin can still manually redeem via dashboard
+      const now = new Date().toISOString();
+      await db
+        .update(voucherCodes)
+        .set({
+          redeemResponse: `Auto-redeem gagal: ${result.message}`,
+          updatedAt: now,
+        })
+        .where(eq(voucherCodes.id, voucher.id));
+
+      // Notify admin group — needs manual action
+      if (sendGroup) {
+        try {
+          await sendGroup(
+            `⚠️ *AUTO-REDEEM GAGAL — Perlu Redeem Manual*\n\n` +
+            `📋 Invoice: ${order.id}\n` +
+            `📦 Produk: ${order.productName}\n` +
+            `📱 No. Tujuan: ${targetPhone}\n` +
+            `🏷️ Provider: ${provider.toUpperCase()}\n` +
+            `🔑 Kode: *${voucher.code}*\n\n` +
+            `❌ Alasan: ${result.message}\n\n` +
+            `⚡ Redeem manual diperlukan:\n` +
+            `${process.env.NEXT_PUBLIC_BASE_URL}/admin/voucher`
+          );
+        } catch (waErr) {
+          console.error("WA group auto-redeem failed notification:", waErr.message);
+        }
+      }
+
+      return { autoRedeemed: false, message: result.message };
+    }
+  } catch (err) {
+    console.error(`❌ Auto-redeem unexpected error for order ${order.id}:`, err.message);
+
+    // Notify admin group about unexpected error
+    if (sendGroup) {
+      try {
+        await sendGroup(
+          `🚨 *AUTO-REDEEM ERROR — Telko.Store*\n\n` +
+          `📋 Invoice: ${order.id}\n` +
+          `📦 Produk: ${order.productName}\n` +
+          `🔑 Kode: *${voucher.code}*\n\n` +
+          `❌ Error: ${err.message}\n\n` +
+          `⚡ Redeem manual diperlukan:\n` +
+          `${process.env.NEXT_PUBLIC_BASE_URL}/admin/voucher`
+        );
+      } catch {}
+    }
+
+    return { autoRedeemed: false, message: err.message };
+  }
+}
+
