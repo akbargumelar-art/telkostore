@@ -14,6 +14,7 @@ import {
   CheckSquare,
   Square,
   MinusSquare,
+  Trash2,
 } from "lucide-react";
 
 function formatRupiah(n) {
@@ -55,12 +56,27 @@ export default function AdminPesananPage() {
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [updating, setUpdating] = useState(false);
   const [success, setSuccess] = useState("");
+  const [error, setError] = useState("");
   const [pagination, setPagination] = useState(null);
+  const [adminType, setAdminType] = useState(null);
 
   // Bulk selection
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [bulkStatus, setBulkStatus] = useState("completed");
   const [bulkUpdating, setBulkUpdating] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [filterDeleting, setFilterDeleting] = useState(false);
+  const isSuperadmin = adminType === "superadmin";
+
+  const fetchAdminInfo = async () => {
+    try {
+      const res = await fetch("/api/admin/me");
+      const data = await res.json();
+      if (data.success) setAdminType(data.adminType);
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   const fetchOrders = async () => {
     try {
@@ -73,6 +89,8 @@ export default function AdminPesananPage() {
       if (data.success) {
         setOrders(data.data);
         setPagination(data.pagination);
+      } else {
+        setError(data.error || "Gagal memuat pesanan");
       }
     } catch (err) {
       console.error(err);
@@ -81,6 +99,7 @@ export default function AdminPesananPage() {
     }
   };
 
+  useEffect(() => { fetchAdminInfo(); }, []);
   useEffect(() => { fetchOrders(); }, [filterStatus]);
 
   const handleSearch = (e) => {
@@ -104,6 +123,9 @@ export default function AdminPesananPage() {
         setSelectedOrder(null);
         setLoading(true);
         fetchOrders();
+      } else {
+        setError(data.error || "Gagal mengubah status pesanan");
+        setTimeout(() => setError(""), 4000);
       }
     } catch (err) {
       console.error(err);
@@ -146,11 +168,96 @@ export default function AdminPesananPage() {
         setSelectedIds(new Set());
         setLoading(true);
         fetchOrders();
+      } else {
+        setError(data.error || "Gagal mengubah status pesanan");
+        setTimeout(() => setError(""), 4000);
       }
     } catch (err) {
       console.error(err);
     } finally {
       setBulkUpdating(false);
+    }
+  };
+
+  const handleDeleteSelected = async () => {
+    if (!isSuperadmin || selectedIds.size === 0) return;
+    if (!confirm(`Hapus permanen ${selectedIds.size} riwayat pesanan terpilih? Aksi ini tidak bisa dibatalkan.`)) return;
+
+    setBulkDeleting(true);
+    setError("");
+    try {
+      const res = await fetch("/api/admin/orders", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orderIds: [...selectedIds],
+          confirmText: "HAPUS PESANAN",
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSuccess(data.message || "Riwayat pesanan dihapus");
+        setTimeout(() => setSuccess(""), 3000);
+        setSelectedIds(new Set());
+        setSelectedOrder(null);
+        setLoading(true);
+        fetchOrders();
+      } else {
+        setError(data.error || "Gagal menghapus riwayat pesanan");
+        setTimeout(() => setError(""), 5000);
+      }
+    } catch (err) {
+      console.error(err);
+      setError("Gagal menghapus riwayat pesanan");
+      setTimeout(() => setError(""), 5000);
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
+
+  const handleDeleteFiltered = async () => {
+    if (!isSuperadmin || !pagination?.total) return;
+
+    const scope =
+      filterStatus === "all" && !search
+        ? "SEMUA riwayat pesanan"
+        : `${pagination.total} riwayat pesanan sesuai filter saat ini`;
+    const typed = window.prompt(
+      `Hapus permanen ${scope}? Ketik HAPUS PESANAN untuk melanjutkan.`
+    );
+    if (typed !== "HAPUS PESANAN") return;
+
+    setFilterDeleting(true);
+    setError("");
+    try {
+      const res = await fetch("/api/admin/orders", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          deleteMatching: true,
+          status: filterStatus,
+          search,
+          confirmText: typed,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSuccess(data.message || "Riwayat pesanan dihapus");
+        setTimeout(() => setSuccess(""), 3000);
+        setSelectedIds(new Set());
+        setSelectedOrder(null);
+        setLoading(true);
+        fetchOrders();
+      } else {
+        setError(data.error || "Gagal menghapus riwayat pesanan");
+        setTimeout(() => setError(""), 5000);
+      }
+    } catch (err) {
+      console.error(err);
+      setError("Gagal menghapus riwayat pesanan");
+      setTimeout(() => setError(""), 5000);
+    } finally {
+      setFilterDeleting(false);
     }
   };
 
@@ -169,12 +276,28 @@ export default function AdminPesananPage() {
             {pagination ? `${pagination.total} pesanan total` : "Memuat..."}
           </p>
         </div>
-        <button
-          onClick={() => { setLoading(true); fetchOrders(); }}
-          className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 self-start"
-        >
-          <RefreshCw size={14} /> Refresh
-        </button>
+        <div className="flex items-center gap-2 self-start flex-wrap">
+          {isSuperadmin && pagination?.total > 0 && (
+            <button
+              onClick={handleDeleteFiltered}
+              disabled={filterDeleting}
+              className="flex items-center gap-2 px-3 py-2 rounded-xl bg-red-50 border border-red-200 text-sm font-semibold text-red-600 hover:bg-red-100 disabled:opacity-50"
+            >
+              {filterDeleting ? (
+                <div className="w-3.5 h-3.5 rounded-full border-2 border-red-300 border-t-red-600 animate-spin" />
+              ) : (
+                <Trash2 size={14} />
+              )}
+              Hapus Hasil Filter
+            </button>
+          )}
+          <button
+            onClick={() => { setLoading(true); fetchOrders(); }}
+            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50"
+          >
+            <RefreshCw size={14} /> Refresh
+          </button>
+        </div>
       </div>
 
       {/* Success */}
@@ -182,6 +305,13 @@ export default function AdminPesananPage() {
         <div className="mb-4 bg-green-50 border border-green-200 rounded-xl p-3 flex items-center gap-2 animate-fade-in">
           <CheckCircle2 size={14} className="text-green-600" />
           <p className="text-green-700 text-sm font-medium">{success}</p>
+        </div>
+      )}
+
+      {error && (
+        <div className="mb-4 bg-red-50 border border-red-200 rounded-xl p-3 flex items-center gap-2 animate-fade-in">
+          <AlertCircle size={14} className="text-red-600" />
+          <p className="text-red-600 text-sm font-medium">{error}</p>
         </div>
       )}
 
@@ -220,6 +350,20 @@ export default function AdminPesananPage() {
               )}
             </button>
           </div>
+          {isSuperadmin && (
+            <button
+              onClick={handleDeleteSelected}
+              disabled={bulkDeleting}
+              className="px-4 py-2 bg-red-50 text-red-600 border border-red-200 rounded-xl text-sm font-semibold hover:bg-red-100 disabled:opacity-50 flex items-center gap-1.5"
+            >
+              {bulkDeleting ? (
+                <div className="w-3.5 h-3.5 rounded-full border-2 border-red-300 border-t-red-600 animate-spin" />
+              ) : (
+                <Trash2 size={14} />
+              )}
+              Hapus Terpilih
+            </button>
+          )}
           <button
             onClick={() => setSelectedIds(new Set())}
             className="text-xs text-gray-500 hover:text-gray-700 font-medium"
