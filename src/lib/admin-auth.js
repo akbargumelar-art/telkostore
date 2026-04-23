@@ -43,11 +43,11 @@ export function getAdminCredentialsConfig() {
 
 export function hasAdminCredentialsConfigured() {
   const config = getAdminCredentialsConfig();
-  return Boolean(config.username && config.password);
+  return Boolean(config.password);
 }
 
-export function isValidAdminCredentials(identifier, password) {
-  if (!identifier || !password) {
+export function isValidAdminPassword(password) {
+  if (!password) {
     return false;
   }
 
@@ -57,14 +57,19 @@ export function isValidAdminCredentials(identifier, password) {
     return false;
   }
 
+  return safeCompare(password, config.password);
+}
+
+export function isConfiguredAdminIdentifier(identifier) {
+  if (!identifier) {
+    return false;
+  }
+
+  const config = getAdminCredentialsConfig();
   const normalizedIdentifier = identifier.trim().toLowerCase();
   const allowedIdentifiers = [config.username, config.email]
     .filter(Boolean)
     .map((value) => value.trim().toLowerCase());
 
-  if (!allowedIdentifiers.includes(normalizedIdentifier)) {
-    return false;
-  }
-
-  return safeCompare(password, config.password);
+  return allowedIdentifiers.includes(normalizedIdentifier);
 }

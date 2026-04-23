@@ -196,6 +196,10 @@ export default function ControlLoginPage() {
                     {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
                 </div>
+                <p className="text-[11px] text-gray-400 mt-2 leading-relaxed">
+                  Gunakan nilai password admin yang tersimpan di server, bukan
+                  nama variabel <span className="font-mono">ADMIN_LOGIN_PASSWORD</span>.
+                </p>
               </div>
             </div>
 
@@ -293,6 +297,10 @@ export default function ControlLoginPage() {
               Login Google/Facebook hanya bisa masuk ke control panel jika email
               tersebut punya role <span className="font-bold">admin</span> di
               tabel user.
+            </p>
+            <p className="text-[11px] leading-relaxed text-blue-900 mt-2">
+              Admin yang dibuat dari halaman user juga bisa login dengan email
+              adminnya sendiri memakai password admin global yang sama.
             </p>
           </div>
         </div>

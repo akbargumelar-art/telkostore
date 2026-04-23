@@ -2,10 +2,14 @@
 import { NextResponse } from "next/server";
 import { createAdminToken } from "@/lib/jwt";
 import { adminLoginLimiter } from "@/lib/rate-limit";
+import db from "@/db/index.js";
+import { users } from "@/db/schema.js";
 import {
   hasAdminCredentialsConfigured,
-  isValidAdminCredentials,
+  isConfiguredAdminIdentifier,
+  isValidAdminPassword,
 } from "@/lib/admin-auth";
+import { and, eq } from "drizzle-orm";
 
 export async function POST(request) {
   try {
@@ -54,9 +58,43 @@ export async function POST(request) {
       );
     }
 
-    if (!isValidAdminCredentials(identifier, password)) {
+    if (password === "ADMIN_LOGIN_PASSWORD") {
       return NextResponse.json(
-        { success: false, error: "Username/email atau password admin salah" },
+        {
+          success: false,
+          error:
+            "Masukkan nilai password admin dari .env.local, bukan teks ADMIN_LOGIN_PASSWORD.",
+        },
+        { status: 401 }
+      );
+    }
+
+    if (!isValidAdminPassword(password)) {
+      return NextResponse.json(
+        { success: false, error: "Password admin salah" },
+        { status: 401 }
+      );
+    }
+
+    let isAllowedAdmin = isConfiguredAdminIdentifier(identifier);
+
+    if (!isAllowedAdmin && identifier.includes("@")) {
+      const adminUser = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(and(eq(users.email, identifier), eq(users.role, "admin")))
+        .limit(1);
+
+      isAllowedAdmin = adminUser.length > 0;
+    }
+
+    if (!isAllowedAdmin) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Username/email ini belum terdaftar sebagai admin control panel.",
+        },
         { status: 401 }
       );
     }
