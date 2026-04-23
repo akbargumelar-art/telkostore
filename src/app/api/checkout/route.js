@@ -1,4 +1,8 @@
-// POST /api/checkout — Create order + Payment (Midtrans or Pakasir)
+// POST /api/checkout — Create order + Payment (auto-route to active gateway)
+//
+// Admin controls which payment gateway is active (Midtrans, Pakasir, or DOKU).
+// Customers are automatically routed — no gateway selection on frontend.
+
 import { NextResponse } from "next/server";
 import db from "@/db/index.js";
 import { products, orders } from "@/db/schema.js";
@@ -13,7 +17,9 @@ import {
   buildGroupNewOrderMsg,
 } from "@/lib/whatsapp";
 import { createSnapClient } from "@/lib/midtrans";
-import { createPakasirTransaction, isPakasirAvailable } from "@/lib/pakasir";
+import { createPakasirTransaction } from "@/lib/pakasir";
+import { createDokuTransaction } from "@/lib/doku";
+import { getActiveGateway } from "@/app/api/gateway/status/route";
 import { checkoutLimiter } from "@/lib/rate-limit";
 import { scheduleNotification } from "@/lib/notification-scheduler";
 
@@ -31,7 +37,7 @@ export async function POST(request) {
   }
   try {
     const body = await request.json();
-    const { productId, phoneNumber, paymentMethod, gameData, targetData: customTargetData, gateway } = body;
+    const { productId, phoneNumber, paymentMethod, gameData, targetData: customTargetData } = body;
 
     // Validate input
     if (!productId || !phoneNumber) {
@@ -49,19 +55,9 @@ export async function POST(request) {
       );
     }
 
-    // Determine payment gateway (default: midtrans)
-    const selectedGateway = gateway === "pakasir" ? "pakasir" : "midtrans";
-
-    // If pakasir selected, verify it's available
-    if (selectedGateway === "pakasir") {
-      const pakasirReady = await isPakasirAvailable();
-      if (!pakasirReady) {
-        return NextResponse.json(
-          { success: false, error: "Pakasir belum dikonfigurasi. Silakan gunakan metode pembayaran lain." },
-          { status: 400 }
-        );
-      }
-    }
+    // Auto-detect active payment gateway (admin-controlled)
+    const { activeGateway } = await getActiveGateway();
+    const selectedGateway = activeGateway;
 
     // Get product from DB
     const productResult = await db
@@ -170,8 +166,57 @@ export async function POST(request) {
         });
       });
 
+    } else if (selectedGateway === "doku") {
+      // ===== DOKU FLOW =====
+      const callbackUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/payment/finish?order_id=${externalOrderId}&token=${guestToken}&gateway=doku`;
+      const failedUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/payment/finish?order_id=${externalOrderId}&token=${guestToken}&status=error&gateway=doku`;
+
+      paymentResult = await createDokuTransaction({
+        orderId: externalOrderId,
+        amount: product.price,
+        productName: product.name,
+        customerPhone: phoneNumber,
+        callbackUrl,
+        failedUrl,
+      });
+
+      // Atomic stock decrease + order insert
+      await db.transaction(async (tx) => {
+        await tx.update(products)
+          .set({ stock: sql`${products.stock} - 1` })
+          .where(and(eq(products.id, product.id), gt(products.stock, 0)));
+
+        const [check] = await tx.select({ stock: products.stock })
+          .from(products)
+          .where(eq(products.id, product.id))
+          .limit(1);
+
+        if (!check || check.stock < 0) {
+          throw new Error("Stok produk habis");
+        }
+
+        await tx.insert(orders).values({
+          id: orderId,
+          productId: product.id,
+          productName: product.name,
+          productPrice: product.price,
+          guestPhone: phoneNumber,
+          guestToken: guestToken,
+          targetData: resolvedTargetData,
+          status: "pending",
+          paymentMethod: paymentMethod || null,
+          paymentGateway: "doku",
+          snapToken: null,
+          snapRedirectUrl: paymentResult.paymentUrl,
+          midtransOrderId: externalOrderId,
+          notes: notes,
+          createdAt: now.toISOString(),
+          updatedAt: now.toISOString(),
+        });
+      });
+
     } else {
-      // ===== MIDTRANS FLOW =====
+      // ===== MIDTRANS FLOW (default) =====
       const snap = await createSnapClient();
 
       const snapTransaction = await snap.createTransaction({

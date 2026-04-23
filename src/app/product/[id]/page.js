@@ -18,8 +18,6 @@ import {
   User,
   Server,
   Globe,
-  Wallet,
-  CreditCard,
 } from "lucide-react";
 
 const MOBILE_SCROLL_OFFSET = 88;
@@ -88,8 +86,7 @@ export default function ProductPage({ params }) {
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [checkoutError, setCheckoutError] = useState("");
   const [showConfirm, setShowConfirm] = useState(false);
-  const [selectedGateway, setSelectedGateway] = useState("midtrans");
-  const [isPakasirReady, setIsPakasirReady] = useState(false);
+  const [activeGatewayLabel, setActiveGatewayLabel] = useState("");
 
   // Refs for auto-scroll
   const phoneRef = useRef(null);
@@ -143,20 +140,20 @@ export default function ProductPage({ params }) {
     fetchProduct();
   }, [id]);
 
-  // Check if Pakasir is available
+  // Fetch active gateway label for display
   useEffect(() => {
-    async function checkPakasir() {
+    async function fetchGateway() {
       try {
         const res = await fetch("/api/gateway/status");
         if (res.ok) {
           const data = await res.json();
-          setIsPakasirReady(data.pakasir === true);
+          setActiveGatewayLabel(data.label || "Midtrans");
         }
       } catch {
-        // silently fail — pakasir just won't show
+        setActiveGatewayLabel("Midtrans");
       }
     }
-    checkPakasir();
+    fetchGateway();
   }, []);
 
   // 3-step checkout: Produk → No. HP / Game ID → Konfirmasi
@@ -382,10 +379,7 @@ export default function ProductPage({ params }) {
       const res = await fetch("/api/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...bodyData,
-          gateway: selectedGateway,
-        }),
+        body: JSON.stringify(bodyData),
       });
 
       const data = await res.json();
@@ -445,13 +439,15 @@ export default function ProductPage({ params }) {
               </div>
             </div>
 
-            {/* Gateway selection in confirm */}
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-500">Pembayaran</span>
-              <span className="font-semibold text-gray-800">
-                {selectedGateway === "pakasir" ? "Pakasir" : "Midtrans"}
-              </span>
-            </div>
+            {/* Active gateway info */}
+            {activeGatewayLabel && (
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500">Pembayaran via</span>
+                <span className="font-semibold text-gray-800">
+                  {activeGatewayLabel}
+                </span>
+              </div>
+            )}
           </div>
 
           <div className="flex gap-3">
@@ -900,45 +896,6 @@ export default function ProductPage({ params }) {
                     Kamu akan memilih metode pembayaran di halaman berikutnya
                   </p>
 
-                  {/* Gateway Selection */}
-                  {isPakasirReady && (
-                    <div className="mt-3">
-                      <p className="text-[11px] font-semibold text-gray-600 mb-2">Bayar via:</p>
-                      <div className="grid grid-cols-2 gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setSelectedGateway("midtrans")}
-                          className={`flex items-center gap-2 p-2.5 rounded-xl border-2 text-left transition-all text-xs font-medium ${
-                            selectedGateway === "midtrans"
-                              ? "border-tred bg-tred-50 text-tred"
-                              : "border-gray-100 text-gray-600 hover:border-gray-200"
-                          }`}
-                        >
-                          <CreditCard size={14} />
-                          <div>
-                            <span className="font-bold block">Midtrans</span>
-                            <span className="text-[9px] text-gray-400">QRIS, GoPay, Transfer</span>
-                          </div>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setSelectedGateway("pakasir")}
-                          className={`flex items-center gap-2 p-2.5 rounded-xl border-2 text-left transition-all text-xs font-medium ${
-                            selectedGateway === "pakasir"
-                              ? "border-tred bg-tred-50 text-tred"
-                              : "border-gray-100 text-gray-600 hover:border-gray-200"
-                          }`}
-                        >
-                          <Wallet size={14} />
-                          <div>
-                            <span className="font-bold block">Pakasir</span>
-                            <span className="text-[9px] text-gray-400">QRIS, VA Bank</span>
-                          </div>
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
                   {checkoutError && (
                     <div className="bg-tred-50 border border-tred/20 rounded-xl p-3 flex items-start gap-2 mt-3">
                       <AlertCircle size={16} className="text-tred shrink-0 mt-0.5" />
@@ -971,7 +928,7 @@ export default function ProductPage({ params }) {
                   <div className="flex items-center justify-center gap-2 mt-3 text-gray-400">
                     <ShieldCheck size={14} />
                     <span className="text-[10px]">
-                      Transaksi aman & terenkripsi via {selectedGateway === "pakasir" ? "Pakasir" : "Midtrans"}
+                      Transaksi aman & terenkripsi{activeGatewayLabel ? ` via ${activeGatewayLabel}` : ""}
                     </span>
                   </div>
                 </div>

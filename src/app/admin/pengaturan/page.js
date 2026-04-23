@@ -2,131 +2,104 @@
 
 import { useState, useEffect } from "react";
 import {
-  Settings,
-  Save,
-  RefreshCw,
-  CheckCircle2,
-  AlertCircle,
-  Shield,
-  MessageCircle,
-  CreditCard,
-  ToggleLeft,
-  ToggleRight,
-  Users,
-  HelpCircle,
-  Wallet,
+  Settings, Save, CheckCircle2, AlertCircle, Shield, MessageCircle,
+  CreditCard, ToggleLeft, ToggleRight, Users, HelpCircle, Wallet, Landmark,
 } from "lucide-react";
 
 export default function AdminPengaturanPage() {
-  const [settings, setSettings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState("");
   const [error, setError] = useState("");
 
-  // Form states for each provider
-  const [midtrans, setMidtrans] = useState({
-    serverKey: "", clientKey: "", isProduction: false, isActive: true,
-  });
-  const [pakasir, setPakasir] = useState({
-    serverKey: "", clientKey: "", apiUrl: "https://app.pakasir.com", isProduction: false, isActive: false,
-  });
-  const [waha, setWaha] = useState({
-    apiUrl: "", serverKey: "", clientKey: "", sessionName: "", isActive: true,
-  });
+  const [midtrans, setMidtrans] = useState({ serverKey: "", clientKey: "", isProduction: false, isActive: true });
+  const [pakasir, setPakasir] = useState({ serverKey: "", clientKey: "", apiUrl: "https://app.pakasir.com", isProduction: false, isActive: false });
+  const [doku, setDoku] = useState({ serverKey: "", clientKey: "", isProduction: false, isActive: false });
+  const [waha, setWaha] = useState({ apiUrl: "", serverKey: "", clientKey: "", sessionName: "", isActive: true });
 
   const fetchSettings = async () => {
     try {
       const res = await fetch("/api/admin/settings");
       const data = await res.json();
       if (data.success) {
-        setSettings(data.data);
-        // Populate forms
-        const mtSetting = data.data.find((s) => s.providerName === "midtrans");
-        const pkSetting = data.data.find((s) => s.providerName === "pakasir");
-        const wahaSetting = data.data.find((s) => s.providerName === "waha");
-        if (mtSetting) {
-          setMidtrans({
-            serverKey: mtSetting.serverKey || "",
-            clientKey: mtSetting.clientKey || "",
-            isProduction: mtSetting.isProduction || false,
-            isActive: mtSetting.isActive ?? true,
-          });
-        }
-        if (pkSetting) {
-          setPakasir({
-            serverKey: pkSetting.serverKey || "",
-            clientKey: pkSetting.clientKey || "",
-            apiUrl: pkSetting.apiUrl || "https://app.pakasir.com",
-            isProduction: pkSetting.isProduction || false,
-            isActive: pkSetting.isActive ?? false,
-          });
-        }
-        if (wahaSetting) {
-          setWaha({
-            apiUrl: wahaSetting.apiUrl || "",
-            serverKey: wahaSetting.serverKey || "",
-            clientKey: wahaSetting.clientKey || "",
-            sessionName: wahaSetting.sessionName || "",
-            isActive: wahaSetting.isActive ?? true,
-          });
-        }
+        const mt = data.data.find((s) => s.providerName === "midtrans");
+        const pk = data.data.find((s) => s.providerName === "pakasir");
+        const dk = data.data.find((s) => s.providerName === "doku");
+        const wa = data.data.find((s) => s.providerName === "waha");
+        if (mt) setMidtrans({ serverKey: mt.serverKey || "", clientKey: mt.clientKey || "", isProduction: mt.isProduction || false, isActive: mt.isActive ?? true });
+        if (pk) setPakasir({ serverKey: pk.serverKey || "", clientKey: pk.clientKey || "", apiUrl: pk.apiUrl || "https://app.pakasir.com", isProduction: pk.isProduction || false, isActive: pk.isActive ?? false });
+        if (dk) setDoku({ serverKey: dk.serverKey || "", clientKey: dk.clientKey || "", isProduction: dk.isProduction || false, isActive: dk.isActive ?? false });
+        if (wa) setWaha({ apiUrl: wa.apiUrl || "", serverKey: wa.serverKey || "", clientKey: wa.clientKey || "", sessionName: wa.sessionName || "", isActive: wa.isActive ?? true });
       }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
+    } catch (err) { console.error(err); }
+    finally { setLoading(false); }
   };
 
   useEffect(() => { fetchSettings(); }, []);
 
-  const handleSave = async (providerName, data) => {
-    setSaving(true);
-    setError("");
-    setSuccess("");
+  // Only one payment gateway can be active at a time
+  const activateGateway = (name) => {
+    setMidtrans(prev => ({ ...prev, isActive: name === "midtrans" }));
+    setPakasir(prev => ({ ...prev, isActive: name === "pakasir" }));
+    setDoku(prev => ({ ...prev, isActive: name === "doku" }));
+  };
 
+  const activeGw = midtrans.isActive ? "midtrans" : pakasir.isActive ? "pakasir" : doku.isActive ? "doku" : "midtrans";
+  const activeGwLabel = activeGw === "midtrans" ? "Midtrans" : activeGw === "pakasir" ? "Pakasir" : "DOKU";
+
+  const handleSave = async (providerName, data) => {
+    setSaving(true); setError(""); setSuccess("");
     try {
       const res = await fetch("/api/admin/settings", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        method: "PUT", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ providerName, ...data }),
       });
       const result = await res.json();
-      if (result.success) {
-        setSuccess(result.message);
-        setTimeout(() => setSuccess(""), 3000);
-      } else {
-        setError(result.error || "Gagal menyimpan");
-      }
-    } catch (err) {
-      setError("Terjadi kesalahan");
-    } finally {
-      setSaving(false);
-    }
+      if (result.success) { setSuccess(result.message); setTimeout(() => setSuccess(""), 3000); }
+      else setError(result.error || "Gagal menyimpan");
+    } catch { setError("Terjadi kesalahan"); }
+    finally { setSaving(false); }
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <div className="w-10 h-10 rounded-full border-4 border-gray-200 border-t-navy animate-spin"></div>
-      </div>
-    );
-  }
+  // Save all 3 gateways when switching active (to persist mutual exclusivity)
+  const handleSaveWithExclusive = async (providerName, data) => {
+    setSaving(true); setError(""); setSuccess("");
+    try {
+      // Deactivate the other 2 gateways
+      const others = ["midtrans", "pakasir", "doku"].filter(n => n !== providerName);
+      for (const other of others) {
+        await fetch("/api/admin/settings", {
+          method: "PUT", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ providerName: other, isActive: false }),
+        });
+      }
+      // Save the active one
+      const res = await fetch("/api/admin/settings", {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ providerName, ...data }),
+      });
+      const result = await res.json();
+      if (result.success) { setSuccess(`${providerName} aktif & tersimpan`); setTimeout(() => setSuccess(""), 3000); }
+      else setError(result.error || "Gagal menyimpan");
+    } catch { setError("Terjadi kesalahan"); }
+    finally { setSaving(false); }
+  };
+
+  if (loading) return (
+    <div className="flex items-center justify-center py-20">
+      <div className="w-10 h-10 rounded-full border-4 border-gray-200 border-t-navy animate-spin"></div>
+    </div>
+  );
 
   return (
     <div>
-      {/* Header */}
       <div className="mb-6">
         <h1 className="text-navy font-extrabold text-xl md:text-2xl flex items-center gap-2">
           <Settings size={24} /> Pengaturan
         </h1>
-        <p className="text-gray-400 text-sm mt-0.5">
-          Konfigurasi payment gateway dan notifikasi
-        </p>
+        <p className="text-gray-400 text-sm mt-0.5">Konfigurasi payment gateway dan notifikasi</p>
       </div>
 
-      {/* Alerts */}
       {success && (
         <div className="mb-4 bg-green-50 border border-green-200 rounded-xl p-3 flex items-center gap-2 animate-fade-in">
           <CheckCircle2 size={14} className="text-green-600" />
@@ -140,174 +113,79 @@ export default function AdminPengaturanPage() {
         </div>
       )}
 
+      {/* Active Gateway Banner */}
+      <div className="mb-4 bg-gradient-to-r from-navy to-navy/80 rounded-2xl p-4 text-white">
+        <p className="text-white/60 text-[11px] font-medium mb-1">PAYMENT GATEWAY AKTIF</p>
+        <p className="text-lg font-extrabold">{activeGwLabel}</p>
+        <p className="text-white/50 text-xs mt-0.5">Pelanggan akan otomatis diarahkan ke gateway ini saat checkout. Hanya 1 gateway yang bisa aktif.</p>
+      </div>
+
       <div className="space-y-4">
-        {/* Midtrans Settings */}
-        <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-          <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center">
-              <CreditCard size={20} className="text-blue-600" />
-            </div>
-            <div className="flex-1">
-              <h2 className="font-bold text-sm text-navy">Midtrans Payment Gateway</h2>
-              <p className="text-[11px] text-gray-400">Konfigurasi API key untuk pembayaran</p>
-            </div>
-            <button
-              onClick={() => setMidtrans({...midtrans, isActive: !midtrans.isActive})}
-              className={`flex items-center gap-1 text-xs font-bold px-3 py-1.5 rounded-lg transition-all ${
-                midtrans.isActive ? "bg-green-50 text-green-700" : "bg-gray-100 text-gray-500"
-              }`}
-            >
-              {midtrans.isActive ? <><ToggleRight size={14} /> Aktif</> : <><ToggleLeft size={14} /> Nonaktif</>}
-            </button>
+        {/* ===== MIDTRANS ===== */}
+        <GatewayCard
+          icon={<CreditCard size={20} className="text-blue-600" />}
+          iconBg="bg-blue-50"
+          title="Midtrans Payment Gateway"
+          subtitle="Konfigurasi API key untuk pembayaran"
+          isActive={midtrans.isActive}
+          onToggle={() => activateGateway("midtrans")}
+        >
+          <InputField label="Server Key" value={midtrans.serverKey} onChange={v => setMidtrans({...midtrans, serverKey: v})} placeholder="Mid-server-xxxxx" mono />
+          <InputField label="Client Key" value={midtrans.clientKey} onChange={v => setMidtrans({...midtrans, clientKey: v})} placeholder="Mid-client-xxxxx" mono />
+          <ProductionToggle checked={midtrans.isProduction} onChange={v => setMidtrans({...midtrans, isProduction: v})} />
+          <SaveButton label="Simpan Midtrans" saving={saving} onClick={() => handleSaveWithExclusive("midtrans", midtrans)} />
+        </GatewayCard>
+
+        {/* ===== PAKASIR ===== */}
+        <GatewayCard
+          icon={<Wallet size={20} className="text-purple-600" />}
+          iconBg="bg-purple-50"
+          title="Pakasir Payment Gateway"
+          subtitle={<>Konfigurasi API untuk pembayaran via <a href="https://pakasir.com" target="_blank" rel="noopener" className="text-purple-500 underline">pakasir.com</a></>}
+          isActive={pakasir.isActive}
+          onToggle={() => activateGateway("pakasir")}
+        >
+          <InputField label="API Key" value={pakasir.serverKey} onChange={v => setPakasir({...pakasir, serverKey: v})} placeholder="pakasir-api-key-xxxxx" mono hint="API Key dari dashboard Pakasir." />
+          <InputField label="Project Slug" value={pakasir.clientKey} onChange={v => setPakasir({...pakasir, clientKey: v})} placeholder="nama-proyek-slug" mono hint="Slug proyek Pakasir." />
+          <InputField label="API URL" value={pakasir.apiUrl} onChange={v => setPakasir({...pakasir, apiUrl: v})} placeholder="https://app.pakasir.com" mono />
+          <ProductionToggle checked={pakasir.isProduction} onChange={v => setPakasir({...pakasir, isProduction: v})} />
+          <div className="bg-purple-50 border border-purple-100 rounded-xl p-3">
+            <p className="text-[11px] font-semibold text-purple-700 mb-1">📌 Webhook URL (atur di dashboard Pakasir)</p>
+            <code className="text-[11px] text-purple-600 bg-white px-2 py-1 rounded block break-all">
+              {typeof window !== "undefined" ? window.location.origin : "https://telko.store"}/api/webhook/pakasir
+            </code>
           </div>
+          <SaveButton label="Simpan Pakasir" saving={saving} onClick={() => handleSaveWithExclusive("pakasir", { serverKey: pakasir.serverKey, clientKey: pakasir.clientKey, apiUrl: pakasir.apiUrl, isProduction: pakasir.isProduction, isActive: pakasir.isActive })} />
+        </GatewayCard>
 
-          <div className="p-5 space-y-4">
-            <div>
-              <label className="text-xs font-semibold text-gray-600 mb-1 block">Server Key</label>
-              <input
-                type="text" value={midtrans.serverKey}
-                onChange={(e) => setMidtrans({...midtrans, serverKey: e.target.value})}
-                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy font-mono"
-                placeholder="Mid-server-xxxxx"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-gray-600 mb-1 block">Client Key</label>
-              <input
-                type="text" value={midtrans.clientKey}
-                onChange={(e) => setMidtrans({...midtrans, clientKey: e.target.value})}
-                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy font-mono"
-                placeholder="Mid-client-xxxxx"
-              />
-            </div>
-            <div className="flex items-center gap-3">
-              <label className="flex items-center gap-2 text-sm cursor-pointer">
-                <input
-                  type="checkbox" checked={midtrans.isProduction}
-                  onChange={(e) => setMidtrans({...midtrans, isProduction: e.target.checked})}
-                  className="rounded"
-                />
-                <span className="text-gray-600 font-medium">Mode Production</span>
-              </label>
-              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                midtrans.isProduction ? "bg-red-50 text-red-600" : "bg-yellow-50 text-yellow-700"
-              }`}>
-                {midtrans.isProduction ? "🔴 PRODUCTION" : "🟡 SANDBOX"}
-              </span>
-            </div>
-            <button
-              onClick={() => handleSave("midtrans", midtrans)}
-              disabled={saving}
-              className="gradient-navy text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:opacity-95 disabled:opacity-50 flex items-center gap-2"
-            >
-              <Save size={14} /> Simpan Midtrans
-            </button>
+        {/* ===== DOKU ===== */}
+        <GatewayCard
+          icon={<Landmark size={20} className="text-orange-600" />}
+          iconBg="bg-orange-50"
+          title="DOKU Payment Gateway"
+          subtitle={<>Konfigurasi API untuk pembayaran via <a href="https://www.doku.com" target="_blank" rel="noopener" className="text-orange-500 underline">doku.com</a></>}
+          isActive={doku.isActive}
+          onToggle={() => activateGateway("doku")}
+        >
+          <InputField label="Client ID" value={doku.clientKey} onChange={v => setDoku({...doku, clientKey: v})} placeholder="MCH-XXXX-XXXXXXXXXXXX" mono hint="Client ID dari DOKU Back Office." />
+          <InputField label="Secret Key" value={doku.serverKey} onChange={v => setDoku({...doku, serverKey: v})} placeholder="SK-XXXXXXXXXXXXXXXX" mono hint="Secret Key dari DOKU Back Office." />
+          <ProductionToggle checked={doku.isProduction} onChange={v => setDoku({...doku, isProduction: v})} />
+          <div className="bg-orange-50 border border-orange-100 rounded-xl p-3">
+            <p className="text-[11px] font-semibold text-orange-700 mb-1">📌 Notification URL (atur di DOKU Back Office)</p>
+            <code className="text-[11px] text-orange-600 bg-white px-2 py-1 rounded block break-all">
+              {typeof window !== "undefined" ? window.location.origin : "https://telko.store"}/api/webhook/doku
+            </code>
           </div>
-        </div>
-
-        {/* Pakasir Settings */}
-        <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-          <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-purple-50 flex items-center justify-center">
-              <Wallet size={20} className="text-purple-600" />
-            </div>
-            <div className="flex-1">
-              <h2 className="font-bold text-sm text-navy">Pakasir Payment Gateway</h2>
-              <p className="text-[11px] text-gray-400">
-                Konfigurasi API untuk pembayaran via <a href="https://pakasir.com" target="_blank" rel="noopener" className="text-purple-500 underline">pakasir.com</a>
-              </p>
-            </div>
-            <button
-              onClick={() => setPakasir({...pakasir, isActive: !pakasir.isActive})}
-              className={`flex items-center gap-1 text-xs font-bold px-3 py-1.5 rounded-lg transition-all ${
-                pakasir.isActive ? "bg-green-50 text-green-700" : "bg-gray-100 text-gray-500"
-              }`}
-            >
-              {pakasir.isActive ? <><ToggleRight size={14} /> Aktif</> : <><ToggleLeft size={14} /> Nonaktif</>}
-            </button>
+          <div className="bg-orange-50/50 border border-orange-100 rounded-xl p-3">
+            <p className="text-[11px] text-orange-700 leading-relaxed">
+              💡 DOKU menggunakan <strong>HMAC-SHA256</strong> signature untuk keamanan. Pastikan Client ID dan Secret Key sesuai dengan yang ada di DOKU Back Office.
+              Sandbox: <code className="text-navy bg-navy/5 px-1 rounded">api-sandbox.doku.com</code> | Production: <code className="text-navy bg-navy/5 px-1 rounded">api.doku.com</code>
+            </p>
           </div>
+          <SaveButton label="Simpan DOKU" saving={saving} onClick={() => handleSaveWithExclusive("doku", { serverKey: doku.serverKey, clientKey: doku.clientKey, isProduction: doku.isProduction, isActive: doku.isActive })} />
+        </GatewayCard>
 
-          <div className="p-5 space-y-4">
-            <div>
-              <label className="text-xs font-semibold text-gray-600 mb-1 block">API Key</label>
-              <input
-                type="text" value={pakasir.serverKey}
-                onChange={(e) => setPakasir({...pakasir, serverKey: e.target.value})}
-                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy font-mono"
-                placeholder="pakasir-api-key-xxxxx"
-              />
-              <div className="flex items-start gap-1.5 mt-1.5">
-                <HelpCircle size={11} className="text-gray-400 shrink-0 mt-0.5" />
-                <p className="text-[11px] text-gray-400">
-                  API Key dari dashboard Pakasir. Buat proyek baru di <code className="text-navy bg-navy/5 px-1 rounded">app.pakasir.com</code> untuk mendapatkan API Key.
-                </p>
-              </div>
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-gray-600 mb-1 block">Project Slug</label>
-              <input
-                type="text" value={pakasir.clientKey}
-                onChange={(e) => setPakasir({...pakasir, clientKey: e.target.value})}
-                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy font-mono"
-                placeholder="nama-proyek-slug"
-              />
-              <div className="flex items-start gap-1.5 mt-1.5">
-                <HelpCircle size={11} className="text-gray-400 shrink-0 mt-0.5" />
-                <p className="text-[11px] text-gray-400">
-                  Slug proyek Pakasir. Tertera di halaman detail proyek setelah dibuat.
-                </p>
-              </div>
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-gray-600 mb-1 block">API URL</label>
-              <input
-                type="text" value={pakasir.apiUrl}
-                onChange={(e) => setPakasir({...pakasir, apiUrl: e.target.value})}
-                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy font-mono"
-                placeholder="https://app.pakasir.com"
-              />
-            </div>
-            <div className="flex items-center gap-3">
-              <label className="flex items-center gap-2 text-sm cursor-pointer">
-                <input
-                  type="checkbox" checked={pakasir.isProduction}
-                  onChange={(e) => setPakasir({...pakasir, isProduction: e.target.checked})}
-                  className="rounded"
-                />
-                <span className="text-gray-600 font-medium">Mode Production</span>
-              </label>
-              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                pakasir.isProduction ? "bg-red-50 text-red-600" : "bg-yellow-50 text-yellow-700"
-              }`}>
-                {pakasir.isProduction ? "🔴 PRODUCTION" : "🟡 SANDBOX"}
-              </span>
-            </div>
-
-            {/* Webhook URL Info */}
-            <div className="bg-purple-50 border border-purple-100 rounded-xl p-3">
-              <p className="text-[11px] font-semibold text-purple-700 mb-1">📌 Webhook URL (atur di dashboard Pakasir)</p>
-              <code className="text-[11px] text-purple-600 bg-white px-2 py-1 rounded block break-all">
-                {typeof window !== "undefined" ? window.location.origin : "https://telko.store"}/api/webhook/pakasir
-              </code>
-            </div>
-
-            <button
-              onClick={() => handleSave("pakasir", {
-                serverKey: pakasir.serverKey,
-                clientKey: pakasir.clientKey,
-                apiUrl: pakasir.apiUrl,
-                isProduction: pakasir.isProduction,
-                isActive: pakasir.isActive,
-              })}
-              disabled={saving}
-              className="gradient-navy text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:opacity-95 disabled:opacity-50 flex items-center gap-2"
-            >
-              <Save size={14} /> Simpan Pakasir
-            </button>
-          </div>
-        </div>
-
-        {/* WAHA Settings */}
+        {/* ===== WAHA ===== */}
         <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
           <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center">
@@ -317,79 +195,28 @@ export default function AdminPengaturanPage() {
               <h2 className="font-bold text-sm text-navy">WAHA WhatsApp API</h2>
               <p className="text-[11px] text-gray-400">Konfigurasi API untuk notifikasi WhatsApp</p>
             </div>
-            <button
-              onClick={() => setWaha({...waha, isActive: !waha.isActive})}
-              className={`flex items-center gap-1 text-xs font-bold px-3 py-1.5 rounded-lg transition-all ${
-                waha.isActive ? "bg-green-50 text-green-700" : "bg-gray-100 text-gray-500"
-              }`}
-            >
+            <button onClick={() => setWaha({...waha, isActive: !waha.isActive})}
+              className={`flex items-center gap-1 text-xs font-bold px-3 py-1.5 rounded-lg transition-all ${waha.isActive ? "bg-green-50 text-green-700" : "bg-gray-100 text-gray-500"}`}>
               {waha.isActive ? <><ToggleRight size={14} /> Aktif</> : <><ToggleLeft size={14} /> Nonaktif</>}
             </button>
           </div>
-
           <div className="p-5 space-y-4">
-            <div>
-              <label className="text-xs font-semibold text-gray-600 mb-1 block">API URL</label>
-              <input
-                type="text" value={waha.apiUrl}
-                onChange={(e) => setWaha({...waha, apiUrl: e.target.value})}
-                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy font-mono"
-                placeholder="http://localhost:3002"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-gray-600 mb-1 block">API Key (opsional)</label>
-              <input
-                type="text" value={waha.serverKey}
-                onChange={(e) => setWaha({...waha, serverKey: e.target.value})}
-                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy font-mono"
-                placeholder="waha-api-key"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-gray-600 mb-1 block">Session Name</label>
-              <input
-                type="text" value={waha.sessionName}
-                onChange={(e) => setWaha({...waha, sessionName: e.target.value})}
-                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy font-mono"
-                placeholder="default"
-              />
-              <div className="flex items-start gap-1.5 mt-1.5">
-                <HelpCircle size={11} className="text-gray-400 shrink-0 mt-0.5" />
-                <p className="text-[11px] text-gray-400">
-                  Nama session WAHA yang digunakan untuk mengirim pesan. Default: <code className="text-navy bg-navy/5 px-1 rounded">default</code>. Lihat daftar session di <code className="text-navy bg-navy/5 px-1 rounded">GET /api/sessions</code> pada WAHA API.
-                </p>
-              </div>
-            </div>
-
-            {/* WA Group ID for internal notifications */}
+            <InputField label="API URL" value={waha.apiUrl} onChange={v => setWaha({...waha, apiUrl: v})} placeholder="http://localhost:3002" mono />
+            <InputField label="API Key (opsional)" value={waha.serverKey} onChange={v => setWaha({...waha, serverKey: v})} placeholder="waha-api-key" mono />
+            <InputField label="Session Name" value={waha.sessionName} onChange={v => setWaha({...waha, sessionName: v})} placeholder="default" mono hint={<>Nama session WAHA. Default: <code className="text-navy bg-navy/5 px-1 rounded">default</code></>} />
             <div className="border-t border-gray-100 pt-4">
               <div className="flex items-center gap-2 mb-2">
                 <Users size={14} className="text-green-600" />
                 <label className="text-xs font-semibold text-gray-600">WhatsApp Group ID (Notifikasi Internal)</label>
               </div>
-              <input
-                type="text" value={waha.clientKey}
-                onChange={(e) => setWaha({...waha, clientKey: e.target.value})}
-                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy font-mono"
-                placeholder="120363xxxxxxxxxxxx@g.us"
-              />
+              <input type="text" value={waha.clientKey} onChange={(e) => setWaha({...waha, clientKey: e.target.value})}
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy font-mono" placeholder="120363xxxxxxxxxxxx@g.us" />
               <div className="flex items-start gap-1.5 mt-1.5">
                 <HelpCircle size={11} className="text-gray-400 shrink-0 mt-0.5" />
-                <p className="text-[11px] text-gray-400">
-                  Group ID untuk menerima notifikasi pesanan baru, pembayaran, dan pesan pelanggan.
-                  Dapatkan Group ID via endpoint <code className="text-navy bg-navy/5 px-1 rounded">GET /api/groups</code> di WAHA API.
-                </p>
+                <p className="text-[11px] text-gray-400">Group ID untuk menerima notifikasi pesanan baru, pembayaran, dan pesan pelanggan.</p>
               </div>
             </div>
-
-            <button
-              onClick={() => handleSave("waha", { apiUrl: waha.apiUrl, serverKey: waha.serverKey, clientKey: waha.clientKey, sessionName: waha.sessionName, isActive: waha.isActive })}
-              disabled={saving}
-              className="gradient-navy text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:opacity-95 disabled:opacity-50 flex items-center gap-2"
-            >
-              <Save size={14} /> Simpan WAHA
-            </button>
+            <SaveButton label="Simpan WAHA" saving={saving} onClick={() => handleSave("waha", { apiUrl: waha.apiUrl, serverKey: waha.serverKey, clientKey: waha.clientKey, sessionName: waha.sessionName, isActive: waha.isActive })} />
           </div>
         </div>
 
@@ -400,25 +227,78 @@ export default function AdminPengaturanPage() {
             <h2 className="font-bold text-sm text-navy">Info Lingkungan</h2>
           </div>
           <div className="space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-gray-500">Environment</span>
-              <span className="font-medium text-gray-800">{process.env.NODE_ENV || "development"}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-500">Database</span>
-              <span className="font-medium text-gray-800">MySQL (InnoDB)</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-500">Framework</span>
-              <span className="font-medium text-gray-800">Next.js 15</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-500">Payment Gateways</span>
-              <span className="font-medium text-gray-800">Midtrans + Pakasir</span>
-            </div>
+            <div className="flex justify-between"><span className="text-gray-500">Environment</span><span className="font-medium text-gray-800">{process.env.NODE_ENV || "development"}</span></div>
+            <div className="flex justify-between"><span className="text-gray-500">Database</span><span className="font-medium text-gray-800">MySQL (InnoDB)</span></div>
+            <div className="flex justify-between"><span className="text-gray-500">Framework</span><span className="font-medium text-gray-800">Next.js 15</span></div>
+            <div className="flex justify-between"><span className="text-gray-500">Payment Gateways</span><span className="font-medium text-gray-800">Midtrans + Pakasir + DOKU</span></div>
+            <div className="flex justify-between"><span className="text-gray-500">Gateway Aktif</span><span className="font-bold text-green-600">{activeGwLabel}</span></div>
           </div>
         </div>
       </div>
     </div>
+  );
+}
+
+// ===== Reusable Components =====
+
+function GatewayCard({ icon, iconBg, title, subtitle, isActive, onToggle, children }) {
+  return (
+    <div className={`bg-white rounded-2xl border overflow-hidden transition-all ${isActive ? "border-green-200 ring-2 ring-green-100" : "border-gray-100"}`}>
+      <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-3">
+        <div className={`w-10 h-10 rounded-xl ${iconBg} flex items-center justify-center`}>{icon}</div>
+        <div className="flex-1">
+          <h2 className="font-bold text-sm text-navy flex items-center gap-2">
+            {title}
+            {isActive && <span className="text-[9px] font-bold bg-green-100 text-green-700 px-2 py-0.5 rounded-full">AKTIF</span>}
+          </h2>
+          <p className="text-[11px] text-gray-400">{subtitle}</p>
+        </div>
+        <button onClick={onToggle}
+          className={`flex items-center gap-1 text-xs font-bold px-3 py-1.5 rounded-lg transition-all ${isActive ? "bg-green-50 text-green-700" : "bg-gray-100 text-gray-500"}`}>
+          {isActive ? <><ToggleRight size={14} /> Aktif</> : <><ToggleLeft size={14} /> Nonaktif</>}
+        </button>
+      </div>
+      <div className="p-5 space-y-4">{children}</div>
+    </div>
+  );
+}
+
+function InputField({ label, value, onChange, placeholder, mono, hint }) {
+  return (
+    <div>
+      <label className="text-xs font-semibold text-gray-600 mb-1 block">{label}</label>
+      <input type="text" value={value} onChange={(e) => onChange(e.target.value)}
+        className={`w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy ${mono ? "font-mono" : ""}`}
+        placeholder={placeholder} />
+      {hint && (
+        <div className="flex items-start gap-1.5 mt-1.5">
+          <HelpCircle size={11} className="text-gray-400 shrink-0 mt-0.5" />
+          <p className="text-[11px] text-gray-400">{hint}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ProductionToggle({ checked, onChange }) {
+  return (
+    <div className="flex items-center gap-3">
+      <label className="flex items-center gap-2 text-sm cursor-pointer">
+        <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="rounded" />
+        <span className="text-gray-600 font-medium">Mode Production</span>
+      </label>
+      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${checked ? "bg-red-50 text-red-600" : "bg-yellow-50 text-yellow-700"}`}>
+        {checked ? "🔴 PRODUCTION" : "🟡 SANDBOX"}
+      </span>
+    </div>
+  );
+}
+
+function SaveButton({ label, saving, onClick }) {
+  return (
+    <button onClick={onClick} disabled={saving}
+      className="gradient-navy text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:opacity-95 disabled:opacity-50 flex items-center gap-2">
+      <Save size={14} /> {label}
+    </button>
   );
 }

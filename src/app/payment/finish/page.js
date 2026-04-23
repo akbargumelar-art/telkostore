@@ -65,14 +65,26 @@ function getPaymentStatus(statusCode, transactionStatus, customStatus, gateway) 
   if (transactionStatus === "completed" || transactionStatus === "paid") return "success";
   if (["expired", "cancelled", "failed"].includes(transactionStatus)) return "failed";
 
+  // DOKU status values
+  if (transactionStatus === "SUCCESS" || transactionStatus === "COMPLETED") return "success";
+  if (["FAILED", "EXPIRED", "DENIED"].includes(transactionStatus)) return "failed";
+
   // Fallback: check status code
   if (statusCode === "200") return "success";
   if (statusCode === "201") return "pending";
 
-  // If coming from Pakasir redirect with no explicit status, check via API
-  if (gateway === "pakasir" && !transactionStatus && !customStatus) return "pending";
+  // If coming from non-Midtrans redirect with no explicit status, check via API
+  if ((gateway === "pakasir" || gateway === "doku") && !transactionStatus && !customStatus) return "pending";
 
   return "pending"; // Default to pending instead of failed for ambiguous cases
+}
+
+function getGatewayLabel(gateway) {
+  switch (gateway) {
+    case "pakasir": return "Pakasir";
+    case "doku": return "DOKU";
+    default: return "Midtrans";
+  }
 }
 
 export default function PaymentFinishPage({ searchParams }) {
@@ -238,7 +250,7 @@ export default function PaymentFinishPage({ searchParams }) {
         <div className="flex items-center justify-center gap-2 mt-6 text-gray-400">
           <ShieldCheck size={14} />
           <span className="text-[10px]">
-            Transaksi aman & terenkripsi via {gateway === "pakasir" ? "Pakasir" : "Midtrans"}
+            Transaksi aman & terenkripsi via {getGatewayLabel(gateway)}
           </span>
         </div>
       </div>
