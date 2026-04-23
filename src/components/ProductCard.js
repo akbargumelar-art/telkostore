@@ -1,11 +1,22 @@
 "use client";
 
 import Link from "next/link";
+import CategoryIcon from "@/components/CategoryIcon";
 import { formatRupiah, calculateDiscount } from "@/lib/utils";
 import { Zap } from "lucide-react";
 
+const FALLBACK_CATEGORY_ICONS = {
+  pulsa: "\uD83D\uDCF1",
+  "paket-data": "\uD83D\uDCF6",
+  "voucher-internet": "\uD83C\uDF10",
+  "voucher-game": "\uD83C\uDFAE",
+};
+
 export default function ProductCard({ product, index = 0 }) {
   const discount = calculateDiscount(product.originalPrice, product.price);
+  const fallbackIcon =
+    FALLBACK_CATEGORY_ICONS[product.categoryId] ||
+    FALLBACK_CATEGORY_ICONS["voucher-game"];
 
   return (
     <Link
@@ -31,14 +42,17 @@ export default function ProductCard({ product, index = 0 }) {
 
         {/* Product icon */}
         <div className="w-12 h-12 rounded-xl bg-gray-50 flex items-center justify-center text-2xl mb-2 group-hover:scale-110 transition-transform border border-gray-100">
-          {product.gameIcon ||
-            (product.categoryId === "pulsa"
-              ? "📱"
-              : product.categoryId === "paket-data"
-              ? "📶"
-              : product.categoryId === "voucher-internet"
-              ? "🌐"
-              : "🎮")}
+          {product.gameIcon ? (
+            product.gameIcon
+          ) : (
+            <CategoryIcon
+              categoryId={product.categoryId}
+              icon={fallbackIcon}
+              alt={product.name}
+              size={28}
+              fallbackClassName="text-2xl"
+            />
+          )}
         </div>
 
         {/* Product name */}
@@ -52,7 +66,7 @@ export default function ProductCard({ product, index = 0 }) {
         )}
         {product.validity && (
           <p className="text-[11px] text-gray-400 mt-0.5">
-            {product.quota} • {product.validity}
+            {product.quota} {"\u2022"} {product.validity}
           </p>
         )}
       </div>

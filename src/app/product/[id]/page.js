@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, use, useCallback, useRef } from "react";
 import Link from "next/link";
 import { formatRupiah, calculateDiscount, isValidIndonesianNumber, getOperatorName } from "@/lib/utils";
 import ProductCard from "@/components/ProductCard";
+import CategoryIcon from "@/components/CategoryIcon";
 import {
   ChevronLeft,
   Check,
@@ -537,7 +538,17 @@ export default function ProductPage({ params }) {
           <div className="bg-white rounded-2xl border border-gray-100 p-5 md:p-6 mb-4">
             <div className="flex items-start gap-4">
               <div className="w-16 h-16 md:w-20 md:h-20 rounded-2xl bg-gray-50 flex items-center justify-center text-3xl md:text-4xl shrink-0 border border-gray-100">
-                {product.gameIcon || categoryIcon}
+                {product.gameIcon ? (
+                  product.gameIcon
+                ) : (
+                  <CategoryIcon
+                    categoryId={product.categoryId}
+                    icon={categoryIcon}
+                    alt={categoryName}
+                    size={44}
+                    fallbackClassName="text-3xl md:text-4xl"
+                  />
+                )}
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-start justify-between gap-2">

@@ -175,6 +175,82 @@ function detectTrackedResponseResult(tracked) {
   return null;
 }
 
+function tryParseJson(text) {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
+function humanizeMachineText(text) {
+  return String(text || "")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function detectTelkomselTrackedResponse(tracked) {
+  const redeemResponses = tracked.filter((entry) =>
+    normalizeText(entry.url).includes("/api/voucher/redeem")
+  );
+
+  for (const entry of redeemResponses.slice().reverse()) {
+    const payload = tryParseJson(entry.bodyText);
+    const data = payload?.data || payload || {};
+    const code = String(data?.code || payload?.code || "").trim();
+    const description = String(data?.description || payload?.description || "").trim();
+    const normalizedDescription = normalizeText(description);
+
+    if (code === "15" || normalizedDescription.includes("alreadyused")) {
+      return {
+        success: false,
+        message: "voucher sudah terpakai",
+      };
+    }
+
+    if (normalizedDescription.includes("expired")) {
+      return {
+        success: false,
+        message: "voucher kedaluwarsa",
+      };
+    }
+
+    if (normalizedDescription.includes("invalid")) {
+      return {
+        success: false,
+        message: "kode voucher tidak valid",
+      };
+    }
+
+    if (
+      entry.status < 400 &&
+      payload &&
+      (payload.success === true || payload.status === true) &&
+      !code &&
+      !responseTextLooksFailed(entry.bodyText)
+    ) {
+      return {
+        success: true,
+        message: `Respons sukses terdeteksi dari ${entry.url}`,
+      };
+    }
+
+    if (entry.status >= 400 || code || responseTextLooksFailed(entry.bodyText)) {
+      return {
+        success: false,
+        message:
+          humanizeMachineText(description) ||
+          (code ? `kode error ${code}` : `HTTP ${entry.status} dari ${entry.url}`),
+      };
+    }
+  }
+
+  return null;
+}
+
 function getTrackerSummary(tracked) {
   return tracked
     .slice(-3)
@@ -379,6 +455,18 @@ export async function autoRedeemVoucher(provider, code, phone, retryCount = 0) {
 
 async function redeemTelkomsel(browser, phone, code) {
   const page = await browser.newPage();
+  const tracker = createResponseTracker(page, (url, method, resourceType) => {
+    const normalizedUrl = normalizeText(url);
+
+    if (!["GET", "POST"].includes(method)) return false;
+    if (!["xhr", "fetch", "document"].includes(resourceType)) return false;
+
+    return (
+      normalizedUrl.includes("telkomsel.com/api/voucher/redeem") ||
+      normalizedUrl.includes("/shops/voucher/redeem/failed") ||
+      normalizedUrl.includes("/shops/voucher/redeem/success")
+    );
+  });
 
   await page.setViewport({ width: 1024, height: 768 });
   await page.setUserAgent(
@@ -486,9 +574,67 @@ async function redeemTelkomsel(browser, phone, code) {
 
   console.log("Clicking Telkomsel Redeem button...");
   await submitBtn.click();
-  await wait(SUBMIT_WAIT);
+  await page
+    .waitForFunction(
+      () => {
+        const text = String(document.body?.innerText || "").toLowerCase();
+        return (
+          location.href.includes("/failed") ||
+          location.href.includes("/success") ||
+          text.includes("redeem voucher gagal") ||
+          text.includes("redeem voucher berhasil")
+        );
+      },
+      { timeout: SUBMIT_WAIT }
+    )
+    .catch(() => null);
 
+  await wait(1500);
+
+  const currentUrl = page.url();
   const pageText = await getBodyText(page);
+  const trackedResult = detectTelkomselTrackedResponse(tracker.tracked);
+  const trackerSummary = getTrackerSummary(tracker.tracked);
+  tracker.detach();
+
+  if (trackedResult?.success) {
+    console.log("Telkomsel auto-redeem SUCCESS via network response");
+    return {
+      success: true,
+      message: trackedResult.message,
+    };
+  }
+
+  if (trackedResult && !trackedResult.success) {
+    console.error(`Telkomsel auto-redeem FAILED via network response: ${trackedResult.message}`);
+    return {
+      success: false,
+      message: `Telkomsel redeem gagal: ${trackedResult.message}`,
+      fallback: true,
+    };
+  }
+
+  if (currentUrl.includes("/failed")) {
+    const pageErrorMatch = pageText.match(/maaf,[^\n]*/i);
+    const pageErrorDetail = pageErrorMatch
+      ? pageErrorMatch[0].trim().substring(0, 220)
+      : "redeem voucher gagal";
+
+    console.error(`Telkomsel auto-redeem FAILED via failed page: ${pageErrorDetail}`);
+    return {
+      success: false,
+      message: `Telkomsel redeem gagal: ${pageErrorDetail}`,
+      fallback: true,
+    };
+  }
+
+  if (currentUrl.includes("/success") || /redeem voucher berhasil/i.test(pageText)) {
+    console.log("Telkomsel auto-redeem SUCCESS via success page");
+    return {
+      success: true,
+      message: `Voucher berhasil di-redeem otomatis ke ${phone} via Telkomsel`,
+    };
+  }
 
   const successPatterns = [
     /berhasil/i,
@@ -506,11 +652,11 @@ async function redeemTelkomsel(browser, phone, code) {
     /invalid/i,
     /sudah digunakan/i,
     /already.*used/i,
+    /telah terpakai/i,
     /expired/i,
     /kedaluwarsa/i,
     /tidak ditemukan/i,
     /not found/i,
-    /salah/i,
     /nomor.*tidak.*terdaftar/i,
   ];
 
@@ -542,7 +688,9 @@ async function redeemTelkomsel(browser, phone, code) {
   console.warn("Telkomsel auto-redeem ambiguous, falling back to semi-auto");
   return {
     success: false,
-    message: "Telkomsel redeem: hasil tidak jelas - perlu verifikasi manual",
+    message:
+      "Telkomsel redeem: hasil tidak jelas - perlu verifikasi manual" +
+      (trackerSummary ? ` (${trackerSummary})` : ""),
     fallback: true,
   };
 }

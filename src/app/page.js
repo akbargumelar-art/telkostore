@@ -6,6 +6,7 @@ import CategoryTabs from "@/components/CategoryTabs";
 import Sidebar from "@/components/Sidebar";
 import ProductCard from "@/components/ProductCard";
 import FlashSaleBanner from "@/components/FlashSaleBanner";
+import CategoryIcon from "@/components/CategoryIcon";
 import { ArrowRight, Sparkles, TrendingUp, Filter } from "lucide-react";
 import Link from "next/link";
 
@@ -229,7 +230,12 @@ export default function HomePage() {
                       </>
                     ) : (
                       <>
-                        <span>{activeCategoryData?.icon}</span>
+                        <CategoryIcon
+                          categoryId={activeCategoryData?.id}
+                          icon={activeCategoryData?.icon}
+                          alt={activeCategoryData?.name}
+                          size={20}
+                        />
                         {activeCategoryData?.name}
                       </>
                     )}
@@ -283,7 +289,12 @@ export default function HomePage() {
                       <div key={cat.id}>
                         <div className="flex items-center justify-between mb-3">
                           <h3 className="font-bold text-sm text-gray-700 flex items-center gap-2">
-                            <span>{cat.icon}</span>
+                            <CategoryIcon
+                              categoryId={cat.id}
+                              icon={cat.icon}
+                              alt={cat.name}
+                              size={20}
+                            />
                             {cat.name}
                             <span className="text-[11px] font-normal text-gray-400">
                               ({catProducts.length})

@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useEffect } from "react";
+import CategoryIcon from "@/components/CategoryIcon";
 
 export default function CategoryTabs({ activeCategory, onCategoryChange, categories = [] }) {
   const scrollRef = useRef(null);
@@ -47,7 +48,15 @@ export default function CategoryTabs({ activeCategory, onCategoryChange, categor
                 : "bg-white text-gray-600 border border-gray-200 hover:border-gray-300"
             }`}
           >
-            {cat.icon} {cat.name}
+            <span className="inline-flex items-center gap-2">
+              <CategoryIcon
+                categoryId={cat.id}
+                icon={cat.icon}
+                alt={cat.name}
+                size={18}
+              />
+              <span>{cat.name}</span>
+            </span>
           </button>
         );
       })}

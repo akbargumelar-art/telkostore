@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { categories } from "@/data/products";
+import CategoryIcon from "@/components/CategoryIcon";
 import { HelpCircle, MessageCircle } from "lucide-react";
 
 export default function Sidebar({ activeCategory, onCategoryChange }) {
@@ -49,7 +50,13 @@ export default function Sidebar({ activeCategory, onCategoryChange }) {
                     : "text-gray-700 hover:bg-gray-50"
                 }`}
               >
-                <span className="text-xl">{cat.icon}</span>
+                <CategoryIcon
+                  categoryId={cat.id}
+                  icon={cat.icon}
+                  alt={cat.name}
+                  size={22}
+                  fallbackClassName="text-xl"
+                />
                 <div className="flex-1 min-w-0">
                   <p className={`text-sm ${isActive ? "font-bold" : "font-medium"}`}>
                     {cat.name}
