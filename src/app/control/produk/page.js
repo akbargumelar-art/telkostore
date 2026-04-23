@@ -204,6 +204,37 @@ export default function AdminProdukPage() {
     }
   };
 
+  const handleHardDelete = async (id, name) => {
+    if (!confirm(`Hapus permanen produk "${name}"? Aksi ini tidak bisa dibatalkan.`)) return;
+
+    try {
+      const res = await fetch("/api/admin/products/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "hard-delete", ids: [id] }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSuccess(data.message || "Produk dihapus permanen!");
+        setTimeout(() => setSuccess(""), 3000);
+        setSelected((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+        setLoading(true);
+        fetchProducts();
+      } else {
+        setError(data.error || "Gagal menghapus permanen produk");
+        setTimeout(() => setError(""), 5000);
+      }
+    } catch (err) {
+      console.error(err);
+      setError("Gagal menghapus permanen produk");
+      setTimeout(() => setError(""), 5000);
+    }
+  };
+
   const handleToggleActive = async (id, currentActive) => {
     try {
       await fetch(`/api/admin/products/${id}`, {
@@ -379,7 +410,8 @@ export default function AdminProdukPage() {
               Voucher internet memakai stok otomatis dari kode voucher.
             </span>
           )}
-          <button onClick={() => { if(confirm(`Nonaktifkan ${selected.size} produk?`)) handleBulkAction("delete"); }} disabled={bulkProcessing} className="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs font-semibold hover:bg-red-100 flex items-center gap-1 ml-auto"><Trash2 size={12} /> Nonaktifkan</button>
+          <button onClick={() => { if(confirm(`Nonaktifkan ${selected.size} produk?`)) handleBulkAction("delete"); }} disabled={bulkProcessing} className="px-3 py-1.5 bg-yellow-50 text-yellow-700 rounded-lg text-xs font-semibold hover:bg-yellow-100 flex items-center gap-1 ml-auto"><EyeOff size={12} /> Nonaktifkan</button>
+          <button onClick={() => { if(confirm(`Hapus permanen ${selected.size} produk? Aksi ini tidak bisa dibatalkan.`)) handleBulkAction("hard-delete"); }} disabled={bulkProcessing} className="px-3 py-1.5 bg-red-600 text-white rounded-lg text-xs font-semibold hover:bg-red-700 flex items-center gap-1"><Trash2 size={12} /> Hapus Permanen</button>
           <button onClick={() => setSelected(new Set())} className="px-3 py-1.5 bg-gray-100 text-gray-500 rounded-lg text-xs font-semibold hover:bg-gray-200"><X size={12} /></button>
           {bulkProcessing && <div className="w-4 h-4 rounded-full border-2 border-navy/30 border-t-navy animate-spin" />}
         </div>
@@ -521,8 +553,15 @@ export default function AdminProdukPage() {
                         <button
                           onClick={() => handleDelete(p.id, p.name)}
                           disabled={!p.isActive}
-                          className="p-1.5 rounded-lg hover:bg-red-50 text-red-500 transition-colors disabled:opacity-40 disabled:hover:bg-transparent"
+                          className="p-1.5 rounded-lg hover:bg-yellow-50 text-yellow-600 transition-colors disabled:opacity-40 disabled:hover:bg-transparent"
                           title={p.isActive ? "Nonaktifkan" : "Sudah non-aktif"}
+                        >
+                          <EyeOff size={14} />
+                        </button>
+                        <button
+                          onClick={() => handleHardDelete(p.id, p.name)}
+                          className="p-1.5 rounded-lg hover:bg-red-50 text-red-500 transition-colors"
+                          title="Hapus permanen"
                         >
                           <Trash2 size={14} />
                         </button>
