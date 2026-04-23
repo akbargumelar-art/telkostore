@@ -5,6 +5,7 @@ import { voucherCodes, products } from "@/db/schema.js";
 import { eq, and, like, sql, count, desc } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { getVoucherStats } from "@/lib/voucher";
+import { syncVoucherProductStock } from "@/lib/product-stock";
 
 // GET — List all voucher codes with filters + stats
 export async function GET(request) {
@@ -155,6 +156,8 @@ export async function POST(request) {
       });
       inserted++;
     }
+
+    await syncVoucherProductStock(productId);
 
     return NextResponse.json({
       success: true,

@@ -2,9 +2,14 @@
 // Supports: import, delete, toggle-active, update-price, update-stock
 import { NextResponse } from "next/server";
 import db from "@/db/index.js";
-import { products, categories } from "@/db/schema.js";
-import { eq, inArray } from "drizzle-orm";
+import { products, categories, orders, voucherCodes } from "@/db/schema.js";
+import { count, eq, inArray } from "drizzle-orm";
 import { nanoid } from "nanoid";
+import { usesVoucherCodeStock, withComputedVoucherStocks } from "@/lib/product-stock";
+
+function toNumber(value) {
+  return Number(value || 0);
+}
 
 export async function POST(request) {
   try {
@@ -74,7 +79,9 @@ export async function POST(request) {
               nominal: item.nominal ? Number(item.nominal) : null,
               price,
               originalPrice: item.originalPrice ? Number(item.originalPrice) : null,
-              stock: item.stock != null ? Number(item.stock) : 999,
+              stock: usesVoucherCodeStock(item.categoryId)
+                ? 0
+                : (item.stock != null ? Number(item.stock) : 999),
               validity: item.validity || null,
               quota: item.quota || null,
               gameName: item.gameName || null,
@@ -131,6 +138,29 @@ export async function POST(request) {
           return NextResponse.json(
             { success: false, error: "Pilih minimal 1 produk" },
             { status: 400 }
+          );
+        }
+
+        const [orderRefs] = await db
+          .select({ total: count() })
+          .from(orders)
+          .where(inArray(orders.productId, ids));
+
+        const [voucherRefs] = await db
+          .select({ total: count() })
+          .from(voucherCodes)
+          .where(inArray(voucherCodes.productId, ids));
+
+        const orderCount = toNumber(orderRefs?.total);
+        const voucherCount = toNumber(voucherRefs?.total);
+
+        if (orderCount > 0 || voucherCount > 0) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: `Tidak bisa hapus permanen karena masih dipakai ${orderCount} pesanan dan ${voucherCount} kode voucher. Nonaktifkan produk agar hilang dari toko tanpa menghapus histori.`,
+            },
+            { status: 409 }
           );
         }
 
@@ -239,15 +269,33 @@ export async function POST(request) {
           );
         }
 
-        const now4 = new Date().toISOString();
-        await db
-          .update(products)
-          .set({ stock: stockValue, updatedAt: now4 })
+        const selectedProducts = await db
+          .select({
+            id: products.id,
+            categoryId: products.categoryId,
+          })
+          .from(products)
           .where(inArray(products.id, ids));
+
+        const manualStockIds = selectedProducts
+          .filter((product) => !usesVoucherCodeStock(product))
+          .map((product) => product.id);
+        const managedCount = selectedProducts.length - manualStockIds.length;
+
+        if (manualStockIds.length > 0) {
+          const now4 = new Date().toISOString();
+          await db
+            .update(products)
+            .set({ stock: stockValue, updatedAt: now4 })
+            .where(inArray(products.id, manualStockIds));
+        }
 
         return NextResponse.json({
           success: true,
-          message: `Stok ${ids.length} produk diubah menjadi ${stockValue}`,
+          message:
+            managedCount > 0
+              ? `Stok ${manualStockIds.length} produk manual diubah menjadi ${stockValue}. ${managedCount} voucher internet dilewati karena stok dihitung otomatis dari kode voucher.`
+              : `Stok ${manualStockIds.length} produk diubah menjadi ${stockValue}`,
         });
       }
 
@@ -277,10 +325,11 @@ export async function POST(request) {
       // ===== EXPORT =====
       case "export": {
         const allProducts = await db.select().from(products);
+        const exportedProducts = await withComputedVoucherStocks(allProducts);
         return NextResponse.json({
           success: true,
-          data: allProducts,
-          count: allProducts.length,
+          data: exportedProducts,
+          count: exportedProducts.length,
         });
       }
 

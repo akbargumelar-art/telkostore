@@ -22,6 +22,10 @@ import { createDokuTransaction } from "@/lib/doku";
 import { getActiveGateway } from "@/app/api/gateway/status/route";
 import { checkoutLimiter } from "@/lib/rate-limit";
 import { scheduleNotification } from "@/lib/notification-scheduler";
+import {
+  getVoucherStockBreakdown,
+  usesVoucherCodeStock,
+} from "@/lib/product-stock";
 
 export async function POST(request) {
   // Rate limiting
@@ -75,8 +79,17 @@ export async function POST(request) {
 
     const product = productResult[0];
 
-    // Check stock
-    if (product.stock <= 0) {
+    const managedByVoucherCodes = usesVoucherCodeStock(product);
+
+    if (managedByVoucherCodes) {
+      const breakdown = await getVoucherStockBreakdown(product.id);
+      if (breakdown.stock <= 0) {
+        return NextResponse.json(
+          { success: false, error: "Stok produk habis" },
+          { status: 400 }
+        );
+      }
+    } else if (product.stock <= 0) {
       return NextResponse.json(
         { success: false, error: "Stok produk habis" },
         { status: 400 }
@@ -116,6 +129,60 @@ export async function POST(request) {
     }
 
     let paymentResult;
+    const nowIso = now.toISOString();
+
+    const createPendingOrder = async (tx, gatewayName, paymentData) => {
+      if (managedByVoucherCodes) {
+        await tx.execute(
+          sql`SELECT id FROM products WHERE id = ${product.id} LIMIT 1 FOR UPDATE`
+        );
+
+        const breakdown = await getVoucherStockBreakdown(product.id, tx);
+        if (breakdown.stock <= 0) {
+          throw new Error("Stok produk habis");
+        }
+
+        await tx
+          .update(products)
+          .set({
+            stock: breakdown.stock - 1,
+            updatedAt: nowIso,
+          })
+          .where(eq(products.id, product.id));
+      } else {
+        await tx.update(products)
+          .set({ stock: sql`${products.stock} - 1` })
+          .where(and(eq(products.id, product.id), gt(products.stock, 0)));
+
+        const [check] = await tx.select({ stock: products.stock })
+          .from(products)
+          .where(eq(products.id, product.id))
+          .limit(1);
+
+        if (!check || check.stock < 0) {
+          throw new Error("Stok produk habis");
+        }
+      }
+
+      await tx.insert(orders).values({
+        id: orderId,
+        productId: product.id,
+        productName: product.name,
+        productPrice: product.price,
+        guestPhone: phoneNumber,
+        guestToken: guestToken,
+        targetData: resolvedTargetData,
+        status: "pending",
+        paymentMethod: paymentMethod || null,
+        paymentGateway: gatewayName,
+        snapToken: paymentData.snapToken,
+        snapRedirectUrl: paymentData.snapRedirectUrl,
+        midtransOrderId: externalOrderId,
+        notes: notes,
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      });
+    };
 
     if (selectedGateway === "pakasir") {
       // ===== PAKASIR FLOW =====
@@ -131,38 +198,9 @@ export async function POST(request) {
 
       // Atomic stock decrease + order insert (MySQL async transaction)
       await db.transaction(async (tx) => {
-        // Decrease stock with guard
-        await tx.update(products)
-          .set({ stock: sql`${products.stock} - 1` })
-          .where(and(eq(products.id, product.id), gt(products.stock, 0)));
-
-        // Verify stock was actually decreased
-        const [check] = await tx.select({ stock: products.stock })
-          .from(products)
-          .where(eq(products.id, product.id))
-          .limit(1);
-
-        if (!check || check.stock < 0) {
-          throw new Error("Stok produk habis");
-        }
-
-        await tx.insert(orders).values({
-          id: orderId,
-          productId: product.id,
-          productName: product.name,
-          productPrice: product.price,
-          guestPhone: phoneNumber,
-          guestToken: guestToken,
-          targetData: resolvedTargetData,
-          status: "pending",
-          paymentMethod: paymentMethod || null,
-          paymentGateway: "pakasir",
+        await createPendingOrder(tx, "pakasir", {
           snapToken: null,
           snapRedirectUrl: paymentResult.paymentUrl,
-          midtransOrderId: externalOrderId,
-          notes: notes,
-          createdAt: now.toISOString(),
-          updatedAt: now.toISOString(),
         });
       });
 
@@ -182,36 +220,9 @@ export async function POST(request) {
 
       // Atomic stock decrease + order insert
       await db.transaction(async (tx) => {
-        await tx.update(products)
-          .set({ stock: sql`${products.stock} - 1` })
-          .where(and(eq(products.id, product.id), gt(products.stock, 0)));
-
-        const [check] = await tx.select({ stock: products.stock })
-          .from(products)
-          .where(eq(products.id, product.id))
-          .limit(1);
-
-        if (!check || check.stock < 0) {
-          throw new Error("Stok produk habis");
-        }
-
-        await tx.insert(orders).values({
-          id: orderId,
-          productId: product.id,
-          productName: product.name,
-          productPrice: product.price,
-          guestPhone: phoneNumber,
-          guestToken: guestToken,
-          targetData: resolvedTargetData,
-          status: "pending",
-          paymentMethod: paymentMethod || null,
-          paymentGateway: "doku",
+        await createPendingOrder(tx, "doku", {
           snapToken: null,
           snapRedirectUrl: paymentResult.paymentUrl,
-          midtransOrderId: externalOrderId,
-          notes: notes,
-          createdAt: now.toISOString(),
-          updatedAt: now.toISOString(),
         });
       });
 
@@ -254,38 +265,9 @@ export async function POST(request) {
 
       // Atomic stock decrease + order insert (MySQL async transaction)
       await db.transaction(async (tx) => {
-        // Decrease stock with guard
-        await tx.update(products)
-          .set({ stock: sql`${products.stock} - 1` })
-          .where(and(eq(products.id, product.id), gt(products.stock, 0)));
-
-        // Verify stock was actually decreased
-        const [check] = await tx.select({ stock: products.stock })
-          .from(products)
-          .where(eq(products.id, product.id))
-          .limit(1);
-
-        if (!check || check.stock < 0) {
-          throw new Error("Stok produk habis");
-        }
-
-        await tx.insert(orders).values({
-          id: orderId,
-          productId: product.id,
-          productName: product.name,
-          productPrice: product.price,
-          guestPhone: phoneNumber,
-          guestToken: guestToken,
-          targetData: resolvedTargetData,
-          status: "pending",
-          paymentMethod: paymentMethod || null,
-          paymentGateway: "midtrans",
+        await createPendingOrder(tx, "midtrans", {
           snapToken: snapTransaction.token,
           snapRedirectUrl: snapTransaction.redirect_url,
-          midtransOrderId: externalOrderId,
-          notes: notes,
-          createdAt: now.toISOString(),
-          updatedAt: now.toISOString(),
         });
       });
     }

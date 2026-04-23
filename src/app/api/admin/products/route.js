@@ -2,8 +2,13 @@
 import { NextResponse } from "next/server";
 import db from "@/db/index.js";
 import { products, categories } from "@/db/schema.js";
-import { eq, like, sql } from "drizzle-orm";
+import { and, eq, like, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
+import {
+  syncVoucherProductStock,
+  usesVoucherCodeStock,
+  withComputedVoucherStocks,
+} from "@/lib/product-stock";
 
 // GET — List all products (including inactive) for admin
 export async function GET(request) {
@@ -19,23 +24,24 @@ export async function GET(request) {
     if (category && category !== "all") {
       conditions.push(eq(products.categoryId, category));
     }
-    if (activeOnly === "true") {
-      conditions.push(eq(products.isActive, true));
+    if (activeOnly === "true" || activeOnly === "false") {
+      conditions.push(eq(products.isActive, activeOnly === "true"));
     }
     if (search) {
       conditions.push(like(products.name, `%${search}%`));
     }
 
     if (conditions.length > 0) {
-      query = query.where(sql`${conditions.map((c, i) => i === 0 ? c : sql` AND ${c}`).reduce((a, b) => sql`${a}${b}`)}`);
+      query = query.where(and(...conditions));
     }
 
     const result = await query.orderBy(sql`${products.createdAt} DESC`);
+    const data = await withComputedVoucherStocks(result);
 
     return NextResponse.json({
       success: true,
-      data: result,
-      count: result.length,
+      data,
+      count: data.length,
     });
   } catch (error) {
     console.error("GET /api/admin/products error:", error);
@@ -75,6 +81,8 @@ export async function POST(request) {
     const id = `${categoryId}-${nanoid(8).toLowerCase()}`;
     const now = new Date().toISOString();
 
+    const managedByVoucherCodes = usesVoucherCodeStock(categoryId);
+
     await db.insert(products).values({
       id,
       categoryId,
@@ -84,7 +92,7 @@ export async function POST(request) {
       nominal: nominal || null,
       price,
       originalPrice: originalPrice || null,
-      stock: stock ?? 999,
+      stock: managedByVoucherCodes ? 0 : (stock ?? 999),
       validity: validity || null,
       quota: quota || null,
       gameName: gameName || null,
@@ -95,6 +103,10 @@ export async function POST(request) {
       createdAt: now,
       updatedAt: now,
     });
+
+    if (managedByVoucherCodes) {
+      await syncVoucherProductStock(id);
+    }
 
     return NextResponse.json({
       success: true,

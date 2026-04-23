@@ -5,6 +5,7 @@ import db from "@/db/index.js";
 import { voucherCodes, orders } from "@/db/schema.js";
 import { eq } from "drizzle-orm";
 import { markVoucherRedeemed, markVoucherFailed, getRedeemUrl } from "@/lib/voucher";
+import { syncVoucherProductStock } from "@/lib/product-stock";
 import {
   sendWhatsAppNotification,
   sendGroupNotification,
@@ -35,6 +36,7 @@ export async function PUT(request, { params }) {
     if (action === "redeem") {
       // Mark as redeemed
       await markVoucherRedeemed(id, response);
+      await syncVoucherProductStock(voucher.productId);
 
       // If linked to an order, update order status to completed
       if (voucher.orderId) {
@@ -77,6 +79,7 @@ export async function PUT(request, { params }) {
     if (action === "fail") {
       // Mark as failed
       await markVoucherFailed(id, response);
+      await syncVoucherProductStock(voucher.productId);
 
       return NextResponse.json({
         success: true,
@@ -97,6 +100,8 @@ export async function PUT(request, { params }) {
           updatedAt: now,
         })
         .where(eq(voucherCodes.id, id));
+
+      await syncVoucherProductStock(voucher.productId);
 
       return NextResponse.json({
         success: true,
@@ -157,6 +162,7 @@ export async function DELETE(request, { params }) {
     }
 
     await db.delete(voucherCodes).where(eq(voucherCodes.id, id));
+    await syncVoucherProductStock(voucher.productId);
 
     return NextResponse.json({
       success: true,

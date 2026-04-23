@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import db from "@/db/index.js";
 import { products } from "@/db/schema.js";
 import { eq, and, like } from "drizzle-orm";
+import { withComputedVoucherStocks } from "@/lib/product-stock";
 
 export async function GET(request) {
   try {
@@ -32,10 +33,12 @@ export async function GET(request) {
       .from(products)
       .where(and(...conditions));
 
+    const data = await withComputedVoucherStocks(result);
+
     return NextResponse.json({
       success: true,
-      data: result,
-      count: result.length,
+      data,
+      count: data.length,
     });
   } catch (error) {
     console.error("GET /api/products error:", error);

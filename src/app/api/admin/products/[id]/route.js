@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import db from "@/db/index.js";
 import { products } from "@/db/schema.js";
 import { eq } from "drizzle-orm";
+import { syncVoucherProductStock, usesVoucherCodeStock } from "@/lib/product-stock";
 
 // PUT — Update product
 export async function PUT(request, { params }) {
@@ -19,6 +20,10 @@ export async function PUT(request, { params }) {
       );
     }
 
+    const currentProduct = existing[0];
+    const targetCategoryId = body.categoryId ?? currentProduct.categoryId;
+    const managedByVoucherCodes = usesVoucherCodeStock(targetCategoryId);
+
     const updateData = {};
     const allowedFields = [
       "name", "categoryId", "type", "description", "nominal",
@@ -28,6 +33,7 @@ export async function PUT(request, { params }) {
 
     for (const field of allowedFields) {
       if (body[field] !== undefined) {
+        if (field === "stock" && managedByVoucherCodes) continue;
         updateData[field] = body[field];
       }
     }
@@ -35,6 +41,10 @@ export async function PUT(request, { params }) {
     updateData.updatedAt = new Date().toISOString();
 
     await db.update(products).set(updateData).where(eq(products.id, id));
+
+    if (managedByVoucherCodes) {
+      await syncVoucherProductStock(id);
+    }
 
     return NextResponse.json({
       success: true,
@@ -69,12 +79,12 @@ export async function DELETE(request, { params }) {
 
     return NextResponse.json({
       success: true,
-      message: "Produk berhasil dihapus",
+      message: "Produk berhasil dinonaktifkan",
     });
   } catch (error) {
     console.error("DELETE /api/admin/products/[id] error:", error);
     return NextResponse.json(
-      { success: false, error: "Gagal menghapus produk" },
+      { success: false, error: "Gagal menonaktifkan produk" },
       { status: 500 }
     );
   }

@@ -47,6 +47,7 @@ export default function AdminProdukPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filterCategory, setFilterCategory] = useState("all");
+  const [filterStatus, setFilterStatus] = useState("active");
   const [showModal, setShowModal] = useState(false);
   const [editId, setEditId] = useState(null);
   const [form, setForm] = useState({ ...emptyForm });
@@ -62,12 +63,24 @@ export default function AdminProdukPage() {
   const [importResult, setImportResult] = useState(null);
   const [bulkStockValue, setBulkStockValue] = useState(999);
   const fileInputRef = useRef(null);
+  const stockManagedByVoucherCodes = form.categoryId === "voucher-internet";
+  const selectedProducts = products.filter((product) => selected.has(product.id));
+  const hasSelectedManualStock = selectedProducts.some((product) => product.stockMode !== "voucher-codes");
+  const hasSelectedVoucherManagedStock = selectedProducts.some((product) => product.stockMode === "voucher-codes");
+  const productCountLabel =
+    filterStatus === "active"
+      ? "produk aktif ditemukan"
+      : filterStatus === "inactive"
+        ? "produk non-aktif ditemukan"
+        : "produk ditemukan";
 
   const fetchProducts = async () => {
     try {
       const params = new URLSearchParams();
       if (search) params.set("search", search);
       if (filterCategory !== "all") params.set("category", filterCategory);
+      if (filterStatus === "active") params.set("active", "true");
+      if (filterStatus === "inactive") params.set("active", "false");
 
       const res = await fetch(`/api/admin/products?${params}`);
       const data = await res.json();
@@ -79,11 +92,16 @@ export default function AdminProdukPage() {
     }
   };
 
-  useEffect(() => { fetchProducts(); }, [filterCategory]);
+  useEffect(() => {
+    setSelected(new Set());
+    setLoading(true);
+    fetchProducts();
+  }, [filterCategory, filterStatus]);
 
   const handleSearch = (e) => {
     e.preventDefault();
     setLoading(true);
+    setSelected(new Set());
     fetchProducts();
   };
 
@@ -131,8 +149,11 @@ export default function AdminProdukPage() {
         price: Number(form.price),
         originalPrice: form.originalPrice ? Number(form.originalPrice) : null,
         nominal: form.nominal ? Number(form.nominal) : null,
-        stock: Number(form.stock),
       };
+
+      if (!stockManagedByVoucherCodes) {
+        payload.stock = Number(form.stock);
+      }
 
       const url = editId ? `/api/admin/products/${editId}` : "/api/admin/products";
       const method = editId ? "PUT" : "POST";
@@ -162,19 +183,24 @@ export default function AdminProdukPage() {
   };
 
   const handleDelete = async (id, name) => {
-    if (!confirm(`Hapus produk "${name}"?`)) return;
+    if (!confirm(`Nonaktifkan produk "${name}"? Produk tidak akan tampil di toko.`)) return;
 
     try {
       const res = await fetch(`/api/admin/products/${id}`, { method: "DELETE" });
       const data = await res.json();
       if (data.success) {
-        setSuccess("Produk dihapus!");
+        setSuccess(data.message || "Produk dinonaktifkan!");
         setTimeout(() => setSuccess(""), 3000);
         setLoading(true);
         fetchProducts();
+      } else {
+        setError(data.error || "Gagal menonaktifkan produk");
+        setTimeout(() => setError(""), 3000);
       }
     } catch (err) {
       console.error(err);
+      setError("Gagal menonaktifkan produk");
+      setTimeout(() => setError(""), 3000);
     }
   };
 
@@ -320,7 +346,7 @@ export default function AdminProdukPage() {
           <h1 className="text-navy font-extrabold text-xl md:text-2xl flex items-center gap-2">
             <Package size={24} /> Kelola Produk
           </h1>
-          <p className="text-gray-400 text-sm mt-0.5">{products.length} produk ditemukan</p>
+          <p className="text-gray-400 text-sm mt-0.5">{products.length} {productCountLabel}</p>
         </div>
         <div className="flex items-center gap-2 self-start flex-wrap">
           <button onClick={() => setShowImport(true)} className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50">
@@ -346,9 +372,14 @@ export default function AdminProdukPage() {
           <button onClick={() => handleBulkAction("toggle-promo", { isPromo: false })} disabled={bulkProcessing} className="px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs font-semibold hover:bg-gray-200">🏷️ Promo OFF</button>
           <div className="flex items-center gap-1">
             <input type="number" value={bulkStockValue} onChange={(e) => setBulkStockValue(e.target.value)} className="w-20 px-2 py-1.5 border border-gray-200 rounded-lg text-xs" placeholder="Stok" />
-            <button onClick={() => handleBulkAction("update-stock", { stock: Number(bulkStockValue) })} disabled={bulkProcessing} className="px-3 py-1.5 bg-purple-50 text-purple-700 rounded-lg text-xs font-semibold hover:bg-purple-100">Set Stok</button>
+            <button onClick={() => handleBulkAction("update-stock", { stock: Number(bulkStockValue) })} disabled={bulkProcessing || !hasSelectedManualStock} className="px-3 py-1.5 bg-purple-50 text-purple-700 rounded-lg text-xs font-semibold hover:bg-purple-100 disabled:opacity-50">Set Stok</button>
           </div>
-          <button onClick={() => { if(confirm(`Hapus ${selected.size} produk?`)) handleBulkAction("delete"); }} disabled={bulkProcessing} className="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs font-semibold hover:bg-red-100 flex items-center gap-1 ml-auto"><Trash2 size={12} /> Hapus</button>
+          {hasSelectedVoucherManagedStock && (
+            <span className="text-[11px] text-gray-500">
+              Voucher internet memakai stok otomatis dari kode voucher.
+            </span>
+          )}
+          <button onClick={() => { if(confirm(`Nonaktifkan ${selected.size} produk?`)) handleBulkAction("delete"); }} disabled={bulkProcessing} className="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs font-semibold hover:bg-red-100 flex items-center gap-1 ml-auto"><Trash2 size={12} /> Nonaktifkan</button>
           <button onClick={() => setSelected(new Set())} className="px-3 py-1.5 bg-gray-100 text-gray-500 rounded-lg text-xs font-semibold hover:bg-gray-200"><X size={12} /></button>
           {bulkProcessing && <div className="w-4 h-4 rounded-full border-2 border-navy/30 border-t-navy animate-spin" />}
         </div>
@@ -388,6 +419,15 @@ export default function AdminProdukPage() {
           {categoryOptions.map((c) => (
             <option key={c.id} value={c.id}>{c.name}</option>
           ))}
+        </select>
+        <select
+          value={filterStatus}
+          onChange={(e) => setFilterStatus(e.target.value)}
+          className="px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy bg-white"
+        >
+          <option value="active">Aktif saja</option>
+          <option value="inactive">Non-aktif saja</option>
+          <option value="all">Semua status</option>
         </select>
       </div>
 
@@ -448,9 +488,16 @@ export default function AdminProdukPage() {
                       )}
                     </td>
                     <td className="px-4 py-3 text-center">
-                      <span className={`text-xs font-bold ${p.stock <= 10 ? "text-red-600" : "text-gray-600"}`}>
-                        {p.stock}
-                      </span>
+                      <div className="flex flex-col items-center gap-1">
+                        <span className={`text-xs font-bold ${p.stock <= 10 ? "text-red-600" : "text-gray-600"}`}>
+                          {p.stock}
+                        </span>
+                        {p.stockMode === "voucher-codes" && (
+                          <span className="text-[10px] font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
+                            Auto
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-center">
                       <button
@@ -473,8 +520,9 @@ export default function AdminProdukPage() {
                         </button>
                         <button
                           onClick={() => handleDelete(p.id, p.name)}
-                          className="p-1.5 rounded-lg hover:bg-red-50 text-red-500 transition-colors"
-                          title="Hapus"
+                          disabled={!p.isActive}
+                          className="p-1.5 rounded-lg hover:bg-red-50 text-red-500 transition-colors disabled:opacity-40 disabled:hover:bg-transparent"
+                          title={p.isActive ? "Nonaktifkan" : "Sudah non-aktif"}
                         >
                           <Trash2 size={14} />
                         </button>
@@ -547,9 +595,22 @@ export default function AdminProdukPage() {
                     className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy" placeholder="5000"/>
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-gray-600 mb-1 block">Stok</label>
-                  <input type="number" value={form.stock} onChange={(e) => setForm({...form, stock: e.target.value})}
-                    className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy" placeholder="999"/>
+                  <label className="text-xs font-semibold text-gray-600 mb-1 block">
+                    {stockManagedByVoucherCodes ? "Stok Otomatis" : "Stok"}
+                  </label>
+                  <input
+                    type="number"
+                    value={form.stock}
+                    onChange={(e) => setForm({...form, stock: e.target.value})}
+                    disabled={stockManagedByVoucherCodes}
+                    className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy disabled:bg-gray-50 disabled:text-gray-400"
+                    placeholder={stockManagedByVoucherCodes ? "Otomatis dari kode voucher" : "999"}
+                  />
+                  {stockManagedByVoucherCodes && (
+                    <p className="text-[11px] text-gray-400 mt-1">
+                      Nilai stok untuk voucher internet dihitung otomatis dari kode voucher yang tersedia.
+                    </p>
+                  )}
                 </div>
                 <div className="col-span-2">
                   <label className="text-xs font-semibold text-gray-600 mb-1 block">Deskripsi</label>
