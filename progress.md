@@ -1,6 +1,6 @@
 # Telko.Store — Progress Report
 
-**Log Terakhir:** 22 April 2026
+**Log Terakhir:** 23 April 2026
 
 ## ✅ Apa yang sudah selesai dilakukan
 
@@ -267,25 +267,61 @@
 - **Cleanup**: Dihapus `better-sqlite3` dari devDependencies (tidak lagi dibutuhkan setelah migrasi MySQL).
 - **Fix WAHA_GROUP_ID**: Ditambahkan variable `WAHA_GROUP_ID` ke `.env.local` yang sebelumnya hilang (menyebabkan group notification di-skip silent).
 
+### 19. Integrasi DOKU Payment Gateway + Auto-Routing Checkout (23 April 2026) 💳
+
+#### a. DOKU Payment Gateway — Gateway ke-3
+- **Library Baru `src/lib/doku.js`**: Integrasi DOKU Checkout API v1 dengan autentikasi HMAC-SHA256 signature. Fungsi: `createDokuTransaction()`, `verifyDokuWebhookSignature()`, `isDokuAvailable()`, `clearDokuCache()`.
+- **Webhook DOKU**: Endpoint `POST /api/webhook/doku` dengan fitur lengkap setara Midtrans dan Pakasir (verifikasi signature, validasi amount, idempotency, stock rollback, voucher auto-assign, WA notifikasi).
+- **Status Mapping**: DOKU `SUCCESS`/`COMPLETED` → paid, `FAILED`/`EXPIRED`/`DENIED` → failed.
+
+#### b. Auto-Routing Checkout (Pelanggan Tidak Pilih Gateway)
+- **Sebelumnya**: Pelanggan harus memilih antara Midtrans dan Pakasir di halaman checkout.
+- **Sesudah**: Gateway ditentukan 100% oleh admin. Pelanggan hanya melihat tombol "Bayar Sekarang" dan otomatis diarahkan ke gateway yang aktif.
+- **`getActiveGateway()`**: Fungsi helper di `GET /api/gateway/status` yang menentukan gateway aktif dari database `gateway_settings`. Digunakan oleh checkout API dan frontend.
+- **Mutual Exclusivity**: Hanya 1 gateway aktif pada satu waktu. Saat admin mengaktifkan satu gateway, yang lain otomatis nonaktif.
+
+#### c. Admin Pengaturan — 3 Gateway + Banner Aktif
+- **Halaman Pengaturan Diperbarui**: Sekarang menampilkan 3 card gateway (Midtrans, Pakasir, DOKU) + card WAHA.
+- **Banner Gateway Aktif**: Di atas halaman, banner gradient menampilkan gateway mana yang sedang aktif.
+- **DOKU Config**: Client ID + Secret Key, toggle Sandbox/Production, info Notification URL.
+- **Simpan dengan Exclusivity**: Saat simpan gateway aktif, otomatis nonaktifkan 2 gateway lainnya.
+
+#### d. Frontend Cleanup
+- **Hapus UI Pilih Gateway**: Tidak ada lagi tombol "Midtrans" / "Pakasir" di Step 3 checkout.
+- **Label Dinamis**: Security badge dan konfirmasi modal menampilkan label gateway aktif ("Transaksi aman & terenkripsi via DOKU").
+- **Payment Finish Page**: Support status DOKU (`SUCCESS`, `FAILED`, `EXPIRED`, `DENIED`) + helper `getGatewayLabel()`.
+
+#### e. Fix Order Status Check — Routing 3 Gateway
+- **Sebelumnya**: `/api/orders/[id]/check` hanya routing ke Midtrans atau Pakasir — order DOKU menyebabkan error "Midtrans dinonaktifkan".
+- **Sesudah**: Routing berdasarkan `order.paymentGateway` — `midtrans` → Midtrans Core API, `pakasir` → Pakasir API, `doku` → return cached status (DOKU tidak support status polling, update via webhook saja).
+
+#### f. Catatan DOKU
+- DOKU **tidak menyediakan API untuk cek status manual** seperti Midtrans/Pakasir. Update status hanya via HTTP Notification (webhook).
+- Webhook URL perlu diset di **DOKU Back Office → Settings → Payment Settings → Configure** per metode pembayaran.
+- Akun DOKU harus **verified** sebelum fitur notification aktif.
+
 ---
 
 
 ## 🛠️ Langkah Lanjutan
 
-1. **Konfigurasi Midtrans Dashboard** (PENTING):
-   - Notification URL → `https://telko.store/api/webhook/midtrans` (hapus `/public/` dari URL lama)
-   - Finish Redirect URL → `https://telko.store/payment/finish` (bukan `/checkout/finish`)
-   - Snap Preferences → Finish URL: `https://telko.store/payment/finish`, Error URL: `https://telko.store/payment/finish?status=error`
+1. **Konfigurasi Webhook URLs** (PENTING):
+   - **Midtrans**: Notification URL → `https://telko.store/api/webhook/midtrans`
+   - **Pakasir**: Webhook URL → `https://telko.store/api/webhook/pakasir`
+   - **DOKU**: Notification URL → `https://telko.store/api/webhook/doku` (setelah akun verified)
 
-2. **Buat OAuth App Google & Facebook**:
+2. **Verifikasi Akun DOKU**:
+   - Klik "Update Now" di banner kuning DOKU Dashboard untuk menyelesaikan onboarding.
+   - Setelah verified, set notification URL per payment method di Settings → Payment Settings.
+
+3. **Buat OAuth App Google & Facebook**:
    - Google: [Google Cloud Console](https://console.cloud.google.com/) → Credentials → OAuth 2.0 Client ID. Redirect URI: `https://telko.store/api/auth/callback/google`.
    - Facebook: [Facebook Developers](https://developers.facebook.com/) → Facebook Login. Redirect URI: `https://telko.store/api/auth/callback/facebook`.
-   - Isi Client ID & Secret di `.env.local` dan `.env.local` di VPS.
 
-3. **Perluasan Katalog Produk**:
+4. **Perluasan Katalog Produk**:
    Melengkapi data produk tambahan (paket spesifik Telkomsel, Indosat, XL, dll) melalui admin dashboard.
 
-4. **Integrasi Fulfillment API**:
+5. **Integrasi Fulfillment API**:
    Menghubungkan dengan provider (Digipos / API reseller) untuk pengiriman pulsa & paket data otomatis setelah pembayaran berhasil.
 
 ---
@@ -301,6 +337,7 @@ telko.store/
 │   │   ├── whatsapp.js                # Shared WA notification helper
 │   │   ├── midtrans.js                # Shared Midtrans helper
 │   │   ├── pakasir.js                 # Pakasir payment gateway helper
+│   │   ├── doku.js                    # DOKU payment gateway helper (HMAC-SHA256)
 │   │   ├── voucher.js                 # Voucher auto-assign + redeem helper
 │   │   ├── jwt.js                     # Admin JWT token management
 │   │   ├── rate-limit.js              # In-memory rate limiter
@@ -331,18 +368,19 @@ telko.store/
 │   │   │   ├── login/page.js
 │   │   │   ├── produk/page.js         # CRUD produk
 │   │   │   ├── pesanan/page.js        # Manajemen pesanan
-│   │   │   ├── pengaturan/page.js     # Gateway settings (Midtrans, Pakasir, WAHA)
+│   │   │   ├── pengaturan/page.js     # Gateway settings (Midtrans, Pakasir, DOKU, WAHA)
 │   │   │   ├── voucher/page.js        # Voucher management (CRUD + 1-click redeem)
 │   │   │   ├── profil/page.js         # Admin profile (ubah kunci)
 │   │   │   └── users/page.js          # User management
 │   │   └── api/
 │   │       ├── health/route.js        # Health check endpoint
-│   │       ├── checkout/route.js      # Checkout + Dual Gateway
+│   │       ├── checkout/route.js      # Checkout + Auto-routing (3 gateways)
 │   │       ├── gateway/
-│   │       │   └── status/route.js    # Gateway availability check
+│   │       │   └── status/route.js    # Active gateway check + getActiveGateway()
 │   │       ├── webhook/
 │   │       │   ├── midtrans/route.js  # Midtrans webhook (signature verified)
-│   │       │   └── pakasir/route.js   # Pakasir webhook (API-verified)
+│   │       │   ├── pakasir/route.js   # Pakasir webhook (API-verified)
+│   │       │   └── doku/route.js      # DOKU webhook (HMAC-SHA256 verified)
 │   │       ├── contact/route.js       # Contact form → WA group
 │   │       ├── products/route.js
 │   │       ├── categories/route.js
