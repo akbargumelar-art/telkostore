@@ -16,6 +16,19 @@ echo ""
 
 cd "$APP_DIR"
 
+# Load .env.local into shell environment so PM2 receives the latest runtime vars
+if [ -f ".env.local" ]; then
+  echo "📄 Loading .env.local into environment..."
+  set -a
+  source <(grep -v '^\s*#' .env.local | grep -v '^\s*$')
+  set +a
+  echo "✅ Environment loaded"
+  echo ""
+else
+  echo "⚠️  .env.local not found. PM2 will use existing environment."
+  echo ""
+fi
+
 # 1. Pull latest dari GitHub
 echo "📥 Pulling latest from GitHub ($BRANCH)..."
 git fetch origin
