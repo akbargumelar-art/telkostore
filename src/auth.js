@@ -1,5 +1,5 @@
 // ==============================
-// TELKO.STORE — Auth Configuration
+// TELKO.STORE - Auth Configuration
 // Auth.js v5 (NextAuth) + Google & Facebook
 // ==============================
 
@@ -11,17 +11,58 @@ import { users } from "@/db/schema.js";
 import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
-export const { handlers, signIn, signOut, auth } = NextAuth({
-  providers: [
-    Google({
-      clientId: process.env.GOOGLE_CLIENT_ID,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-    }),
-    Facebook({
-      clientId: process.env.FACEBOOK_CLIENT_ID,
-      clientSecret: process.env.FACEBOOK_CLIENT_SECRET,
-    }),
-  ],
+function getProviderCredentials() {
+  return {
+    googleClientId:
+      process.env.GOOGLE_CLIENT_ID || process.env.AUTH_GOOGLE_ID || "",
+    googleClientSecret:
+      process.env.GOOGLE_CLIENT_SECRET || process.env.AUTH_GOOGLE_SECRET || "",
+    facebookClientId:
+      process.env.FACEBOOK_CLIENT_ID || process.env.AUTH_FACEBOOK_ID || "",
+    facebookClientSecret:
+      process.env.FACEBOOK_CLIENT_SECRET ||
+      process.env.AUTH_FACEBOOK_SECRET ||
+      "",
+  };
+}
+
+function buildProviders() {
+  const {
+    googleClientId,
+    googleClientSecret,
+    facebookClientId,
+    facebookClientSecret,
+  } = getProviderCredentials();
+
+  const providers = [];
+
+  if (googleClientId && googleClientSecret) {
+    providers.push(
+      Google({
+        clientId: googleClientId,
+        clientSecret: googleClientSecret,
+      })
+    );
+  } else {
+    console.warn("[auth] Google OAuth disabled: missing client ID or secret");
+  }
+
+  if (facebookClientId && facebookClientSecret) {
+    providers.push(
+      Facebook({
+        clientId: facebookClientId,
+        clientSecret: facebookClientSecret,
+      })
+    );
+  } else {
+    console.warn("[auth] Facebook OAuth disabled: missing client ID or secret");
+  }
+
+  return providers;
+}
+
+export const { handlers, signIn, signOut, auth } = NextAuth(() => ({
+  providers: buildProviders(),
   pages: {
     signIn: "/account",
   },
@@ -29,7 +70,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     strategy: "jwt",
   },
   callbacks: {
-    // On sign in → upsert user in our database
+    // On sign in -> upsert user in our database
     async signIn({ user, account }) {
       try {
         const existing = await db
@@ -66,7 +107,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     },
 
     // Attach our DB user ID to the JWT token
-    async jwt({ token, user, trigger }) {
+    async jwt({ token, user }) {
       if (user?.email) {
         try {
           const dbUser = await db
@@ -101,4 +142,4 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       return session;
     },
   },
-});
+}));
