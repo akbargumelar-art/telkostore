@@ -9,6 +9,7 @@ import {
   isConfiguredAdminIdentifier,
   isValidAdminPassword,
 } from "@/lib/admin-auth";
+import { verifyAdminUserPassword } from "@/lib/admin-user-password";
 import { and, eq } from "drizzle-orm";
 
 export async function POST(request) {
@@ -37,6 +38,7 @@ export async function POST(request) {
       body.identifier || body.username || body.email || ""
     ).trim();
     const password = String(body.password || "").trim();
+    const normalizedIdentifier = identifier.toLowerCase();
 
     if (!hasAdminCredentialsConfigured()) {
       return NextResponse.json(
@@ -69,24 +71,27 @@ export async function POST(request) {
       );
     }
 
-    if (!isValidAdminPassword(password)) {
-      return NextResponse.json(
-        { success: false, error: "Password admin salah" },
-        { status: 401 }
-      );
-    }
+    let adminUser = null;
 
-    let isAllowedAdmin = isConfiguredAdminIdentifier(identifier);
-
-    if (!isAllowedAdmin && identifier.includes("@")) {
-      const adminUser = await db
-        .select({ id: users.id })
+    if (normalizedIdentifier.includes("@")) {
+      const matchingAdmins = await db
+        .select({
+          id: users.id,
+          passwordHash: users.passwordHash,
+        })
         .from(users)
-        .where(and(eq(users.email, identifier), eq(users.role, "admin")))
+        .where(and(eq(users.email, normalizedIdentifier), eq(users.role, "admin")))
         .limit(1);
 
-      isAllowedAdmin = adminUser.length > 0;
+      adminUser = matchingAdmins[0] || null;
     }
+
+    const isAllowedAdmin =
+      isConfiguredAdminIdentifier(identifier) || Boolean(adminUser);
+    const isPersonalPasswordValid =
+      Boolean(adminUser?.passwordHash) &&
+      verifyAdminUserPassword(password, adminUser.passwordHash);
+    const isGlobalPasswordValid = isValidAdminPassword(password);
 
     if (!isAllowedAdmin) {
       return NextResponse.json(
@@ -95,6 +100,13 @@ export async function POST(request) {
           error:
             "Username/email ini belum terdaftar sebagai admin control panel.",
         },
+        { status: 401 }
+      );
+    }
+
+    if (!isPersonalPasswordValid && !isGlobalPasswordValid) {
+      return NextResponse.json(
+        { success: false, error: "Password admin salah" },
         { status: 401 }
       );
     }

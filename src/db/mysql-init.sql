@@ -16,6 +16,8 @@ CREATE TABLE IF NOT EXISTS users (
   email VARCHAR(255) UNIQUE,
   image TEXT,
   phone VARCHAR(20),
+  role VARCHAR(20) DEFAULT 'user',
+  password_hash VARCHAR(255),
   provider VARCHAR(50),
   provider_id VARCHAR(255),
   created_at VARCHAR(50)

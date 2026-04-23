@@ -134,13 +134,18 @@ fi
 echo ""
 
 # ===== STEP 6: BUILD =====
-echo "🔨 Step 6: Building Next.js..."
+echo "🗄️ Step 6: Running admin password migration..."
+npm run db:migrate-admin-password
+echo "   ✅ Admin password migration complete"
+echo ""
+
+echo "🔨 Step 7: Building Next.js..."
 npm run build
 echo "   ✅ Build complete"
 echo ""
 
-# ===== STEP 7: RESTART PM2 =====
-echo "🔄 Step 7: Restarting application..."
+# ===== STEP 8: RESTART PM2 =====
+echo "🔄 Step 8: Restarting application..."
 if command -v pm2 &> /dev/null; then
   pm2 restart telkostore-app --update-env 2>/dev/null || pm2 start npm --name "telkostore-app" -- start
   pm2 save 2>/dev/null
@@ -171,8 +176,8 @@ else
   HEALTH_URL="http://127.0.0.1:3000/api/health"
 fi
 
-# ===== STEP 8: HEALTH CHECK =====
-echo "🏥 Step 8: Health check..."
+# ===== STEP 9: HEALTH CHECK =====
+echo "🏥 Step 9: Health check..."
 sleep 3  # Wait for app to start
 
 echo "   Checking: $HEALTH_URL"
@@ -192,7 +197,7 @@ echo "🎉 Migration deploy complete!"
 echo ""
 echo "📋 Checklist manual setelah ini:"
 echo "   1. Buka https://telko.store/ → pastikan produk muncul"
-echo "   2. Login admin → /admin/login"
+echo "   2. Login admin → /control/login"
 echo "   3. Update Midtrans Dashboard webhook URL:"
 echo "      → https://telko.store/api/webhook/midtrans"
 echo "   4. Test checkout end-to-end"

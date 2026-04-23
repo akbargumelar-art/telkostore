@@ -42,6 +42,12 @@ npm install --production=false
 echo "✅ Dependencies updated"
 echo ""
 
+# 2.5. Run lightweight DB migrations needed by runtime auth
+echo "🗄️ Running database migrations..."
+npm run db:migrate-admin-password
+echo "✅ Database migration selesai"
+echo ""
+
 # 3. Build Next.js
 echo "🔨 Building Next.js..."
 npm run build

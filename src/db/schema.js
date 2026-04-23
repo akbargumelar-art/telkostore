@@ -13,6 +13,7 @@ export const users = mysqlTable("users", {
   image: text("image"),
   phone: varchar("phone", { length: 20 }),
   role: varchar("role", { length: 20 }).default("user"), // user, admin
+  passwordHash: varchar("password_hash", { length: 255 }),
   provider: varchar("provider", { length: 50 }), // google, facebook
   providerId: varchar("provider_id", { length: 255 }),
   createdAt: varchar("created_at", { length: 50 }).$defaultFn(() => new Date().toISOString()),

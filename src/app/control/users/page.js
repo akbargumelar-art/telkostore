@@ -134,7 +134,7 @@ export default function AdminUsersPage() {
       });
       const data = await res.json();
       if (data.success) {
-        showSuccess(`Role diubah menjadi ${newRole}`);
+        showSuccess(data.message || `Role diubah menjadi ${newRole}`);
         setLoading(true);
         fetchUsers();
       }
@@ -232,12 +232,15 @@ export default function AdminUsersPage() {
 
       <div className="mb-4 bg-blue-50 border border-blue-100 rounded-2xl p-4">
         <p className="text-blue-900 text-sm font-semibold">
-          Role admin sekarang juga berlaku untuk login Google/Facebook.
+          Role admin sekarang berlaku untuk Google/Facebook dan login manual.
         </p>
         <p className="text-blue-800 text-xs mt-1 leading-relaxed">
-          Jika user dibuat manual, ia tetap harus login dengan Google atau Facebook
-          memakai email yang sama. Alternatif lainnya, admin bisa masuk lewat
-          username/email + password khusus di /control/login.
+          Jika user dibuat manual sebagai admin, ia bisa login dengan email adminnya
+          sendiri di <span className="font-mono font-bold">/control/login</span>.
+          Google/Facebook juga tetap bisa dipakai jika emailnya sama. Admin manual
+          otomatis mendapat password
+          default <span className="font-mono font-bold">telko.store@2026</span>{" "}
+          saat pertama kali dibuat.
         </p>
       </div>
 
@@ -461,7 +464,7 @@ export default function AdminUsersPage() {
               <div>
                 <h3 className="font-bold text-navy text-base">Tambah User Baru</h3>
                 <p className="text-gray-400 text-xs">
-                  Tetapkan role admin atau user untuk email OAuth yang akan dipakai login
+                  Tetapkan role admin atau user untuk akun yang akan dipakai login
                 </p>
               </div>
             </div>
@@ -523,8 +526,9 @@ export default function AdminUsersPage() {
                   <ShieldCheck size={14} className="text-purple-600 mt-0.5 shrink-0" />
                   <p className="text-purple-700 text-xs">
                     Admin dapat masuk ke dashboard lewat Google/Facebook dengan email
-                    yang sama, atau memakai username/email + password admin di
-                    /control/login.
+                    yang sama, atau memakai email admin + password default{" "}
+                    <span className="font-mono font-bold">telko.store@2026</span>{" "}
+                    di /control/login.
                   </p>
                 </div>
               )}

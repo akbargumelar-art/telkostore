@@ -200,6 +200,11 @@ export default function ControlLoginPage() {
                   Gunakan nilai password admin yang tersimpan di server, bukan
                   nama variabel <span className="font-mono">ADMIN_LOGIN_PASSWORD</span>.
                 </p>
+                <p className="text-[11px] text-gray-400 mt-1 leading-relaxed">
+                  Untuk admin yang dibuat manual dari halaman user, password
+                  default-nya adalah{" "}
+                  <span className="font-mono">telko.store@2026</span>.
+                </p>
               </div>
             </div>
 

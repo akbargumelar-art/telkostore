@@ -3,6 +3,22 @@ import { NextResponse } from "next/server";
 import db from "@/db/index.js";
 import { users, orders } from "@/db/schema.js";
 import { eq, desc } from "drizzle-orm";
+import {
+  getDefaultAdminUserPassword,
+  hashAdminUserPassword,
+} from "@/lib/admin-user-password";
+
+const userDetailSelect = {
+  id: users.id,
+  name: users.name,
+  email: users.email,
+  image: users.image,
+  phone: users.phone,
+  role: users.role,
+  provider: users.provider,
+  providerId: users.providerId,
+  createdAt: users.createdAt,
+};
 
 // GET — User detail + orders
 export async function GET(request, { params }) {
@@ -10,7 +26,7 @@ export async function GET(request, { params }) {
     const { id } = await params;
 
     const [user] = await db
-      .select()
+      .select(userDetailSelect)
       .from(users)
       .where(eq(users.id, id))
       .limit(1);
@@ -80,6 +96,16 @@ export async function PUT(request, { params }) {
       );
     }
 
+    if (
+      updateData.role === "admin" &&
+      existing.role !== "admin" &&
+      !existing.passwordHash
+    ) {
+      updateData.passwordHash = hashAdminUserPassword(
+        getDefaultAdminUserPassword()
+      );
+    }
+
     if (Object.keys(updateData).length === 0) {
       return NextResponse.json(
         { success: false, error: "Tidak ada data yang diperbarui" },
@@ -91,7 +117,10 @@ export async function PUT(request, { params }) {
 
     return NextResponse.json({
       success: true,
-      message: "User berhasil diperbarui",
+      message:
+        updateData.role === "admin" && existing.role !== "admin"
+          ? `User berhasil dijadikan admin. Password default: ${getDefaultAdminUserPassword()}`
+          : "User berhasil diperbarui",
     });
   } catch (error) {
     console.error("PUT /api/admin/users/[id] error:", error);
@@ -121,4 +150,3 @@ export async function DELETE(request, { params }) {
     );
   }
 }
-

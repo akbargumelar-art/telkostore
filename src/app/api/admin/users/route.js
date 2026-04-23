@@ -5,13 +5,29 @@ import db from "@/db/index.js";
 import { users } from "@/db/schema.js";
 import { like, or, desc, eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
+import {
+  getDefaultAdminUserPassword,
+  hashAdminUserPassword,
+} from "@/lib/admin-user-password";
+
+const userListSelect = {
+  id: users.id,
+  name: users.name,
+  email: users.email,
+  image: users.image,
+  phone: users.phone,
+  role: users.role,
+  provider: users.provider,
+  providerId: users.providerId,
+  createdAt: users.createdAt,
+};
 
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
     const search = searchParams.get("search");
 
-    let query = db.select().from(users);
+    let query = db.select(userListSelect).from(users);
 
     if (search) {
       query = query.where(
@@ -74,6 +90,10 @@ export async function POST(request) {
 
     const userId = `USR-${nanoid(12)}`;
     const now = new Date().toISOString();
+    const passwordHash =
+      userRole === "admin"
+        ? hashAdminUserPassword(getDefaultAdminUserPassword())
+        : null;
 
     await db.insert(users).values({
       id: userId,
@@ -81,6 +101,7 @@ export async function POST(request) {
       email: email.trim().toLowerCase(),
       phone: phone?.trim() || null,
       role: userRole,
+      passwordHash,
       provider: "manual",
       providerId: null,
       image: null,
@@ -89,8 +110,16 @@ export async function POST(request) {
 
     return NextResponse.json({
       success: true,
-      message: `User ${name} berhasil dibuat sebagai ${userRole}`,
-      data: { id: userId, name: name.trim(), email: email.trim().toLowerCase(), role: userRole },
+      message:
+        userRole === "admin"
+          ? `Admin ${name.trim()} berhasil dibuat. Password default: ${getDefaultAdminUserPassword()}`
+          : `User ${name.trim()} berhasil dibuat sebagai ${userRole}`,
+      data: {
+        id: userId,
+        name: name.trim(),
+        email: email.trim().toLowerCase(),
+        role: userRole,
+      },
     });
   } catch (error) {
     console.error("POST /api/admin/users error:", error);
