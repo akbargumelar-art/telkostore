@@ -48,6 +48,100 @@ async function getBodyText(page) {
   }
 }
 
+async function findInputByHints(page, hints, timeout = 10_000) {
+  const deadline = Date.now() + timeout;
+
+  while (Date.now() < deadline) {
+    const result = await page.evaluate((rawHints) => {
+      const normalize = (value) =>
+        String(value || "")
+          .replace(/\s+/g, " ")
+          .trim()
+          .toLowerCase();
+
+      const hintSet = rawHints.map((hint) => normalize(hint));
+      const inputs = Array.from(document.querySelectorAll("input"));
+
+      for (const input of inputs) {
+        const rect = input.getBoundingClientRect();
+        const style = window.getComputedStyle(input);
+        const descriptor = [
+          input.id,
+          input.name,
+          input.type,
+          input.getAttribute("aria-label"),
+          input.getAttribute("placeholder"),
+          input.getAttribute("formcontrolname"),
+        ]
+          .filter(Boolean)
+          .map((item) => normalize(item))
+          .join(" ");
+
+        const visible =
+          rect.width > 0 &&
+          rect.height > 0 &&
+          style.display !== "none" &&
+          style.visibility !== "hidden" &&
+          style.opacity !== "0";
+
+        if (!visible || !descriptor) continue;
+
+        if (hintSet.some((hint) => descriptor.includes(hint))) {
+          return {
+            found: true,
+            selector:
+              input.id
+                ? `#${input.id}`
+                : input.getAttribute("aria-label")
+                ? `input[aria-label="${input.getAttribute("aria-label")}"]`
+                : input.getAttribute("placeholder")
+                ? `input[placeholder="${input.getAttribute("placeholder")}"]`
+                : null,
+          };
+        }
+      }
+
+      return { found: false, selector: null };
+    }, hints);
+
+    if (result?.found && result.selector) {
+      try {
+        const handle = await page.$(result.selector);
+        if (handle) {
+          return handle;
+        }
+      } catch {}
+    }
+
+    await wait(300);
+  }
+
+  return null;
+}
+
+async function clickRadioByValue(page, value) {
+  return page.evaluate((targetValue) => {
+    const radio = document.querySelector(`input[type="radio"][value="${targetValue}"]`);
+    if (!radio) return false;
+
+    const rect = radio.getBoundingClientRect();
+    const style = window.getComputedStyle(radio);
+    const visible =
+      rect.width > 0 &&
+      rect.height > 0 &&
+      style.display !== "none" &&
+      style.visibility !== "hidden" &&
+      style.opacity !== "0";
+
+    if (!visible) return false;
+
+    if (radio.checked) return true;
+
+    radio.click();
+    return true;
+  }, value);
+}
+
 function createResponseTracker(page, matcher) {
   const tracked = [];
 
@@ -481,6 +575,9 @@ async function redeemTelkomsel(browser, phone, code) {
 
   console.log("Waiting for Telkomsel form to load...");
 
+  await clickRadioByValue(page, "voucher").catch(() => false);
+  await wait(500);
+
   const phoneSelectors = [
     'input[aria-label="MSISDN"]',
     'input[placeholder="Masukan Nomor Telkomsel Anda"]',
@@ -500,6 +597,11 @@ async function redeemTelkomsel(browser, phone, code) {
   }
 
   if (!phoneInput) {
+    phoneInput = await findInputByHints(page, ["msisdn", "nomor telkomsel"], 12_000);
+  }
+
+  if (!phoneInput) {
+    tracker.detach();
     return {
       success: false,
       message: "Telkomsel: Phone input field not found - page structure may have changed",
@@ -522,7 +624,7 @@ async function redeemTelkomsel(browser, phone, code) {
   let voucherInput = null;
   for (const sel of voucherSelectors) {
     try {
-      voucherInput = await page.waitForSelector(sel, { timeout: 5_000 });
+      voucherInput = await page.waitForSelector(sel, { timeout: 10_000 });
       if (voucherInput) {
         console.log(`Telkomsel voucher input found: ${sel}`);
         break;
@@ -531,6 +633,46 @@ async function redeemTelkomsel(browser, phone, code) {
   }
 
   if (!voucherInput) {
+    voucherInput = await findInputByHints(page, ["kode voucher", "voucher"], 12_000);
+  }
+
+  if (!voucherInput) {
+    console.warn("Telkomsel voucher input not found on first pass, retrying after soft reload...");
+    await page.reload({ waitUntil: "networkidle2", timeout: PAGE_LOAD_TIMEOUT }).catch(() => null);
+    await clickRadioByValue(page, "voucher").catch(() => false);
+    await wait(800);
+
+    for (const sel of phoneSelectors) {
+      try {
+        phoneInput = await page.$(sel);
+        if (phoneInput) break;
+      } catch {}
+    }
+    if (!phoneInput) {
+      phoneInput = await findInputByHints(page, ["msisdn", "nomor telkomsel"], 8_000);
+    }
+    if (phoneInput) {
+      await phoneInput.click({ clickCount: 3 }).catch(() => null);
+      await phoneInput.type(phone, { delay: INPUT_DELAY }).catch(() => null);
+      await wait(800);
+    }
+
+    for (const sel of voucherSelectors) {
+      try {
+        voucherInput = await page.$(sel);
+        if (voucherInput) {
+          console.log(`Telkomsel voucher input found after reload: ${sel}`);
+          break;
+        }
+      } catch {}
+    }
+    if (!voucherInput) {
+      voucherInput = await findInputByHints(page, ["kode voucher", "voucher"], 8_000);
+    }
+  }
+
+  if (!voucherInput) {
+    tracker.detach();
     return {
       success: false,
       message: "Telkomsel: Voucher input field not found - page structure may have changed",
