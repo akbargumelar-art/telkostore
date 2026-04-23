@@ -76,6 +76,13 @@ export default function HomePage() {
     return result;
   }, [activeCategory, activeValidity, products]);
 
+  const soldOutProductCount = useMemo(
+    () => filteredProducts.filter((p) => Number(p.stock ?? 0) <= 0).length,
+    [filteredProducts]
+  );
+  const availableProductCount =
+    filteredProducts.length - soldOutProductCount;
+
   const getProductsByCategory = (catId) =>
     products.filter((p) => p.categoryId === catId);
 
@@ -241,8 +248,15 @@ export default function HomePage() {
                     )}
                   </h2>
                   <p className="text-gray-400 text-xs mt-0.5">
-                    {filteredProducts.length} produk tersedia
-                    {activeValidity !== "all" && ` • Masa aktif: ${activeValidity}`}
+                    {soldOutProductCount > 0
+                      ? `${availableProductCount} tersedia dari ${filteredProducts.length} produk`
+                      : `${filteredProducts.length} produk tersedia`}
+                    {soldOutProductCount > 0 && (
+                      <> {"\u2022"} {soldOutProductCount} habis karena laris</>
+                    )}
+                    {activeValidity !== "all" && (
+                      <> {"\u2022"} Masa aktif: {activeValidity}</>
+                    )}
                   </p>
                 </div>
               </div>
