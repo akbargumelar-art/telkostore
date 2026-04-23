@@ -20,20 +20,20 @@ import {
 import { useState } from "react";
 
 const navItems = [
-  { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/admin/produk", label: "Produk", icon: Package },
-  { href: "/admin/pesanan", label: "Pesanan", icon: ShoppingCart },
-  { href: "/admin/voucher", label: "Voucher", icon: Ticket },
-  { href: "/admin/users", label: "Users", icon: Users },
-  { href: "/admin/profil", label: "Profil", icon: User },
-  { href: "/admin/pengaturan", label: "Pengaturan", icon: Settings },
+  { href: "/control", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/control/produk", label: "Produk", icon: Package },
+  { href: "/control/pesanan", label: "Pesanan", icon: ShoppingCart },
+  { href: "/control/voucher", label: "Voucher", icon: Ticket },
+  { href: "/control/users", label: "Users", icon: Users },
+  { href: "/control/profil", label: "Profil", icon: User },
+  { href: "/control/pengaturan", label: "Pengaturan", icon: Settings },
 ];
 
 function SidebarContent({ pathname, onLogout }) {
   return (
     <>
       <div className="px-5 py-5 border-b border-gray-100">
-        <Link href="/admin" className="flex items-center gap-2.5">
+        <Link href="/control" className="flex items-center gap-2.5">
           <div className="w-9 h-9 rounded-xl gradient-navy flex items-center justify-center">
             <Store size={18} className="text-white" />
           </div>
@@ -41,7 +41,7 @@ function SidebarContent({ pathname, onLogout }) {
             <h1 className="font-extrabold text-sm text-navy leading-tight">
               Telko<span className="text-tred">.Store</span>
             </h1>
-            <p className="text-[10px] text-gray-400 font-medium">Admin Panel</p>
+            <p className="text-[10px] text-gray-400 font-medium">Control Panel</p>
           </div>
         </Link>
       </div>
@@ -50,7 +50,7 @@ function SidebarContent({ pathname, onLogout }) {
         {navItems.map((item) => {
           const isActive =
             pathname === item.href ||
-            (item.href !== "/admin" && pathname.startsWith(item.href));
+            (item.href !== "/control" && pathname.startsWith(item.href));
           const Icon = item.icon;
           return (
             <Link
@@ -90,12 +90,12 @@ function SidebarContent({ pathname, onLogout }) {
   );
 }
 
-export default function AdminLayout({ children }) {
+export default function ControlLayout({ children }) {
   const pathname = usePathname();
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  if (pathname === "/admin/login") {
+  if (pathname === "/control/login") {
     return children;
   }
 
@@ -109,7 +109,7 @@ export default function AdminLayout({ children }) {
     }
 
     document.cookie = "admin_token=; path=/; max-age=0";
-    router.push("/admin/login");
+    router.push("/control/login");
     router.refresh();
   };
 
@@ -146,7 +146,7 @@ export default function AdminLayout({ children }) {
             <Menu size={18} />
           </button>
           <h1 className="font-bold text-sm text-navy">
-            Telko<span className="text-tred">.Store</span> Admin
+            Telko<span className="text-tred">.Store</span> Control
           </h1>
         </header>
 

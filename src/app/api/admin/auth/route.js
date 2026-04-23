@@ -1,7 +1,11 @@
-// POST /api/admin/auth — Login admin with secret key (JWT-based)
+// POST /api/admin/auth — Login control panel with admin credentials
 import { NextResponse } from "next/server";
 import { createAdminToken } from "@/lib/jwt";
 import { adminLoginLimiter } from "@/lib/rate-limit";
+import {
+  hasAdminCredentialsConfigured,
+  isValidAdminCredentials,
+} from "@/lib/admin-auth";
 
 export async function POST(request) {
   try {
@@ -24,27 +28,41 @@ export async function POST(request) {
       );
     }
 
-    const { secret } = await request.json();
-    const adminSecret = process.env.ADMIN_SECRET;
+    const body = await request.json();
+    const identifier = String(
+      body.identifier || body.username || body.email || ""
+    ).trim();
+    const password = String(body.password || "").trim();
 
-    if (!adminSecret) {
+    if (!hasAdminCredentialsConfigured()) {
       return NextResponse.json(
-        { success: false, error: "Server configuration error" },
+        {
+          success: false,
+          error: "Kredensial admin belum dikonfigurasi di server",
+        },
         { status: 500 }
       );
     }
 
-    if (secret !== adminSecret) {
+    if (!identifier || !password) {
       return NextResponse.json(
-        { success: false, error: "Kunci admin salah" },
+        {
+          success: false,
+          error: "Username/email dan password admin wajib diisi",
+        },
+        { status: 400 }
+      );
+    }
+
+    if (!isValidAdminCredentials(identifier, password)) {
+      return NextResponse.json(
+        { success: false, error: "Username/email atau password admin salah" },
         { status: 401 }
       );
     }
 
-    // Generate signed JWT token (NOT the plain-text secret)
     const token = createAdminToken();
 
-    // Set auth cookie with JWT
     const response = NextResponse.json({ success: true });
     response.cookies.set("admin_token", token, {
       httpOnly: true,
@@ -55,7 +73,7 @@ export async function POST(request) {
     });
 
     return response;
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { success: false, error: "Login gagal" },
       { status: 500 }

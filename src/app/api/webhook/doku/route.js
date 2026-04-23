@@ -254,7 +254,7 @@ export async function POST(request) {
       try {
         let groupMsg = buildGroupPaymentSuccessMsg(order, channelId || "doku");
         if (!isVoucher) {
-          groupMsg += `\n\n⚡ *AKSI DIPERLUKAN:*\nProduk ini perlu diproses manual oleh admin.\n🔗 ${process.env.NEXT_PUBLIC_BASE_URL}/admin/pesanan`;
+          groupMsg += `\n\n⚡ *AKSI DIPERLUKAN:*\nProduk ini perlu diproses manual oleh admin.\n🔗 ${process.env.NEXT_PUBLIC_BASE_URL}/control/pesanan`;
         }
         await sendGroupNotification(groupMsg);
       } catch (waErr) {

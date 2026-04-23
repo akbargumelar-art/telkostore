@@ -121,7 +121,7 @@ export default function AdminDashboard() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-navy font-extrabold text-xl md:text-2xl">Dashboard</h1>
-          <p className="text-gray-400 text-sm mt-0.5">Selamat datang di admin panel</p>
+          <p className="text-gray-400 text-sm mt-0.5">Selamat datang di control panel</p>
         </div>
         <button
           onClick={() => { setLoading(true); fetchStats(); }}
@@ -153,9 +153,9 @@ export default function AdminDashboard() {
       {/* Quick Actions */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4 mb-6">
         {[
-          { href: "/admin/produk", label: "Kelola Produk", desc: "Tambah, edit, hapus produk", icon: Package, color: "gradient-navy" },
-          { href: "/admin/pesanan", label: "Kelola Pesanan", desc: "Lihat dan update status", icon: ShoppingCart, color: "gradient-red" },
-          { href: "/admin/pengaturan", label: "Pengaturan", desc: "Konfigurasi gateway", icon: Clock, color: "gradient-navy" },
+          { href: "/control/produk", label: "Kelola Produk", desc: "Tambah, edit, hapus produk", icon: Package, color: "gradient-navy" },
+          { href: "/control/pesanan", label: "Kelola Pesanan", desc: "Lihat dan update status", icon: ShoppingCart, color: "gradient-red" },
+          { href: "/control/pengaturan", label: "Pengaturan", desc: "Konfigurasi gateway", icon: Clock, color: "gradient-navy" },
         ].map((action, i) => {
           const Icon = action.icon;
           return (
@@ -181,7 +181,7 @@ export default function AdminDashboard() {
       <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
         <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
           <h2 className="font-bold text-sm text-navy">Pesanan Terbaru</h2>
-          <Link href="/admin/pesanan" className="text-tred text-xs font-semibold hover:underline flex items-center gap-1">
+          <Link href="/control/pesanan" className="text-tred text-xs font-semibold hover:underline flex items-center gap-1">
             Lihat semua <ArrowRight size={12} />
           </Link>
         </div>

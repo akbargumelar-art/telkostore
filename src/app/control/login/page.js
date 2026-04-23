@@ -3,7 +3,14 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { signIn, useSession } from "next-auth/react";
-import { Lock, ShieldCheck, AlertCircle, Eye, EyeOff } from "lucide-react";
+import {
+  AlertCircle,
+  Eye,
+  EyeOff,
+  Lock,
+  ShieldCheck,
+  UserRound,
+} from "lucide-react";
 
 function OAuthButton({ provider, loadingProvider, onClick, children }) {
   const isLoading = loadingProvider === provider;
@@ -17,16 +24,19 @@ function OAuthButton({ provider, loadingProvider, onClick, children }) {
     >
       {isLoading ? (
         <div className="w-4 h-4 rounded-full border-2 border-gray-300 border-t-gray-600 animate-spin" />
-      ) : children}
+      ) : (
+        children
+      )}
     </button>
   );
 }
 
-export default function AdminLoginPage() {
-  const [secret, setSecret] = useState("");
+export default function ControlLoginPage() {
+  const [identifier, setIdentifier] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const [loadingSecret, setLoadingSecret] = useState(false);
-  const [showKey, setShowKey] = useState(false);
+  const [loadingCredentials, setLoadingCredentials] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [loadingProvider, setLoadingProvider] = useState("");
   const [authorizingOAuth, setAuthorizingOAuth] = useState(false);
   const oauthAuthorizationStarted = useRef(false);
@@ -37,6 +47,7 @@ export default function AdminLoginPage() {
     if (status === "authenticated" && session?.user?.role === "admin") {
       if (!oauthAuthorizationStarted.current) {
         oauthAuthorizationStarted.current = true;
+
         void (async () => {
           setAuthorizingOAuth(true);
           setError("");
@@ -46,15 +57,15 @@ export default function AdminLoginPage() {
             const data = await res.json();
 
             if (data.success) {
-              router.replace("/admin");
+              router.replace("/control");
               router.refresh();
               return;
             }
 
-            setError(data.error || "Gagal menyambungkan akses admin.");
+            setError(data.error || "Gagal menyambungkan akses control.");
             oauthAuthorizationStarted.current = false;
           } catch {
-            setError("Gagal menyambungkan akses admin.");
+            setError("Gagal menyambungkan akses control.");
             oauthAuthorizationStarted.current = false;
           } finally {
             setAuthorizingOAuth(false);
@@ -62,13 +73,14 @@ export default function AdminLoginPage() {
           }
         })();
       }
+
       return;
     }
 
     if (status === "authenticated" && session?.user?.role !== "admin") {
       setLoadingProvider("");
       setAuthorizingOAuth(false);
-      setError("Akun sudah login, tetapi email ini belum diberi role admin.");
+      setError("Akun ini sudah login, tetapi belum memiliki role admin.");
     }
 
     if (status === "unauthenticated") {
@@ -76,34 +88,37 @@ export default function AdminLoginPage() {
     }
   }, [router, session?.user?.role, status]);
 
-  const handleLogin = async (e) => {
-    e.preventDefault();
-    if (!secret.trim()) {
-      setError("Masukkan kunci admin");
+  const handleCredentialLogin = async (event) => {
+    event.preventDefault();
+
+    if (!identifier.trim() || !password.trim()) {
+      setError("Masukkan username/email admin dan password.");
       return;
     }
 
-    setLoadingSecret(true);
+    setLoadingCredentials(true);
     setError("");
 
     try {
       const res = await fetch("/api/admin/auth", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ secret }),
+        body: JSON.stringify({ identifier, password }),
       });
 
       const data = await res.json();
 
       if (data.success) {
-        router.push("/admin");
-      } else {
-        setError(data.error || "Login gagal");
+        router.push("/control");
+        router.refresh();
+        return;
       }
+
+      setError(data.error || "Login admin gagal");
     } catch {
       setError("Terjadi kesalahan server");
     } finally {
-      setLoadingSecret(false);
+      setLoadingCredentials(false);
     }
   };
 
@@ -113,7 +128,7 @@ export default function AdminLoginPage() {
     oauthAuthorizationStarted.current = false;
 
     try {
-      await signIn(provider, { callbackUrl: "/admin/login" });
+      await signIn(provider, { callbackUrl: "/control/login" });
     } catch {
       setError("Login OAuth gagal. Coba lagi.");
       setLoadingProvider("");
@@ -127,53 +142,75 @@ export default function AdminLoginPage() {
           <div className="w-16 h-16 rounded-2xl gradient-navy flex items-center justify-center text-white text-2xl font-extrabold mx-auto mb-4 shadow-lg">
             <ShieldCheck size={32} />
           </div>
-          <h1 className="text-navy font-extrabold text-2xl">Admin Panel</h1>
+          <h1 className="text-navy font-extrabold text-2xl">Control Panel</h1>
           <p className="text-gray-400 text-sm mt-1">
-            Telko<span className="text-tred">.Store</span> Dashboard
+            Telko<span className="text-tred">.Store</span> akses admin
           </p>
         </div>
 
         <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
-          <form onSubmit={handleLogin}>
-            <div className="mb-4">
-              <label className="text-sm font-semibold text-gray-700 mb-2 block">
-                Kunci Admin
-              </label>
-              <div className="relative">
-                <Lock
-                  size={16}
-                  className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400"
-                />
-                <input
-                  type={showKey ? "text" : "password"}
-                  value={secret}
-                  onChange={(e) => setSecret(e.target.value)}
-                  placeholder="Masukkan kunci admin..."
-                  className="w-full pl-10 pr-10 py-3 border-2 border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy focus:ring-2 focus:ring-navy/10 transition-all"
-                  autoFocus
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowKey(!showKey)}
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                >
-                  {showKey ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
+          <form onSubmit={handleCredentialLogin}>
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm font-semibold text-gray-700 mb-2 block">
+                  Username / Email Admin
+                </label>
+                <div className="relative">
+                  <UserRound
+                    size={16}
+                    className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400"
+                  />
+                  <input
+                    type="text"
+                    value={identifier}
+                    onChange={(event) => setIdentifier(event.target.value)}
+                    placeholder="admin atau admin@domain.com"
+                    className="w-full pl-10 pr-4 py-3 border-2 border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy focus:ring-2 focus:ring-navy/10 transition-all"
+                    autoFocus
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-sm font-semibold text-gray-700 mb-2 block">
+                  Password Admin
+                </label>
+                <div className="relative">
+                  <Lock
+                    size={16}
+                    className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400"
+                  />
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    placeholder="Masukkan password admin..."
+                    className="w-full pl-10 pr-10 py-3 border-2 border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy focus:ring-2 focus:ring-navy/10 transition-all"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((prev) => !prev)}
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    aria-label="Tampilkan password"
+                  >
+                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
               </div>
             </div>
 
             {error && (
-              <div className="mb-4 bg-red-50 border border-red-200 rounded-xl p-3 flex items-center gap-2">
+              <div className="mt-4 bg-red-50 border border-red-200 rounded-xl p-3 flex items-center gap-2">
                 <AlertCircle size={14} className="text-red-600 shrink-0" />
                 <p className="text-red-600 text-xs">{error}</p>
               </div>
             )}
 
             {authorizingOAuth && (
-              <div className="mb-4 bg-blue-50 border border-blue-100 rounded-xl p-3 flex items-center gap-2">
+              <div className="mt-4 bg-blue-50 border border-blue-100 rounded-xl p-3 flex items-center gap-2">
                 <div className="w-4 h-4 rounded-full border-2 border-blue-200 border-t-blue-700 animate-spin shrink-0" />
                 <p className="text-blue-900 text-xs">
-                  Memverifikasi akses admin dari akun Google/Facebook...
+                  Memverifikasi akses control dari akun Google/Facebook...
                 </p>
               </div>
             )}
@@ -181,20 +218,20 @@ export default function AdminLoginPage() {
             <button
               type="submit"
               disabled={
-                loadingSecret ||
+                loadingCredentials ||
                 Boolean(loadingProvider) ||
                 authorizingOAuth
               }
-              className="w-full gradient-navy text-white font-bold py-3 rounded-xl text-sm hover:opacity-95 transition-opacity disabled:opacity-50 flex items-center justify-center gap-2"
+              className="w-full mt-4 gradient-navy text-white font-bold py-3 rounded-xl text-sm hover:opacity-95 transition-opacity disabled:opacity-50 flex items-center justify-center gap-2"
             >
-              {loadingSecret ? (
+              {loadingCredentials ? (
                 <>
                   <div className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
                   Memproses...
                 </>
               ) : (
                 <>
-                  <ShieldCheck size={16} /> Masuk dengan Kunci
+                  <ShieldCheck size={16} /> Masuk ke Control
                 </>
               )}
             </button>
@@ -253,7 +290,7 @@ export default function AdminLoginPage() {
 
           <div className="mt-4 rounded-xl bg-blue-50 border border-blue-100 px-4 py-3">
             <p className="text-[11px] leading-relaxed text-blue-900">
-              Login Google/Facebook hanya bisa masuk ke dashboard jika email
+              Login Google/Facebook hanya bisa masuk ke control panel jika email
               tersebut punya role <span className="font-bold">admin</span> di
               tabel user.
             </p>
@@ -261,9 +298,15 @@ export default function AdminLoginPage() {
         </div>
 
         <p className="text-center text-gray-400 text-[10px] mt-6 leading-relaxed">
-          Gunakan email yang sama dengan akun admin OAuth, atau pakai{" "}
-          <span className="font-mono text-gray-500">ADMIN_SECRET</span> untuk
-          login lama.
+          Atur kredensial admin khusus di{" "}
+          <span className="font-mono text-gray-500">
+            ADMIN_LOGIN_USER
+          </span>{" "}
+          dan{" "}
+          <span className="font-mono text-gray-500">
+            ADMIN_LOGIN_PASSWORD
+          </span>{" "}
+          pada <span className="font-mono text-gray-500">.env.local</span>.
         </p>
       </div>
     </div>

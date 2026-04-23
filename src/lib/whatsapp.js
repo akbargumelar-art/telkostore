@@ -266,7 +266,7 @@ export function buildGroupNewOrderMsg(order, product) {
   msg += `🎯 Tujuan: ${order.targetData}\n`;
   msg += `⏰ Waktu: ${formatDateWA(new Date().toISOString())}\n\n`;
   msg += `⏳ Status: Menunggu Pembayaran\n`;
-  msg += `🔗 Admin: ${process.env.NEXT_PUBLIC_BASE_URL}/admin/pesanan`;
+  msg += `🔗 Control: ${process.env.NEXT_PUBLIC_BASE_URL}/control/pesanan`;
 
   return msg;
 }
@@ -283,7 +283,7 @@ export function buildGroupPaymentSuccessMsg(order, paymentType) {
   msg += `📱 Pembeli: ${order.guestPhone}\n`;
   msg += `⏰ Waktu: ${formatDateWA(new Date().toISOString())}\n\n`;
   msg += `✅ Status: Pembayaran Berhasil\n`;
-  msg += `🔗 Admin: ${process.env.NEXT_PUBLIC_BASE_URL}/admin/pesanan`;
+  msg += `🔗 Control: ${process.env.NEXT_PUBLIC_BASE_URL}/control/pesanan`;
 
   return msg;
 }
@@ -371,7 +371,7 @@ export function buildGroupVoucherRedeemMsg(order, voucher) {
   msg += `🏷️ Provider: ${(voucher.provider || "—").toUpperCase()}\n`;
   msg += `🔑 Kode: *${voucher.code}*\n\n`;
   msg += `⚡ Segera redeem di Admin Dashboard:\n`;
-  msg += `${process.env.NEXT_PUBLIC_BASE_URL}/admin/voucher\n\n`;
+  msg += `${process.env.NEXT_PUBLIC_BASE_URL}/control/voucher\n\n`;
   msg += `⏰ Waktu: ${formatDateWA(new Date().toISOString())}`;
 
   return msg;

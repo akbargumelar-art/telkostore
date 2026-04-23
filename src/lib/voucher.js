@@ -298,7 +298,7 @@ export async function autoRedeemAndComplete(order, voucher, callbacks = {}) {
           `🔑 Kode: *${voucher.code}*\n\n` +
           `⚠️ Auto-redeem tidak tersedia (module error)\n` +
           `⚡ Redeem manual diperlukan:\n` +
-          `${process.env.NEXT_PUBLIC_BASE_URL}/admin/voucher`
+          `${process.env.NEXT_PUBLIC_BASE_URL}/control/voucher`
         );
       } catch {}
     }
@@ -320,7 +320,7 @@ export async function autoRedeemAndComplete(order, voucher, callbacks = {}) {
           `🔑 Kode: *${voucher.code}*\n\n` +
           `⚠️ Puppeteer belum di-install di server\n` +
           `⚡ Redeem manual diperlukan:\n` +
-          `${process.env.NEXT_PUBLIC_BASE_URL}/admin/voucher`
+          `${process.env.NEXT_PUBLIC_BASE_URL}/control/voucher`
         );
       } catch {}
     }
@@ -417,7 +417,7 @@ export async function autoRedeemAndComplete(order, voucher, callbacks = {}) {
             `🔑 Kode: *${voucher.code}*\n\n` +
             `❌ Alasan: ${result.message}\n\n` +
             `⚡ Redeem manual diperlukan:\n` +
-            `${process.env.NEXT_PUBLIC_BASE_URL}/admin/voucher`
+            `${process.env.NEXT_PUBLIC_BASE_URL}/control/voucher`
           );
         } catch (waErr) {
           console.error("WA group auto-redeem failed notification:", waErr.message);
@@ -439,7 +439,7 @@ export async function autoRedeemAndComplete(order, voucher, callbacks = {}) {
           `🔑 Kode: *${voucher.code}*\n\n` +
           `❌ Error: ${err.message}\n\n` +
           `⚡ Redeem manual diperlukan:\n` +
-          `${process.env.NEXT_PUBLIC_BASE_URL}/admin/voucher`
+          `${process.env.NEXT_PUBLIC_BASE_URL}/control/voucher`
         );
       } catch {}
     }
@@ -447,4 +447,3 @@ export async function autoRedeemAndComplete(order, voucher, callbacks = {}) {
     return { autoRedeemed: false, message: err.message };
   }
 }
-

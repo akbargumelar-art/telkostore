@@ -236,8 +236,8 @@ export default function AdminUsersPage() {
         </p>
         <p className="text-blue-800 text-xs mt-1 leading-relaxed">
           Jika user dibuat manual, ia tetap harus login dengan Google atau Facebook
-          memakai email yang sama. Opsi lama via kunci admin tetap tersedia di
-          /admin/login.
+          memakai email yang sama. Alternatif lainnya, admin bisa masuk lewat
+          username/email + password khusus di /control/login.
         </p>
       </div>
 
@@ -523,7 +523,8 @@ export default function AdminUsersPage() {
                   <ShieldCheck size={14} className="text-purple-600 mt-0.5 shrink-0" />
                   <p className="text-purple-700 text-xs">
                     Admin dapat masuk ke dashboard lewat Google/Facebook dengan email
-                    yang sama, atau memakai kunci admin di /admin/login.
+                    yang sama, atau memakai username/email + password admin di
+                    /control/login.
                   </p>
                 </div>
               )}

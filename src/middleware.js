@@ -1,6 +1,6 @@
 // ==============================
 // TELKO.STORE - Middleware
-// Protect admin routes with JWT auth
+// Protect control panel routes with JWT auth
 // ==============================
 
 import { NextResponse } from "next/server";
@@ -83,9 +83,9 @@ async function verifyJwtEdge(token, adminSecret) {
 export async function middleware(request) {
   const { pathname } = request.nextUrl;
 
-  // Only protect /admin/* and /api/admin/* routes (exclude login + auth endpoints)
+  // Protect /control/* and /api/admin/* routes (exclude login + auth endpoints)
   const isAdminPage =
-    pathname.startsWith("/admin") && !pathname.startsWith("/admin/login");
+    pathname.startsWith("/control") && !pathname.startsWith("/control/login");
   const isAdminApi =
     pathname.startsWith("/api/admin") &&
     !pathname.startsWith("/api/admin/auth");
@@ -105,7 +105,7 @@ export async function middleware(request) {
         { status: 500 }
       );
     }
-    return NextResponse.redirect(new URL("/admin/login", request.url));
+    return NextResponse.redirect(new URL("/control/login", request.url));
   }
 
   const isValid = await verifyJwtEdge(adminToken, adminSecret);
@@ -117,12 +117,12 @@ export async function middleware(request) {
         { status: 401 }
       );
     }
-    return NextResponse.redirect(new URL("/admin/login", request.url));
+    return NextResponse.redirect(new URL("/control/login", request.url));
   }
 
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: ["/admin/:path*", "/api/admin/:path*"],
+  matcher: ["/control/:path*", "/api/admin/:path*"],
 };
