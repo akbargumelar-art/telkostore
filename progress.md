@@ -17,7 +17,21 @@
 - **Dashboard Utama**: Menampilkan summary performa (total order, klik, profit pending, profit paid) dan riwayat transaksi/klik terbaru. Desain dibuat *mobile-first* dengan grid dinamis.
 - **Manajemen Promo & Profil**: Mitra bisa mengatur custom URL alias (contoh: `/r/namatoko`), margin tambahan per transaksi, dan tema visual promosi.
 - **Withdraw Komisi**: Fitur pencairan komisi mandiri. Mitra bisa meminta pencairan saldo `approved` dengan mengisi catatan rekening tujuan.
-- **UI Responsif**: Sidebar layout `/mitra` dibuat dengan opsi *collapse/expand* di layar desktop untuk memberikan area kerja yang lebih luas.
+- **UI Responsif**: Dashboard `/mitra` dan `/control` kini secara otomatis menyembunyikan *Header* dan *BottomNav* global untuk memberikan tampilan *full-screen* yang premium. Sidebar layout `/mitra` juga memiliki opsi *collapse/expand*.
+- **Download QR Code**: Ditambahkan fitur pembuatan dan pengunduhan QR Code referral secara instan di halaman Promo Mitra untuk mempermudah promosi offline.
+
+#### d. Sistem Aktivasi & Keamanan Mandiri (Self-Service)
+- **Alur Aktivasi Baru**: Saat admin membuat akun mitra, sistem tidak lagi memberikan password statis. Sebaliknya, sistem mengirimkan **Link Aktivasi** unik via WhatsApp dan Email.
+- **Notifikasi Multi-Channel**:
+  - **WhatsApp**: Pesan otomatis berisi data login, link referral, dan link download QR Code.
+  - **Email HTML (Nodemailer)**: Email berdesain premium yang memuat data profil, link referral, dan gambar QR Code yang tertanam langsung di dalam badan email.
+- **Set Password Mandiri**: Mitra diarahkan ke halaman `/mitra/aktivasi` untuk membuat password mereka sendiri secara aman. Setelah password disimpan, status akun otomatis berubah menjadi **Verified**.
+- **Indikator Verified**: Admin dapat memantau status aktivasi mitra (Verified/Belum Aktivasi) langsung dari daftar downline di dashboard control.
+
+#### e. Pembaruan Teknis & Infrastruktur
+- **Nodemailer Integration**: Mengintegrasikan `nodemailer` (versi terbaru) untuk pengiriman email SMTP via mail server VPS (`info@telko.store`).
+- **Skrip Migrasi**: Penambahan `src/db/migrate-add-user-activation.mjs` dan integrasinya ke dalam `deploy.sh` untuk pembaruan schema otomatis di VPS.
+- **Dependency Fix**: Resolving konflik peer dependency antara `next-auth` dan `nodemailer` dengan menggunakan `"nodemailer": "latest"` dan flag `--legacy-peer-deps`.
 
 #### c. Manajemen Referral oleh Superadmin (`/control/downline`)
 - Dibuat panel khusus di dashboard Admin untuk mengelola semua akun Mitra. Fitur ini dilindungi hak akses khusus `superadminOnly`.
