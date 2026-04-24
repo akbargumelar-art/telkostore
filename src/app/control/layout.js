@@ -127,7 +127,15 @@ export default function ControlLayout({ children }) {
       // Ignore if there is no Auth.js session and continue clearing legacy cookie.
     }
 
-    document.cookie = "admin_token=; path=/; max-age=0";
+    try {
+      await fetch("/api/admin/auth/logout", {
+        method: "POST",
+        credentials: "include",
+      });
+    } catch {
+      // Ignore logout route failures and continue redirecting to login page.
+    }
+
     router.push("/control/login");
     router.refresh();
   };
@@ -174,4 +182,3 @@ export default function ControlLayout({ children }) {
     </div>
   );
 }
-
