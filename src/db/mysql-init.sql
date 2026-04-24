@@ -153,3 +153,19 @@ CREATE TABLE IF NOT EXISTS digiflazz_transactions (
   INDEX idx_digiflazz_order (order_id),
   INDEX idx_digiflazz_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS site_banners (
+  id VARCHAR(100) PRIMARY KEY,
+  title VARCHAR(255) NOT NULL,
+  subtitle TEXT,
+  cta_text VARCHAR(100) NOT NULL,
+  cta_type VARCHAR(20) DEFAULT 'link',
+  cta_link VARCHAR(500),
+  category_id VARCHAR(100),
+  background_style TEXT,
+  sort_order INT DEFAULT 0,
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at VARCHAR(50),
+  updated_at VARCHAR(50),
+  INDEX idx_site_banners_active_order (is_active, sort_order)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

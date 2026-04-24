@@ -55,6 +55,7 @@ export default function AdminProdukPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [permissions, setPermissions] = useState({ manageProducts: false });
   // Bulk management state
   const [selected, setSelected] = useState(new Set());
   const [bulkAction, setBulkAction] = useState("");
@@ -70,6 +71,7 @@ export default function AdminProdukPage() {
   const selectedProducts = products.filter((product) => selected.has(product.id));
   const hasSelectedManualStock = selectedProducts.some((product) => product.stockMode !== "voucher-codes");
   const hasSelectedVoucherManagedStock = selectedProducts.some((product) => product.stockMode === "voucher-codes");
+  const canManageProducts = Boolean(permissions.manageProducts);
   const productCountLabel =
     filterStatus === "active"
       ? "produk aktif ditemukan"
@@ -95,11 +97,27 @@ export default function AdminProdukPage() {
     }
   };
 
+  const fetchAdminInfo = async () => {
+    try {
+      const res = await fetch("/api/admin/me", { cache: "no-store" });
+      const data = await res.json();
+      if (data.success) {
+        setPermissions(data.permissions || { manageProducts: false });
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   useEffect(() => {
     setSelected(new Set());
     setLoading(true);
     fetchProducts();
   }, [filterCategory, filterStatus]);
+
+  useEffect(() => {
+    fetchAdminInfo();
+  }, []);
 
   const handleSearch = (e) => {
     e.preventDefault();
@@ -109,6 +127,7 @@ export default function AdminProdukPage() {
   };
 
   const openCreate = () => {
+    if (!canManageProducts) return;
     setEditId(null);
     setForm({ ...emptyForm });
     setError("");
@@ -116,6 +135,7 @@ export default function AdminProdukPage() {
   };
 
   const openEdit = (product) => {
+    if (!canManageProducts) return;
     setEditId(product.id);
     setForm({
       name: product.name || "",
@@ -141,6 +161,7 @@ export default function AdminProdukPage() {
   };
 
   const handleSave = async () => {
+    if (!canManageProducts) return;
     if (!form.name || !form.price) {
       setError("Nama dan harga wajib diisi");
       return;
@@ -195,6 +216,7 @@ export default function AdminProdukPage() {
   };
 
   const handleDelete = async (id, name) => {
+    if (!canManageProducts) return;
     if (!confirm(`Nonaktifkan produk "${name}"? Produk tidak akan tampil di toko.`)) return;
 
     try {
@@ -217,6 +239,7 @@ export default function AdminProdukPage() {
   };
 
   const handleHardDelete = async (id, name) => {
+    if (!canManageProducts) return;
     if (!confirm(`Hapus permanen produk "${name}"? Aksi ini tidak bisa dibatalkan.`)) return;
 
     try {
@@ -248,6 +271,7 @@ export default function AdminProdukPage() {
   };
 
   const handleToggleActive = async (id, currentActive) => {
+    if (!canManageProducts) return;
     try {
       await fetch(`/api/admin/products/${id}`, {
         method: "PUT",
@@ -263,6 +287,7 @@ export default function AdminProdukPage() {
 
   // ===== BULK HANDLERS =====
   const toggleSelect = (id) => {
+    if (!canManageProducts) return;
     setSelected((prev) => {
       const next = new Set(prev);
       next.has(id) ? next.delete(id) : next.add(id);
@@ -271,6 +296,7 @@ export default function AdminProdukPage() {
   };
 
   const toggleSelectAll = () => {
+    if (!canManageProducts) return;
     if (selected.size === products.length) {
       setSelected(new Set());
     } else {
@@ -279,6 +305,7 @@ export default function AdminProdukPage() {
   };
 
   const handleBulkAction = async (action, extraData = {}) => {
+    if (!canManageProducts) return;
     if (selected.size === 0) return;
     setBulkProcessing(true);
     try {
@@ -372,6 +399,7 @@ export default function AdminProdukPage() {
   };
 
   const handleImportSubmit = async () => {
+    if (!canManageProducts) return;
     setBulkProcessing(true);
     setImportResult(null);
     try {
@@ -408,9 +436,11 @@ export default function AdminProdukPage() {
           <p className="text-gray-400 text-sm mt-0.5">{products.length} {productCountLabel}</p>
         </div>
         <div className="flex items-center gap-2 self-start flex-wrap">
-          <button onClick={() => setShowImport(true)} className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50">
-            <Upload size={14} /> Import
-          </button>
+          {canManageProducts && (
+            <button onClick={() => setShowImport(true)} className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50">
+              <Upload size={14} /> Import
+            </button>
+          )}
           <button
             onClick={handleExport}
             disabled={exporting}
@@ -419,14 +449,16 @@ export default function AdminProdukPage() {
             {exporting ? <div className="w-4 h-4 rounded-full border-2 border-gray-300 border-t-navy animate-spin" /> : <Download size={14} />}
             {exporting ? "Exporting..." : "Export Excel"}
           </button>
-          <button onClick={openCreate} className="gradient-red text-white font-bold px-5 py-2.5 rounded-xl text-sm hover:opacity-95 transition-opacity flex items-center gap-2">
-            <Plus size={16} /> Tambah Produk
-          </button>
+          {canManageProducts && (
+            <button onClick={openCreate} className="gradient-red text-white font-bold px-5 py-2.5 rounded-xl text-sm hover:opacity-95 transition-opacity flex items-center gap-2">
+              <Plus size={16} /> Tambah Produk
+            </button>
+          )}
         </div>
       </div>
 
       {/* Bulk Action Toolbar */}
-      {selected.size > 0 && (
+      {canManageProducts && selected.size > 0 && (
         <div className="mb-4 bg-navy/5 border border-navy/20 rounded-2xl p-3 flex flex-wrap items-center gap-2 animate-fade-in">
           <span className="text-sm font-bold text-navy px-2"><Layers size={14} className="inline mr-1" />{selected.size} dipilih</span>
           <div className="h-5 w-px bg-navy/20 hidden md:block" />
@@ -455,6 +487,15 @@ export default function AdminProdukPage() {
         <div className="mb-4 bg-green-50 border border-green-200 rounded-xl p-3 flex items-center gap-2 animate-fade-in">
           <Check size={14} className="text-green-600" />
           <p className="text-green-700 text-sm font-medium">{success}</p>
+        </div>
+      )}
+
+      {!canManageProducts && (
+        <div className="mb-4 bg-blue-50 border border-blue-200 rounded-xl p-3 flex items-center gap-2 animate-fade-in">
+          <AlertCircle size={14} className="text-blue-600" />
+          <p className="text-blue-700 text-sm font-medium">
+            Admin biasa hanya bisa melihat daftar produk. Tambah, edit, nonaktifkan, dan hapus produk khusus superadmin.
+          </p>
         </div>
       )}
 
@@ -519,27 +560,33 @@ export default function AdminProdukPage() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-100">
                 <tr>
-                  <th className="px-3 py-3 w-10">
-                    <button onClick={toggleSelectAll} className="text-gray-400 hover:text-navy">
-                      {selected.size === products.length && products.length > 0 ? <CheckSquare size={16} className="text-navy" /> : <Square size={16} />}
-                    </button>
-                  </th>
+                  {canManageProducts && (
+                    <th className="px-3 py-3 w-10">
+                      <button onClick={toggleSelectAll} className="text-gray-400 hover:text-navy">
+                        {selected.size === products.length && products.length > 0 ? <CheckSquare size={16} className="text-navy" /> : <Square size={16} />}
+                      </button>
+                    </th>
+                  )}
                   <th className="text-left px-4 py-3 font-semibold text-gray-500 text-xs uppercase">Produk</th>
                   <th className="text-left px-4 py-3 font-semibold text-gray-500 text-xs uppercase">Kategori</th>
                   <th className="text-right px-4 py-3 font-semibold text-gray-500 text-xs uppercase">Harga</th>
                   <th className="text-center px-4 py-3 font-semibold text-gray-500 text-xs uppercase">Stok</th>
                   <th className="text-center px-4 py-3 font-semibold text-gray-500 text-xs uppercase">Status</th>
-                  <th className="text-center px-4 py-3 font-semibold text-gray-500 text-xs uppercase">Aksi</th>
+                  {canManageProducts && (
+                    <th className="text-center px-4 py-3 font-semibold text-gray-500 text-xs uppercase">Aksi</th>
+                  )}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {products.map((p) => (
                   <tr key={p.id} className={`hover:bg-gray-50 transition-colors ${!p.isActive ? "opacity-50" : ""} ${selected.has(p.id) ? "bg-navy/5" : ""}`}>
-                    <td className="px-3 py-3">
-                      <button onClick={() => toggleSelect(p.id)} className="text-gray-400 hover:text-navy">
-                        {selected.has(p.id) ? <CheckSquare size={16} className="text-navy" /> : <Square size={16} />}
-                      </button>
-                    </td>
+                    {canManageProducts && (
+                      <td className="px-3 py-3">
+                        <button onClick={() => toggleSelect(p.id)} className="text-gray-400 hover:text-navy">
+                          {selected.has(p.id) ? <CheckSquare size={16} className="text-navy" /> : <Square size={16} />}
+                        </button>
+                      </td>
+                    )}
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         {p.isFlashSale && <span className="text-[9px] bg-red-100 text-red-600 font-bold px-1.5 py-0.5 rounded-full">⚡</span>}
@@ -577,41 +624,53 @@ export default function AdminProdukPage() {
                       </div>
                     </td>
                     <td className="px-4 py-3 text-center">
-                      <button
-                        onClick={() => handleToggleActive(p.id, p.isActive)}
-                        className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full ${
-                          p.isActive ? "bg-green-50 text-green-700" : "bg-gray-100 text-gray-500"
-                        }`}
-                      >
-                        {p.isActive ? <><Eye size={10} /> Aktif</> : <><EyeOff size={10} /> Non-Aktif</>}
-                      </button>
+                      {canManageProducts ? (
+                        <button
+                          onClick={() => handleToggleActive(p.id, p.isActive)}
+                          className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full ${
+                            p.isActive ? "bg-green-50 text-green-700" : "bg-gray-100 text-gray-500"
+                          }`}
+                        >
+                          {p.isActive ? <><Eye size={10} /> Aktif</> : <><EyeOff size={10} /> Non-Aktif</>}
+                        </button>
+                      ) : (
+                        <span
+                          className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full ${
+                            p.isActive ? "bg-green-50 text-green-700" : "bg-gray-100 text-gray-500"
+                          }`}
+                        >
+                          {p.isActive ? <><Eye size={10} /> Aktif</> : <><EyeOff size={10} /> Non-Aktif</>}
+                        </span>
+                      )}
                     </td>
-                    <td className="px-4 py-3 text-center">
-                      <div className="flex items-center justify-center gap-1">
-                        <button
-                          onClick={() => openEdit(p)}
-                          className="p-1.5 rounded-lg hover:bg-blue-50 text-blue-600 transition-colors"
-                          title="Edit"
-                        >
-                          <Edit3 size={14} />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(p.id, p.name)}
-                          disabled={!p.isActive}
-                          className="p-1.5 rounded-lg hover:bg-yellow-50 text-yellow-600 transition-colors disabled:opacity-40 disabled:hover:bg-transparent"
-                          title={p.isActive ? "Nonaktifkan" : "Sudah non-aktif"}
-                        >
-                          <EyeOff size={14} />
-                        </button>
-                        <button
-                          onClick={() => handleHardDelete(p.id, p.name)}
-                          className="p-1.5 rounded-lg hover:bg-red-50 text-red-500 transition-colors"
-                          title="Hapus permanen"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    </td>
+                    {canManageProducts && (
+                      <td className="px-4 py-3 text-center">
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            onClick={() => openEdit(p)}
+                            className="p-1.5 rounded-lg hover:bg-blue-50 text-blue-600 transition-colors"
+                            title="Edit"
+                          >
+                            <Edit3 size={14} />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(p.id, p.name)}
+                            disabled={!p.isActive}
+                            className="p-1.5 rounded-lg hover:bg-yellow-50 text-yellow-600 transition-colors disabled:opacity-40 disabled:hover:bg-transparent"
+                            title={p.isActive ? "Nonaktifkan" : "Sudah non-aktif"}
+                          >
+                            <EyeOff size={14} />
+                          </button>
+                          <button
+                            onClick={() => handleHardDelete(p.id, p.name)}
+                            className="p-1.5 rounded-lg hover:bg-red-50 text-red-500 transition-colors"
+                            title="Hapus permanen"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>

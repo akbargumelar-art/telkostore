@@ -11,9 +11,17 @@ import {
   sendGroupNotification,
   buildOrderCompletedMsg,
 } from "@/lib/whatsapp";
+import { requireAdminSession } from "@/lib/admin-session";
 
 // PUT — Update voucher status (redeem / fail / release)
 export async function PUT(request, { params }) {
+  const auth = await requireAdminSession({
+    allowedAdminTypes: ["superadmin"],
+    forbiddenMessage:
+      "Akses ditolak. Hanya superadmin yang dapat mengubah status voucher.",
+  });
+  if (!auth.ok) return auth.response;
+
   try {
     const { id } = await params;
     const body = await request.json();
@@ -138,6 +146,13 @@ export async function PUT(request, { params }) {
 
 // DELETE — Delete a voucher code (only if available)
 export async function DELETE(request, { params }) {
+  const auth = await requireAdminSession({
+    allowedAdminTypes: ["superadmin"],
+    forbiddenMessage:
+      "Akses ditolak. Hanya superadmin yang dapat menghapus voucher.",
+  });
+  if (!auth.ok) return auth.response;
+
   try {
     const { id } = await params;
 

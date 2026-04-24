@@ -138,3 +138,19 @@ export const digiflazzTransactions = mysqlTable("digiflazz_transactions", {
   createdAt: varchar("created_at", { length: 50 }).$defaultFn(() => new Date().toISOString()),
   updatedAt: varchar("updated_at", { length: 50 }).$defaultFn(() => new Date().toISOString()),
 });
+
+// ===== SITE BANNERS =====
+export const siteBanners = mysqlTable("site_banners", {
+  id: varchar("id", { length: 100 }).primaryKey(),
+  title: varchar("title", { length: 255 }).notNull(),
+  subtitle: text("subtitle"),
+  ctaText: varchar("cta_text", { length: 100 }).notNull(),
+  ctaType: varchar("cta_type", { length: 20 }).default("link"),
+  ctaLink: varchar("cta_link", { length: 500 }),
+  categoryId: varchar("category_id", { length: 100 }),
+  backgroundStyle: text("background_style"),
+  sortOrder: int("sort_order").default(0),
+  isActive: boolean("is_active").default(true),
+  createdAt: varchar("created_at", { length: 50 }).$defaultFn(() => new Date().toISOString()),
+  updatedAt: varchar("updated_at", { length: 50 }).$defaultFn(() => new Date().toISOString()),
+});

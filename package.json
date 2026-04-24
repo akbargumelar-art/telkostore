@@ -17,6 +17,7 @@
     "db:migrate-data": "node src/db/migrate-sqlite-to-mysql.mjs",
     "db:migrate-admin-password": "node src/db/migrate-add-admin-password.mjs",
     "db:migrate-digiflazz": "node src/db/migrate-add-digiflazz.mjs",
+    "db:migrate-site-banners": "node src/db/migrate-add-site-banners.mjs",
     "payments:reconcile": "node src/scripts/reconcile-pending-payments.mjs"
   },
   "dependencies": {

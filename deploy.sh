@@ -45,6 +45,7 @@ echo ""
 # 2.5. Run lightweight DB migrations needed by runtime auth
 echo "🗄️ Running database migrations..."
 npm run db:migrate-admin-password
+npm run db:migrate-site-banners
 echo "✅ Database migration selesai"
 echo ""
 

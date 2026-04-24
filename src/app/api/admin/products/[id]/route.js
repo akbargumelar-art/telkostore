@@ -5,9 +5,17 @@ import { products } from "@/db/schema.js";
 import { eq } from "drizzle-orm";
 import { syncVoucherProductStock, usesVoucherCodeStock } from "@/lib/product-stock";
 import { normalizeDigiflazzProductConfig } from "@/lib/digiflazz";
+import { requireAdminSession } from "@/lib/admin-session";
 
 // PUT — Update product
 export async function PUT(request, { params }) {
+  const auth = await requireAdminSession({
+    allowedAdminTypes: ["superadmin"],
+    forbiddenMessage:
+      "Akses ditolak. Hanya superadmin yang dapat mengubah produk.",
+  });
+  if (!auth.ok) return auth.response;
+
   try {
     const { id } = await params;
     const body = await request.json();
@@ -82,6 +90,13 @@ export async function PUT(request, { params }) {
 
 // DELETE — Soft-delete product (set isActive = false)
 export async function DELETE(request, { params }) {
+  const auth = await requireAdminSession({
+    allowedAdminTypes: ["superadmin"],
+    forbiddenMessage:
+      "Akses ditolak. Hanya superadmin yang dapat menghapus produk.",
+  });
+  if (!auth.ok) return auth.response;
+
   try {
     const { id } = await params;
 

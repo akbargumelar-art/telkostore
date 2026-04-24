@@ -76,7 +76,7 @@ export default function AdminPesananPage() {
   const [bulkUpdating, setBulkUpdating] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [filterDeleting, setFilterDeleting] = useState(false);
-  const canDeleteHistory = adminType === "superadmin" || adminType === "admin";
+  const canDeleteHistory = adminType === "superadmin";
 
   const fetchAdminInfo = async () => {
     try {

@@ -8,6 +8,7 @@ import { count, eq, inArray } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { usesVoucherCodeStock, withComputedVoucherStocks } from "@/lib/product-stock";
 import { normalizeDigiflazzProductConfig } from "@/lib/digiflazz";
+import { requireAdminSession } from "@/lib/admin-session";
 
 function toNumber(value) {
   return Number(value || 0);
@@ -22,9 +23,23 @@ function normalizeCell(value) {
 }
 
 export async function POST(request) {
+  const auth = await requireAdminSession();
+  if (!auth.ok) return auth.response;
+
   try {
     const body = await request.json();
     const { action, ids, data } = body;
+
+    if (action !== "export" && !auth.permissions.manageProducts) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Akses ditolak. Hanya superadmin yang dapat mengubah data produk.",
+        },
+        { status: 403 }
+      );
+    }
 
     switch (action) {
       // ===== BULK IMPORT (CSV/JSON) =====

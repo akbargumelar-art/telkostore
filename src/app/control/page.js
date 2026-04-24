@@ -7,11 +7,11 @@ import {
   ShoppingCart,
   DollarSign,
   TrendingUp,
-  Clock,
-  CheckCircle2,
   AlertCircle,
   ArrowRight,
   RefreshCw,
+  Ticket,
+  Image as ImageIcon,
 } from "lucide-react";
 
 function formatRupiah(n) {
@@ -43,6 +43,7 @@ const statusConfig = {
 export default function AdminDashboard() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [adminType, setAdminType] = useState("admin");
 
   const fetchStats = async () => {
     try {
@@ -58,6 +59,19 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     fetchStats();
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/admin/me", { cache: "no-store" })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success) {
+          setAdminType(data.adminType || "admin");
+        }
+      })
+      .catch(() => {
+        setAdminType("admin");
+      });
   }, []);
 
   if (loading) {
@@ -115,6 +129,55 @@ export default function AdminDashboard() {
     },
   ];
 
+  const quickActions =
+    adminType === "superadmin"
+      ? [
+          {
+            href: "/control/produk",
+            label: "Kelola Produk",
+            desc: "Tambah, edit, hapus produk",
+            icon: Package,
+            color: "gradient-navy",
+          },
+          {
+            href: "/control/pesanan",
+            label: "Kelola Pesanan",
+            desc: "Lihat dan update status",
+            icon: ShoppingCart,
+            color: "gradient-red",
+          },
+          {
+            href: "/control/banner",
+            label: "Kelola Banner",
+            desc: "Atur slide homepage",
+            icon: ImageIcon,
+            color: "gradient-navy",
+          },
+        ]
+      : [
+          {
+            href: "/control/produk",
+            label: "Lihat Produk",
+            desc: "Pantau katalog tanpa edit",
+            icon: Package,
+            color: "gradient-navy",
+          },
+          {
+            href: "/control/pesanan",
+            label: "Kelola Pesanan",
+            desc: "Lihat dan update status",
+            icon: ShoppingCart,
+            color: "gradient-red",
+          },
+          {
+            href: "/control/voucher",
+            label: "Tambah Voucher",
+            desc: "Masukkan kode voucher internet",
+            icon: Ticket,
+            color: "gradient-navy",
+          },
+        ];
+
   return (
     <div>
       {/* Page Header */}
@@ -152,11 +215,7 @@ export default function AdminDashboard() {
 
       {/* Quick Actions */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4 mb-6">
-        {[
-          { href: "/control/produk", label: "Kelola Produk", desc: "Tambah, edit, hapus produk", icon: Package, color: "gradient-navy" },
-          { href: "/control/pesanan", label: "Kelola Pesanan", desc: "Lihat dan update status", icon: ShoppingCart, color: "gradient-red" },
-          { href: "/control/pengaturan", label: "Pengaturan", desc: "Konfigurasi gateway", icon: Clock, color: "gradient-navy" },
-        ].map((action, i) => {
+        {quickActions.map((action, i) => {
           const Icon = action.icon;
           return (
             <Link

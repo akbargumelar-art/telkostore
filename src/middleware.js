@@ -82,8 +82,16 @@ async function verifyJwtEdge(token, adminSecret) {
 }
 
 // Routes restricted to superadmin only
-const SUPERADMIN_ONLY_PAGES = ["/control/users", "/control/pengaturan"];
-const SUPERADMIN_ONLY_API = ["/api/admin/users", "/api/admin/settings"];
+const SUPERADMIN_ONLY_PAGES = [
+  "/control/banner",
+  "/control/users",
+  "/control/pengaturan",
+];
+const SUPERADMIN_ONLY_API = [
+  "/api/admin/banners",
+  "/api/admin/users",
+  "/api/admin/settings",
+];
 
 function isSuperadminOnlyRoute(pathname) {
   return (
@@ -154,4 +162,3 @@ export async function middleware(request) {
 export const config = {
   matcher: ["/control/:path*", "/api/admin/:path*"],
 };
-

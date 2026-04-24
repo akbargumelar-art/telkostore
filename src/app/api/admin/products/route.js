@@ -10,9 +10,13 @@ import {
   withComputedVoucherStocks,
 } from "@/lib/product-stock";
 import { normalizeDigiflazzProductConfig } from "@/lib/digiflazz";
+import { requireAdminSession } from "@/lib/admin-session";
 
 // GET — List all products (including inactive) for admin
 export async function GET(request) {
+  const auth = await requireAdminSession();
+  if (!auth.ok) return auth.response;
+
   try {
     const { searchParams } = new URL(request.url);
     const search = searchParams.get("search");
@@ -55,6 +59,13 @@ export async function GET(request) {
 
 // POST — Create a new product
 export async function POST(request) {
+  const auth = await requireAdminSession({
+    allowedAdminTypes: ["superadmin"],
+    forbiddenMessage:
+      "Akses ditolak. Hanya superadmin yang dapat menambah produk.",
+  });
+  if (!auth.ok) return auth.response;
+
   try {
     const body = await request.json();
     const {

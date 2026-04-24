@@ -11,8 +11,12 @@ import {
   formatRupiahServer,
 } from "@/lib/whatsapp";
 import { ensurePostPaymentFulfillment } from "@/lib/order-fulfillment";
+import { requireAdminSession } from "@/lib/admin-session";
 
 export async function GET(request, { params }) {
+  const auth = await requireAdminSession();
+  if (!auth.ok) return auth.response;
+
   try {
     const { id } = await params;
 
@@ -35,6 +39,18 @@ export async function GET(request, { params }) {
 }
 
 export async function PUT(request, { params }) {
+  const auth = await requireAdminSession();
+  if (!auth.ok) return auth.response;
+  if (!auth.permissions.updateOrders) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Akses ditolak. Akun ini tidak dapat mengubah status pesanan.",
+      },
+      { status: 403 }
+    );
+  }
+
   try {
     const { id } = await params;
     const body = await request.json();

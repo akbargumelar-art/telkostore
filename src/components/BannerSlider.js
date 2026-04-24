@@ -4,69 +4,68 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-
-const bannerData = [
-  {
-    id: 1,
-    title: "Flash Sale Paket Data!",
-    subtitle: "Combo Sakti 30GB hanya Rp85.000",
-    bg: "linear-gradient(135deg, #ED0226 0%, #1A1A4E 100%)",
-    ctaText: "Beli Sekarang",
-    ctaLink: "/product/data-combo-30d",
-    type: "link",
-  },
-  {
-    id: 2,
-    title: "Pulsa Murah Semua Operator",
-    subtitle: "Mulai dari Rp6.500 — Proses instan!",
-    bg: "linear-gradient(135deg, #1A1A4E 0%, #2D2D6B 100%)",
-    ctaText: "Isi Pulsa",
-    ctaLink: "/product/pulsa-5k",
-    type: "link",
-  },
-  {
-    id: 3,
-    title: "Top Up Game Murah 🎮",
-    subtitle: "Mobile Legends, Free Fire, PUBG & Genshin",
-    bg: "linear-gradient(135deg, #0F0F30 0%, #B8001F 100%)",
-    ctaText: "Top Up Sekarang",
-    type: "category",
-    categoryId: "voucher-game",
-  },
-  {
-    id: 4,
-    title: "Voucher Internet Hemat",
-    subtitle: "25GB hanya Rp85.000 — Diskon 15%!",
-    bg: "linear-gradient(135deg, #B8001F 0%, #1A1A4E 100%)",
-    ctaText: "Lihat Voucher",
-    type: "category",
-    categoryId: "voucher-internet",
-  },
-];
+import { cloneDefaultSiteBanners } from "@/lib/site-banners";
 
 export default function BannerSlider({ onCategoryChange }) {
   const [current, setCurrent] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
+  const [banners, setBanners] = useState(null);
   const router = useRouter();
 
+  const resolvedBanners = banners ?? cloneDefaultSiteBanners();
+  const slideCount = resolvedBanners.length;
+
   const next = useCallback(() => {
-    setCurrent((prev) => (prev + 1) % bannerData.length);
-  }, []);
+    if (slideCount <= 1) return;
+    setCurrent((prev) => (prev + 1) % slideCount);
+  }, [slideCount]);
 
   const prev = useCallback(() => {
-    setCurrent((prev) => (prev - 1 + bannerData.length) % bannerData.length);
+    if (slideCount <= 1) return;
+    setCurrent((prev) => (prev - 1 + slideCount) % slideCount);
+  }, [slideCount]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function fetchBanners() {
+      try {
+        const res = await fetch("/api/banners", { cache: "no-store" });
+        const data = await res.json();
+
+        if (!cancelled && data.success && Array.isArray(data.data)) {
+          setBanners(data.data);
+        }
+      } catch (error) {
+        console.error("Failed to fetch banners:", error);
+      }
+    }
+
+    fetchBanners();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
-    if (isPaused) return;
+    if (slideCount === 0) {
+      setCurrent(0);
+      return;
+    }
+
+    setCurrent((prev) => (prev >= slideCount ? 0 : prev));
+  }, [slideCount]);
+
+  useEffect(() => {
+    if (isPaused || slideCount <= 1) return;
     const timer = setInterval(next, 5000);
     return () => clearInterval(timer);
-  }, [isPaused, next]);
+  }, [isPaused, next, slideCount]);
 
   const handleCategoryCta = (categoryId) => {
     if (onCategoryChange) {
       onCategoryChange(categoryId);
-      // Scroll to products section
       setTimeout(() => {
         const el = document.getElementById("beli");
         if (el) {
@@ -74,10 +73,13 @@ export default function BannerSlider({ onCategoryChange }) {
         }
       }, 100);
     } else {
-      // Fallback: navigate to homepage with category
       router.push(`/?category=${categoryId}#beli`);
     }
   };
+
+  if (banners && banners.length === 0) {
+    return null;
+  }
 
   return (
     <div
@@ -85,20 +87,24 @@ export default function BannerSlider({ onCategoryChange }) {
       onMouseEnter={() => setIsPaused(true)}
       onMouseLeave={() => setIsPaused(false)}
     >
-      {/* Slides container */}
       <div
         className="flex transition-transform duration-500 ease-out"
         style={{ transform: `translateX(-${current * 100}%)` }}
       >
-        {bannerData.map((banner) => (
+        {resolvedBanners.map((banner) => (
           <div
             key={banner.id}
             className="w-full shrink-0 relative overflow-hidden"
-            style={{ background: banner.bg }}
+            style={{ background: banner.backgroundStyle }}
           >
-            {/* Decorative circles */}
-            <div className="absolute top-0 right-0 w-64 h-64 rounded-full -translate-y-1/2 translate-x-1/2" style={{ background: 'rgba(255,255,255,0.06)' }}></div>
-            <div className="absolute bottom-0 left-0 w-48 h-48 rounded-full translate-y-1/2 -translate-x-1/2" style={{ background: 'rgba(255,255,255,0.05)' }}></div>
+            <div
+              className="absolute top-0 right-0 w-64 h-64 rounded-full -translate-y-1/2 translate-x-1/2"
+              style={{ background: "rgba(255,255,255,0.06)" }}
+            />
+            <div
+              className="absolute bottom-0 left-0 w-48 h-48 rounded-full translate-y-1/2 -translate-x-1/2"
+              style={{ background: "rgba(255,255,255,0.05)" }}
+            />
 
             <div className="relative z-10 px-6 md:px-12 py-10 md:py-16">
               <div className="max-w-lg">
@@ -108,7 +114,7 @@ export default function BannerSlider({ onCategoryChange }) {
                 <p className="text-white/80 text-sm md:text-base mb-5">
                   {banner.subtitle}
                 </p>
-                {banner.type === "link" ? (
+                {banner.ctaType === "link" ? (
                   <Link
                     href={banner.ctaLink}
                     className="inline-flex items-center gap-2 bg-white text-navy font-bold text-sm px-6 py-2.5 rounded-xl hover:bg-gray-100 transition-colors shadow-lg"
@@ -131,39 +137,44 @@ export default function BannerSlider({ onCategoryChange }) {
         ))}
       </div>
 
-      {/* Navigation arrows (desktop) */}
-      <button
-        onClick={prev}
-        className="hidden md:flex absolute left-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full items-center justify-center text-white hover:bg-white/20 transition-colors"
-        style={{ background: 'rgba(255,255,255,0.15)' }}
-        aria-label="Previous slide"
-      >
-        <ChevronLeft size={20} />
-      </button>
-      <button
-        onClick={next}
-        className="hidden md:flex absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full items-center justify-center text-white hover:bg-white/20 transition-colors"
-        style={{ background: 'rgba(255,255,255,0.15)' }}
-        aria-label="Next slide"
-      >
-        <ChevronRight size={20} />
-      </button>
-
-      {/* Dots */}
-      <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
-        {bannerData.map((_, i) => (
+      {slideCount > 1 && (
+        <>
           <button
-            key={i}
-            onClick={() => setCurrent(i)}
-            className="h-1.5 rounded-full transition-all duration-300"
-            style={{
-              width: i === current ? '24px' : '6px',
-              background: i === current ? 'white' : 'rgba(255,255,255,0.4)',
-            }}
-            aria-label={`Slide ${i + 1}`}
-          />
-        ))}
-      </div>
+            onClick={prev}
+            className="hidden md:flex absolute left-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full items-center justify-center text-white hover:bg-white/20 transition-colors"
+            style={{ background: "rgba(255,255,255,0.15)" }}
+            aria-label="Previous slide"
+          >
+            <ChevronLeft size={20} />
+          </button>
+          <button
+            onClick={next}
+            className="hidden md:flex absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full items-center justify-center text-white hover:bg-white/20 transition-colors"
+            style={{ background: "rgba(255,255,255,0.15)" }}
+            aria-label="Next slide"
+          >
+            <ChevronRight size={20} />
+          </button>
+        </>
+      )}
+
+      {slideCount > 1 && (
+        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
+          {resolvedBanners.map((_, index) => (
+            <button
+              key={index}
+              onClick={() => setCurrent(index)}
+              className="h-1.5 rounded-full transition-all duration-300"
+              style={{
+                width: index === current ? "24px" : "6px",
+                background:
+                  index === current ? "white" : "rgba(255,255,255,0.4)",
+              }}
+              aria-label={`Slide ${index + 1}`}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

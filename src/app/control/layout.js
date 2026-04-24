@@ -16,6 +16,7 @@ import {
   User,
   Users,
   Ticket,
+  Image as ImageIcon,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -24,6 +25,7 @@ const allNavItems = [
   { href: "/control/produk", label: "Produk", icon: Package, superadminOnly: false },
   { href: "/control/pesanan", label: "Pesanan", icon: ShoppingCart, superadminOnly: false },
   { href: "/control/voucher", label: "Voucher", icon: Ticket, superadminOnly: false },
+  { href: "/control/banner", label: "Banner", icon: ImageIcon, superadminOnly: true },
   { href: "/control/users", label: "Users", icon: Users, superadminOnly: true },
   { href: "/control/profil", label: "Profil", icon: User, superadminOnly: false },
   { href: "/control/pengaturan", label: "Pengaturan", icon: Settings, superadminOnly: true },

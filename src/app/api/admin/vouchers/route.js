@@ -6,9 +6,13 @@ import { eq, and, like, sql, count, desc } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { getVoucherStats } from "@/lib/voucher";
 import { syncVoucherProductStock } from "@/lib/product-stock";
+import { requireAdminSession } from "@/lib/admin-session";
 
 // GET — List all voucher codes with filters + stats
 export async function GET(request) {
+  const auth = await requireAdminSession();
+  if (!auth.ok) return auth.response;
+
   try {
     const { searchParams } = new URL(request.url);
     const productId = searchParams.get("productId");
@@ -100,6 +104,18 @@ export async function GET(request) {
 
 // POST — Add voucher code(s)
 export async function POST(request) {
+  const auth = await requireAdminSession();
+  if (!auth.ok) return auth.response;
+  if (!auth.permissions.addVoucherCodes) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Akses ditolak. Akun ini tidak dapat menambah kode voucher.",
+      },
+      { status: 403 }
+    );
+  }
+
   try {
     const body = await request.json();
     const { productId, provider, codes } = body;

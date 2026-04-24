@@ -1,27 +1,26 @@
 import { NextResponse } from "next/server";
-import { verifyAdminToken } from "@/lib/jwt";
-import { cookies } from "next/headers";
 import db from "@/db/index.js";
 import { users } from "@/db/schema.js";
 import { eq } from "drizzle-orm";
 import { hashAdminUserPassword } from "@/lib/admin-user-password";
+import { getAdminSession } from "@/lib/admin-session";
 
 // PUT /api/admin/profile — Update admin profile (name, image, password)
 export async function PUT(request) {
   try {
-    const cookieStore = await cookies();
-    const adminToken = cookieStore.get("admin_token")?.value;
-
-    if (!adminToken) {
+    const session = await getAdminSession();
+    if (!session) {
       return NextResponse.json(
         { success: false, error: "Not authenticated" },
         { status: 401 }
       );
     }
 
-    const tokenData = verifyAdminToken(adminToken);
-
-    if (!tokenData || tokenData.adminType !== "admin" || !tokenData.sub) {
+    if (
+      session.adminType !== "admin" ||
+      !session.permissions.editProfile ||
+      !session.tokenData.sub
+    ) {
       return NextResponse.json(
         { success: false, error: "Hanya admin dari database yang bisa mengubah profil" },
         { status: 403 }
@@ -43,7 +42,7 @@ export async function PUT(request) {
     await db
       .update(users)
       .set(updateData)
-      .where(eq(users.id, tokenData.sub));
+      .where(eq(users.id, session.tokenData.sub));
 
     return NextResponse.json({
       success: true,

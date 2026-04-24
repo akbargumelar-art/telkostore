@@ -1,34 +1,22 @@
 // GET /api/admin/me — Return current admin session info + profile data
 import { NextResponse } from "next/server";
-import { verifyAdminToken } from "@/lib/jwt";
-import { cookies } from "next/headers";
 import db from "@/db/index.js";
 import { users } from "@/db/schema.js";
 import { eq } from "drizzle-orm";
 import { getAdminCredentialsConfig } from "@/lib/admin-auth";
+import { getAdminSession } from "@/lib/admin-session";
 
 export async function GET() {
   try {
-    const cookieStore = await cookies();
-    const adminToken = cookieStore.get("admin_token")?.value;
-
-    if (!adminToken) {
+    const session = await getAdminSession();
+    if (!session) {
       return NextResponse.json(
         { success: false, error: "Not authenticated" },
         { status: 401 }
       );
     }
 
-    const tokenData = verifyAdminToken(adminToken);
-
-    if (!tokenData) {
-      return NextResponse.json(
-        { success: false, error: "Invalid token" },
-        { status: 401 }
-      );
-    }
-
-    const adminType = tokenData.adminType || "superadmin";
+    const { tokenData, adminType, permissions } = session;
     const sub = tokenData.sub || "";
 
     // For DB-based admin users, fetch their profile from the database
@@ -52,16 +40,25 @@ export async function GET() {
         return NextResponse.json({
           success: true,
           adminType,
+          permissions,
           profile: {
             id: user.id,
             name: user.name || "",
             email: user.email || "",
             image: user.image || "",
             phone: user.phone || "",
-            canEditProfile: true,
+            canEditProfile: permissions.editProfile,
           },
         });
       }
+
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Akun admin tidak ditemukan lagi. Silakan login ulang.",
+        },
+        { status: 401 }
+      );
     }
 
     // For superadmin (env-configured), return env config info
@@ -69,13 +66,14 @@ export async function GET() {
     return NextResponse.json({
       success: true,
       adminType,
+      permissions,
       profile: {
         id: sub || "superadmin",
         name: config.username || "Superadmin",
         email: config.email || "",
         image: "",
         phone: "",
-        canEditProfile: false, // superadmin profile is managed via .env
+        canEditProfile: permissions.editProfile,
       },
     });
   } catch {

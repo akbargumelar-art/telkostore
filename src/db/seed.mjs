@@ -6,6 +6,7 @@
 
 import mysql from "mysql2/promise";
 import crypto from "crypto";
+import { DEFAULT_SITE_BANNERS } from "../lib/site-banners.js";
 
 const DATABASE_URL = process.env.DATABASE_URL || "mysql://root:password@localhost:3306/telkostore";
 
@@ -167,6 +168,24 @@ async function seed() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
 
+  await connection.execute(`
+    CREATE TABLE IF NOT EXISTS site_banners (
+      id VARCHAR(100) PRIMARY KEY,
+      title VARCHAR(255) NOT NULL,
+      subtitle TEXT,
+      cta_text VARCHAR(100) NOT NULL,
+      cta_type VARCHAR(20) DEFAULT 'link',
+      cta_link VARCHAR(500),
+      category_id VARCHAR(100),
+      background_style TEXT,
+      sort_order INT DEFAULT 0,
+      is_active BOOLEAN DEFAULT TRUE,
+      created_at VARCHAR(50),
+      updated_at VARCHAR(50),
+      INDEX idx_site_banners_active_order (is_active, sort_order)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
   console.log("✅ Tables created!");
 
   // ===== SEED CATEGORIES =====
@@ -257,12 +276,50 @@ async function seed() {
 
   console.log("✅ Gateway settings seeded!");
 
+  // ===== SEED SITE BANNERS =====
+  console.log("📦 Seeding site banners...");
+
+  for (const banner of DEFAULT_SITE_BANNERS) {
+    await connection.execute(
+      `INSERT INTO site_banners (id, title, subtitle, cta_text, cta_type, cta_link, category_id, background_style, sort_order, is_active, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE
+         title=VALUES(title),
+         subtitle=VALUES(subtitle),
+         cta_text=VALUES(cta_text),
+         cta_type=VALUES(cta_type),
+         cta_link=VALUES(cta_link),
+         category_id=VALUES(category_id),
+         background_style=VALUES(background_style),
+         sort_order=VALUES(sort_order),
+         is_active=VALUES(is_active),
+         updated_at=VALUES(updated_at)`,
+      [
+        banner.id,
+        banner.title,
+        banner.subtitle,
+        banner.ctaText,
+        banner.ctaType,
+        banner.ctaLink || null,
+        banner.categoryId || null,
+        banner.backgroundStyle,
+        banner.sortOrder,
+        banner.isActive,
+        now,
+        now,
+      ]
+    );
+  }
+
+  console.log(`✅ ${DEFAULT_SITE_BANNERS.length} site banners seeded!`);
+
   // ===== SUMMARY =====
   const [[{ count: pCount }]] = await connection.execute("SELECT COUNT(*) as count FROM products");
   const [[{ count: cCount }]] = await connection.execute("SELECT COUNT(*) as count FROM categories");
   const [[{ count: oCount }]] = await connection.execute("SELECT COUNT(*) as count FROM orders");
   const [[{ count: payCount }]] = await connection.execute("SELECT COUNT(*) as count FROM payments");
   const [[{ count: gwCount }]] = await connection.execute("SELECT COUNT(*) as count FROM gateway_settings");
+  const [[{ count: bannerCount }]] = await connection.execute("SELECT COUNT(*) as count FROM site_banners");
 
   console.log(`\n📊 Database summary:`);
   console.log(`   Categories: ${cCount}`);
@@ -270,6 +327,7 @@ async function seed() {
   console.log(`   Orders: ${oCount}`);
   console.log(`   Payments: ${payCount}`);
   console.log(`   Gateway Settings: ${gwCount}`);
+  console.log(`   Site Banners: ${bannerCount}`);
   console.log(`\n🎉 MySQL seed complete!`);
 
   await connection.end();

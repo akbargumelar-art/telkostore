@@ -1,34 +1,19 @@
 // GET /api/admin/orders — List all orders with pagination & filters
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import db from "@/db/index.js";
 import { orders, payments, voucherCodes } from "@/db/schema.js";
 import { and, desc, eq, gte, inArray, like, lte, or, sql } from "drizzle-orm";
-import { verifyAdminToken } from "@/lib/jwt";
 import { syncVoucherProductStock } from "@/lib/product-stock";
 import { reconcileVisiblePendingOrders } from "@/lib/payment-reconciliation";
 import { ensurePostPaymentFulfillment } from "@/lib/order-fulfillment";
 import { sendWhatsAppNotification, sendGroupNotification } from "@/lib/whatsapp";
+import { requireAdminSession } from "@/lib/admin-session";
 
 const DELETE_CONFIRM_TEXT = "HAPUS PESANAN";
 const DELETE_CHUNK_SIZE = 250;
 
 async function requireAdminAccess() {
-  const cookieStore = await cookies();
-  const adminToken = cookieStore.get("admin_token")?.value;
-  const tokenData = verifyAdminToken(adminToken);
-
-  if (!tokenData) {
-    return {
-      ok: false,
-      response: NextResponse.json(
-        { success: false, error: "Unauthorized" },
-        { status: 401 }
-      ),
-    };
-  }
-
-  return { ok: true, tokenData };
+  return requireAdminSession();
 }
 
 function buildOrderConditions({ status, search, createdFrom, createdTo }) {
@@ -129,6 +114,16 @@ export async function DELETE(request) {
   try {
     const auth = await requireAdminAccess();
     if (!auth.ok) return auth.response;
+    if (!auth.permissions.deleteOrders) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Akses ditolak. Hanya superadmin yang dapat menghapus riwayat pesanan.",
+        },
+        { status: 403 }
+      );
+    }
 
     const body = await request.json();
     const {
@@ -273,6 +268,19 @@ export async function DELETE(request) {
 // PUT /api/admin/orders — Bulk update order statuses
 export async function PUT(request) {
   try {
+    const auth = await requireAdminAccess();
+    if (!auth.ok) return auth.response;
+    if (!auth.permissions.updateOrders) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Akses ditolak. Akun ini tidak dapat mengubah status pesanan.",
+        },
+        { status: 403 }
+      );
+    }
+
     const { orderIds, status } = await request.json();
 
     if (!orderIds || !Array.isArray(orderIds) || orderIds.length === 0 || !status) {
