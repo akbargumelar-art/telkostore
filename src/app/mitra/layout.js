@@ -15,6 +15,7 @@ import {
   Banknote,
   ChevronLeft,
   ChevronRight,
+  Wallet,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 const navItems = [

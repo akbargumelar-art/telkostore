@@ -4,6 +4,27 @@
 
 ## ✅ Apa yang sudah selesai dilakukan
 
+### 25. Sistem Komisi Referral (Mitra) & Penyempurnaan UI (24 April 2026)
+
+#### a. Arsitektur & Pelacakan Referral
+- Dibuat skema database lengkap untuk referral: `downline_profiles` (profil mitra), `referral_clicks` (log klik), `referral_commissions` (komisi per transaksi), dan `referral_withdrawals` (pencairan komisi).
+- Sistem pelacakan cerdas via cookies (masa aktif 30 hari). Link referral (`/r/alias` atau `/dl-slug`) menggunakan *Clean Redirect* — URL dikembalikan menjadi `telko.store` polos setelah cookies berhasil disuntikkan ke browser pembeli.
+- Setiap checkout otomatis mengunci snapshot profil mitra dan margin saat transaksi dibuat.
+- Sinkronisasi pembayaran (Midtrans, Pakasir, DOKU) otomatis memperbarui status komisi: transaksi sukses (`paid`) membuat komisi berstatus `approved`; transaksi batal/gagal membatalkan komisi.
+
+#### b. Dashboard Mitra (`/mitra`)
+- **Login Otentikasi**: Dibangun halaman login khusus `/mitra/login` untuk masuk sebagai Mitra menggunakan email dan password.
+- **Dashboard Utama**: Menampilkan summary performa (total order, klik, profit pending, profit paid) dan riwayat transaksi/klik terbaru. Desain dibuat *mobile-first* dengan grid dinamis.
+- **Manajemen Promo & Profil**: Mitra bisa mengatur custom URL alias (contoh: `/r/namatoko`), margin tambahan per transaksi, dan tema visual promosi.
+- **Withdraw Komisi**: Fitur pencairan komisi mandiri. Mitra bisa meminta pencairan saldo `approved` dengan mengisi catatan rekening tujuan.
+- **UI Responsif**: Sidebar layout `/mitra` dibuat dengan opsi *collapse/expand* di layar desktop untuk memberikan area kerja yang lebih luas.
+
+#### c. Manajemen Referral oleh Superadmin (`/control/downline`)
+- Dibuat panel khusus di dashboard Admin untuk mengelola semua akun Mitra. Fitur ini dilindungi hak akses khusus `superadminOnly`.
+- **Buat Akun Mitra**: Superadmin bisa membuat akun mitra baru. Jika email sudah ada di sistem (baik user biasa atau admin sekalipun), sistem akan otomatis mengupgrade peran/mengaitkan profil Mitra ke akun tersebut tanpa memunculkan error duplikat.
+- **Approval Pencairan (Payout)**: Superadmin dapat melihat riwayat *withdrawal* dan mengubah statusnya (`pending` -> `processing` -> `completed/rejected`).
+- **Real-time Statistics**: Superadmin dapat melihat data agregat performa seluruh mitra (Total Profit Approved, Paid, dll).
+
 ### 24. Integrasi Digiflazz, Perbaikan Admin Control, dan Stabilitas Deploy VPS (24 April 2026)
 
 #### a. Export Produk Admin ke Excel
