@@ -1,7 +1,7 @@
 "use client";
 
-import { useParams } from "next/navigation";
-import { Copy, KeyRound, Save } from "lucide-react";
+import { useParams, useRouter } from "next/navigation";
+import { Copy, KeyRound, Save, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import PromoVisualCard from "@/components/referral/PromoVisualCard";
@@ -16,11 +16,13 @@ import { PROMO_VISUAL_VARIANTS, REFERRAL_THEME_OPTIONS } from "@/lib/referral-co
 
 export default function AdminDownlineDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const profileId = params?.id;
   const [detail, setDetail] = useState(null);
   const [form, setForm] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [message, setMessage] = useState("");
   const [resetPasswordInfo, setResetPasswordInfo] = useState("");
 
@@ -134,6 +136,26 @@ export default function AdminDownlineDetailPage() {
     setMessage(copied ? `${label} berhasil disalin.` : `Gagal menyalin ${label}.`);
   };
 
+  const handleDelete = async () => {
+    if (!window.confirm("Yakin ingin menghapus mitra ini? Semua data terkait (akun, komisi, dll) akan terhapus dan tidak dapat dikembalikan.")) {
+      return;
+    }
+
+    setDeleting(true);
+    const res = await fetch(`/api/admin/downline/${profileId}`, {
+      method: "DELETE",
+    });
+    const data = await res.json();
+
+    if (data.success) {
+      alert("Referral berhasil dihapus.");
+      router.push("/control/downline");
+    } else {
+      setMessage(data.error || "Gagal menghapus referral.");
+      setDeleting(false);
+    }
+  };
+
   if (loading || !detail || !form || !previewProfile) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -167,6 +189,14 @@ export default function AdminDownlineDetailPage() {
           >
             <KeyRound size={15} />
             Reset Password
+          </button>
+          <button
+            onClick={handleDelete}
+            disabled={deleting}
+            className="inline-flex items-center gap-2 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-600 hover:bg-red-100 disabled:opacity-60"
+          >
+            <Trash2 size={15} />
+            {deleting ? "Menghapus..." : "Hapus Mitra"}
           </button>
         </div>
       </div>

@@ -116,7 +116,7 @@ export default function MitraLayout({ children }) {
   const [profile, setProfile] = useState(null);
 
   useEffect(() => {
-    if (pathname === "/mitra/login") {
+    if (pathname === "/mitra/login" || pathname === "/mitra/aktivasi") {
       setCheckingSession(false);
       return;
     }
@@ -152,7 +152,7 @@ export default function MitraLayout({ children }) {
     router.refresh();
   };
 
-  if (pathname === "/mitra/login") {
+  if (pathname === "/mitra/login" || pathname === "/mitra/aktivasi") {
     return children;
   }
 

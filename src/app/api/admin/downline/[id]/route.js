@@ -230,3 +230,47 @@ export async function PUT(request, { params }) {
     );
   }
 }
+
+export async function DELETE(request, { params }) {
+  const auth = await requireAdminSession({
+    allowedAdminTypes: ["superadmin"],
+    forbiddenMessage: "Hanya superadmin yang dapat menghapus akun referral.",
+  });
+  if (!auth.ok) return auth.response;
+
+  try {
+    const { id } = await params;
+    
+    // First find the userId associated with this profile
+    const [existing] = await db
+      .select({ userId: downlineProfiles.userId })
+      .from(downlineProfiles)
+      .where(eq(downlineProfiles.id, id))
+      .limit(1);
+
+    if (!existing) {
+      return NextResponse.json(
+        { success: false, error: "Referral tidak ditemukan." },
+        { status: 404 }
+      );
+    }
+
+    await db.transaction(async (tx) => {
+      // 1. Delete the profile
+      await tx.delete(downlineProfiles).where(eq(downlineProfiles.id, id));
+      // 2. Delete the associated user account
+      await tx.delete(users).where(eq(users.id, existing.userId));
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: "Akun referral berhasil dihapus.",
+    });
+  } catch (error) {
+    console.error("DELETE /api/admin/downline/[id] error:", error);
+    return NextResponse.json(
+      { success: false, error: "Gagal menghapus referral." },
+      { status: 500 }
+    );
+  }
+}
