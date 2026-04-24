@@ -4,6 +4,32 @@ import db from "@/db/index.js";
 import { users, downlineProfiles } from "@/db/schema.js";
 import { hashPassword } from "@/lib/password";
 
+export async function GET(request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const token = searchParams.get("token");
+
+    if (!token) {
+      return NextResponse.json({ valid: false, error: "Token tidak valid" });
+    }
+
+    const userRows = await db
+      .select({ id: users.id, emailVerified: users.emailVerified })
+      .from(users)
+      .where(eq(users.activationToken, token))
+      .limit(1);
+
+    if (userRows.length === 0) {
+      // If no token is found, it means it was either invalid or already used
+      return NextResponse.json({ valid: false, used: true });
+    }
+
+    return NextResponse.json({ valid: true });
+  } catch (error) {
+    return NextResponse.json({ valid: false, error: "Server error" });
+  }
+}
+
 export async function POST(request) {
   try {
     const body = await request.json();

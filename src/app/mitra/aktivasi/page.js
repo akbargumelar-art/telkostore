@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, Suspense } from "react";
+import { useState, Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Lock, Eye, EyeOff, CheckCircle2 } from "lucide-react";
+import { Lock, Eye, EyeOff, CheckCircle2, AlertCircle } from "lucide-react";
 import Link from "next/link";
 
 function AktivasiForm() {
@@ -13,8 +13,30 @@ function AktivasiForm() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [checkingToken, setCheckingToken] = useState(true);
+  const [tokenUsed, setTokenUsed] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
+
+  useEffect(() => {
+    if (!token) {
+      setCheckingToken(false);
+      return;
+    }
+    
+    // Verify if token is still valid
+    fetch(`/api/mitra/auth/activate?token=${token}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (!data.valid && data.used) {
+          setTokenUsed(true);
+        }
+        setCheckingToken(false);
+      })
+      .catch(() => {
+        setCheckingToken(false);
+      });
+  }, [token]);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -55,6 +77,38 @@ function AktivasiForm() {
       <div className="rounded-2xl border border-red-100 bg-red-50 p-6 text-center shadow-lg">
         <p className="font-semibold text-red-600">Link aktivasi tidak valid.</p>
         <p className="mt-2 text-sm text-red-500">Pastikan Anda mengklik link lengkap dari pesan WhatsApp/Email.</p>
+      </div>
+    );
+  }
+
+  if (checkingToken) {
+    return (
+      <div className="flex flex-col items-center justify-center py-10">
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-white/20 border-t-white" />
+        <p className="mt-4 text-sm text-white/80">Memverifikasi link aktivasi...</p>
+      </div>
+    );
+  }
+
+  if (tokenUsed) {
+    return (
+      <div className="rounded-2xl bg-white p-8 text-center shadow-2xl">
+        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-blue-100">
+          <AlertCircle size={32} className="text-blue-600" />
+        </div>
+        <h2 className="mt-6 text-2xl font-black text-navy">Sudah Diverifikasi</h2>
+        <p className="mt-2 text-sm text-gray-500">
+          Akun referral Anda sudah aktif dan password sudah dibuat sebelumnya.
+        </p>
+        <p className="mt-2 text-sm text-gray-500">
+          Silakan langsung login menggunakan Email dan Password yang telah Anda buat.
+        </p>
+        <Link
+          href="/mitra/login"
+          className="mt-8 flex w-full justify-center rounded-xl bg-navy px-4 py-3 text-sm font-bold text-white shadow-lg transition-colors hover:bg-navy/90"
+        >
+          Masuk ke Portal Mitra
+        </Link>
       </div>
     );
   }
