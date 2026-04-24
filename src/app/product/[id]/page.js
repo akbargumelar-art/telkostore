@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, use, useCallback, useRef } from "react";
+import { useState, useEffect, use, useCallback, useRef } from "react";
 import Link from "next/link";
 import {
   VOUCHER_REGION_APPROVAL_TEXT,
@@ -262,13 +262,10 @@ export default function ProductPage({ params }) {
   const detectedOperator = phoneReadyForPayment
     ? getOperatorName(phoneNumber)
     : null;
-  const voucherRequirement = useMemo(
-    () => getVoucherInternetRequirement(selectedProduct),
-    [selectedProduct]
-  );
-  const voucherValidation = useMemo(
-    () => validateVoucherInternetCheckout(selectedProduct, phoneNumber),
-    [selectedProduct, phoneNumber]
+  const voucherRequirement = getVoucherInternetRequirement(selectedProduct);
+  const voucherValidation = validateVoucherInternetCheckout(
+    selectedProduct,
+    phoneNumber
   );
   const voucherValidationMessage =
     isVoucherInternet &&

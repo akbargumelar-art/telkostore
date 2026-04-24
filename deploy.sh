@@ -8,11 +8,27 @@ set -e
 
 APP_DIR="/var/www/telkostore"
 BRANCH="main"
+PRIMARY_PM2_APP="telkostore"
+LEGACY_PM2_APP="telkostore-app"
+PM2_APP_NAME=""
 
 echo ""
 echo "🚀 Telko.Store — Deploy"
 echo "========================"
 echo ""
+
+restart_pm2_app() {
+  if pm2 describe "$PRIMARY_PM2_APP" >/dev/null 2>&1; then
+    PM2_APP_NAME="$PRIMARY_PM2_APP"
+    pm2 restart "$PM2_APP_NAME" --update-env
+  elif pm2 describe "$LEGACY_PM2_APP" >/dev/null 2>&1; then
+    PM2_APP_NAME="$LEGACY_PM2_APP"
+    pm2 restart "$PM2_APP_NAME" --update-env
+  else
+    PM2_APP_NAME="$PRIMARY_PM2_APP"
+    pm2 start npm --name "$PM2_APP_NAME" -- start
+  fi
+}
 
 cd "$APP_DIR"
 
@@ -58,13 +74,13 @@ echo ""
 # 4. Restart aplikasi (PM2)
 if command -v pm2 &> /dev/null; then
   echo "🔄 Restarting PM2 process..."
-  pm2 restart telkostore-app --update-env 2>/dev/null || pm2 start npm --name "telkostore-app" -- start
+  restart_pm2_app
   pm2 save 2>/dev/null
-  echo "✅ PM2 restarted"
+  echo "✅ PM2 restarted ($PM2_APP_NAME)"
 else
   echo "⚠️  PM2 tidak terdeteksi. Restart manual diperlukan."
   echo "   Install PM2: npm install -g pm2"
-  echo "   Start: pm2 start npm --name telkostore-app -- start"
+  echo "   Start: pm2 start npm --name $PRIMARY_PM2_APP -- start"
 fi
 
 echo ""
@@ -100,7 +116,7 @@ if echo "$HEALTH" | grep -q '"status":"ok"'; then
   echo "✅ Application is healthy!"
 else
   echo "⚠️  Health check: $HEALTH"
-  echo "   Cek logs: pm2 logs telkostore-app --lines 30"
+  echo "   Cek logs: pm2 logs ${PM2_APP_NAME:-$PRIMARY_PM2_APP} --lines 30"
 fi
 
 echo ""

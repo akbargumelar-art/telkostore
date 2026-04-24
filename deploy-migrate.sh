@@ -21,11 +21,27 @@ set -e
 
 APP_DIR="/var/www/telkostore"
 BRANCH="main"
+PRIMARY_PM2_APP="telkostore"
+LEGACY_PM2_APP="telkostore-app"
+PM2_APP_NAME=""
 
 echo ""
 echo "🔄 Telko.Store — Migration Deploy (SQLite → MySQL)"
 echo "===================================================="
 echo ""
+
+restart_pm2_app() {
+  if pm2 describe "$PRIMARY_PM2_APP" >/dev/null 2>&1; then
+    PM2_APP_NAME="$PRIMARY_PM2_APP"
+    pm2 restart "$PM2_APP_NAME" --update-env
+  elif pm2 describe "$LEGACY_PM2_APP" >/dev/null 2>&1; then
+    PM2_APP_NAME="$LEGACY_PM2_APP"
+    pm2 restart "$PM2_APP_NAME" --update-env
+  else
+    PM2_APP_NAME="$PRIMARY_PM2_APP"
+    pm2 start npm --name "$PM2_APP_NAME" -- start
+  fi
+}
 
 # ===== PRE-CHECK =====
 echo "🔍 Pre-flight checks..."
@@ -152,12 +168,12 @@ echo ""
 # ===== STEP 9: RESTART PM2 =====
 echo "🔄 Step 9: Restarting application..."
 if command -v pm2 &> /dev/null; then
-  pm2 restart telkostore-app --update-env 2>/dev/null || pm2 start npm --name "telkostore-app" -- start
+  restart_pm2_app
   pm2 save 2>/dev/null
-  echo "   ✅ PM2 restarted"
+  echo "   ✅ PM2 restarted ($PM2_APP_NAME)"
 else
   echo "   ⚠️  PM2 not found. Install: npm install -g pm2"
-  echo "   Manual start: pm2 start npm --name telkostore-app -- start"
+  echo "   Manual start: pm2 start npm --name $PRIMARY_PM2_APP -- start"
 fi
 echo ""
 
@@ -192,7 +208,7 @@ echo "   Response: $HEALTH"
 if echo "$HEALTH" | grep -q '"status":"ok"'; then
   echo "   ✅ Application is healthy!"
 else
-  echo "   ⚠️  Health check failed — check: pm2 logs telkostore-app"
+  echo "   ⚠️  Health check failed — check: pm2 logs ${PM2_APP_NAME:-$PRIMARY_PM2_APP}"
 fi
 echo ""
 
