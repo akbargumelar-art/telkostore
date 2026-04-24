@@ -11,9 +11,10 @@ import {
   ReceiptText,
   Store,
   UserRound,
-  Wallet,
   X,
   Banknote,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 const navItems = [
@@ -25,23 +26,28 @@ const navItems = [
   { href: "/mitra/profil", label: "Profil", icon: UserRound },
 ];
 
-function SidebarContent({ pathname, profile, onLogout }) {
+function SidebarContent({ pathname, profile, onLogout, collapsed, onToggleCollapse, isDesktop }) {
   return (
     <>
-      <div className="border-b border-white/10 px-5 py-5">
-        <Link href="/mitra" className="flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/14">
+      <div className="border-b border-white/10 px-5 py-5 flex items-center justify-between">
+        <Link href="/mitra" className={`flex items-center ${collapsed ? "justify-center w-full" : "gap-3"}`}>
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white/14">
             <Link2 size={20} className="text-white" />
           </div>
-          <div>
-            <h1 className="text-sm font-black text-white">
-              Portal Mitra
-            </h1>
-            <p className="text-[11px] text-white/65">
-              {profile?.displayName || "Referral Telko.Store"}
-            </p>
-          </div>
+          {!collapsed && (
+            <div className="min-w-0">
+              <h1 className="text-sm font-black text-white truncate">Portal Mitra</h1>
+              <p className="text-[11px] text-white/65 truncate">
+                {profile?.displayName || "Referral Telko.Store"}
+              </p>
+            </div>
+          )}
         </Link>
+        {isDesktop && !collapsed && (
+          <button onClick={onToggleCollapse} className="text-white/50 hover:text-white">
+            <ChevronLeft size={18} />
+          </button>
+        )}
       </div>
 
       <nav className="flex-1 space-y-1 px-3 py-4">
@@ -55,33 +61,45 @@ function SidebarContent({ pathname, profile, onLogout }) {
             <Link
               key={item.href}
               href={item.href}
-              className={`flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-semibold transition-all ${
+              title={collapsed ? item.label : undefined}
+              className={`flex items-center ${collapsed ? "justify-center" : "gap-3 px-3"} rounded-2xl py-2.5 text-sm font-semibold transition-all ${
                 isActive
                   ? "bg-white text-navy shadow-lg"
                   : "text-white/80 hover:bg-white/10 hover:text-white"
               }`}
             >
               <Icon size={17} />
-              {item.label}
+              {!collapsed && <span>{item.label}</span>}
             </Link>
           );
         })}
       </nav>
 
       <div className="space-y-2 border-t border-white/10 px-3 py-4">
+        {isDesktop && collapsed && (
+          <button
+            onClick={onToggleCollapse}
+            title="Expand Menu"
+            className="flex w-full items-center justify-center rounded-2xl py-2.5 text-white/50 hover:bg-white/10 hover:text-white"
+          >
+            <ChevronRight size={18} />
+          </button>
+        )}
         <Link
           href="/"
-          className="flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-semibold text-white/80 hover:bg-white/10 hover:text-white"
+          title={collapsed ? "Lihat Toko" : undefined}
+          className={`flex items-center ${collapsed ? "justify-center" : "gap-3 px-3"} rounded-2xl py-2.5 text-sm font-semibold text-white/80 hover:bg-white/10 hover:text-white`}
         >
           <Store size={17} />
-          Lihat Toko
+          {!collapsed && <span>Lihat Toko</span>}
         </Link>
         <button
           onClick={onLogout}
-          className="flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-semibold text-rose-100 hover:bg-white/10"
+          title={collapsed ? "Logout" : undefined}
+          className={`flex w-full items-center ${collapsed ? "justify-center" : "gap-3 px-3"} rounded-2xl py-2.5 text-sm font-semibold text-rose-100 hover:bg-white/10`}
         >
           <LogOut size={17} />
-          Logout
+          {!collapsed && <span>Logout</span>}
         </button>
       </div>
     </>
@@ -92,6 +110,7 @@ export default function MitraLayout({ children }) {
   const pathname = usePathname();
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [desktopCollapsed, setDesktopCollapsed] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
   const [profile, setProfile] = useState(null);
 
@@ -146,8 +165,15 @@ export default function MitraLayout({ children }) {
 
   return (
     <div className="min-h-screen bg-[#f7f7fb]">
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-72 flex-col bg-[radial-gradient(circle_at_top,_#2d2d6b,_#0f0f30)] md:flex">
-        <SidebarContent pathname={pathname} profile={profile} onLogout={handleLogout} />
+      <aside className={`fixed inset-y-0 left-0 z-30 hidden flex-col bg-[radial-gradient(circle_at_top,_#2d2d6b,_#0f0f30)] transition-all duration-300 md:flex ${desktopCollapsed ? "w-20" : "w-72"}`}>
+        <SidebarContent 
+          pathname={pathname} 
+          profile={profile} 
+          onLogout={handleLogout} 
+          collapsed={desktopCollapsed}
+          onToggleCollapse={() => setDesktopCollapsed(!desktopCollapsed)}
+          isDesktop={true}
+        />
       </aside>
 
       {sidebarOpen ? (
@@ -160,12 +186,18 @@ export default function MitraLayout({ children }) {
             >
               <X size={16} />
             </button>
-            <SidebarContent pathname={pathname} profile={profile} onLogout={handleLogout} />
+            <SidebarContent 
+              pathname={pathname} 
+              profile={profile} 
+              onLogout={handleLogout} 
+              collapsed={false}
+              isDesktop={false}
+            />
           </aside>
         </div>
       ) : null}
 
-      <div className="md:ml-72">
+      <div className={`transition-all duration-300 ${desktopCollapsed ? "md:ml-20" : "md:ml-72"}`}>
         <header className="sticky top-0 z-20 border-b border-gray-100 bg-white/90 backdrop-blur md:hidden">
           <div className="flex items-center gap-3 px-4 py-3">
             <button
