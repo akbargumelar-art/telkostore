@@ -54,7 +54,7 @@ echo ""
 
 # 2. Install dependencies
 echo "📦 Installing dependencies..."
-npm install --production=false
+npm install --production=false --legacy-peer-deps
 echo "✅ Dependencies updated"
 echo ""
 
