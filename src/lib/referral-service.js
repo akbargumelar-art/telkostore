@@ -187,6 +187,7 @@ const profileSelect = {
   updatedAt: downlineProfiles.updatedAt,
   name: users.name,
   email: users.email,
+  emailVerified: users.emailVerified,
   phone: users.phone,
   role: users.role,
 };

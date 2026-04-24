@@ -19,6 +19,7 @@
     "db:migrate-digiflazz": "node src/db/migrate-add-digiflazz.mjs",
     "db:migrate-site-banners": "node src/db/migrate-add-site-banners.mjs",
     "db:migrate-referral": "node src/db/migrate-add-referral-system.mjs",
+    "db:migrate-user-activation": "node src/db/migrate-add-user-activation.mjs",
     "payments:reconcile": "node src/scripts/reconcile-pending-payments.mjs"
   },
   "dependencies": {
@@ -31,6 +32,7 @@
     "nanoid": "^5.1.5",
     "next": "^15.3.1",
     "next-auth": "^5.0.0-beta.30",
+    "nodemailer": "^6.9.13",
     "puppeteer": "^24.42.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

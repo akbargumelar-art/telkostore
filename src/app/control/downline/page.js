@@ -286,6 +286,15 @@ export default function AdminDownlinePage() {
                     >
                       {row.isReferralActive ? "Aktif" : "Nonaktif"}
                     </span>
+                    <span
+                      className={`rounded-full px-2 py-1 text-[11px] font-bold ${
+                        row.emailVerified
+                          ? "bg-blue-50 text-blue-700"
+                          : "bg-orange-50 text-orange-700"
+                      }`}
+                    >
+                      {row.emailVerified ? "Verified" : "Belum Aktivasi"}
+                    </span>
                   </div>
                   <p className="mt-1 text-sm text-gray-500">
                     {row.email} • Margin {formatRupiah(row.marginPerTransaction)} / transaksi

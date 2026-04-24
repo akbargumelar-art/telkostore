@@ -1,19 +1,21 @@
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { nanoid } from "nanoid";
+import crypto from "crypto";
 
 import db from "@/db/index.js";
 import { downlineProfiles, users } from "@/db/schema.js";
 import { requireAdminSession } from "@/lib/admin-session";
 import { hashPassword, generateTemporaryPassword } from "@/lib/password";
 import {
-  buildReferralLinks,
   generateUniqueCanonicalSlug,
 } from "@/lib/referral";
 import {
   listDownlines,
 } from "@/lib/referral-service";
 import { normalizeRedirectPath } from "@/lib/referral-config";
+import { sendWhatsAppNotification } from "@/lib/whatsapp";
+import { sendEmail } from "@/lib/email";
 
 function parseMargin(value) {
   const parsed = Number(value);
@@ -147,6 +149,7 @@ export async function POST(request) {
     const profileId = `DLP-${nanoid(10)}`;
     const slug = await generateUniqueCanonicalSlug(displayName);
     const now = new Date().toISOString();
+    const activationToken = crypto.randomBytes(32).toString('hex');
 
     await db.transaction(async (tx) => {
       if (!existingUser) {
@@ -158,13 +161,18 @@ export async function POST(request) {
           phone: phone || null,
           role: "downline",
           passwordHash: hashPassword(generatedPassword),
+          activationToken: activationToken,
+          emailVerified: false,
           provider: "manual",
           providerId: null,
           createdAt: now,
         });
       } else {
         // Update existing user (set password if they don't have one, update role if they are just a "user")
-        const updateData = {};
+        const updateData = {
+          activationToken: activationToken,
+          emailVerified: false,
+        };
         if (!existingUser.passwordHash) {
           updateData.passwordHash = hashPassword(generatedPassword);
         } else if (providedPassword) {
@@ -176,9 +184,7 @@ export async function POST(request) {
           updateData.role = "downline";
         }
         
-        if (Object.keys(updateData).length > 0) {
-          await tx.update(users).set(updateData).where(eq(users.id, existingUser.id));
-        }
+        await tx.update(users).set(updateData).where(eq(users.id, existingUser.id));
       }
 
       await tx.insert(downlineProfiles).values({
@@ -209,15 +215,92 @@ export async function POST(request) {
       isCustomReferralActive: false,
     });
 
+    // Send Activation Link via WA
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://telko.store";
+    const activationUrl = `${baseUrl}/mitra/aktivasi?token=${activationToken}`;
+    const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=500x500&data=${encodeURIComponent(links.canonicalUrl)}&margin=10`;
+    
+    const waMessage = `Halo *${displayName}*,
+
+Selamat bergabung! Akun Mitra Referral Telko.Store Anda telah berhasil didaftarkan.
+
+*Data Referral Anda:*
+- Email Login: ${email}
+- Link Referral: ${links.canonicalUrl}
+- Download QR Code: ${qrCodeUrl}
+
+*(Anda bisa menggunakan Link/QR Code di atas untuk disebar ke pelanggan Anda)*
+
+*LANGKAH PENTING:*
+Silakan klik link di bawah ini untuk **mengatur password** dan mengaktifkan akun Anda:
+${activationUrl}
+
+_(Link ini hanya untuk Anda, jangan bagikan ke siapapun)_`;
+
+    if (phone) {
+      // Background WA send
+      sendWhatsAppNotification(phone, waMessage).catch((err) => {
+        console.error("Gagal mengirim WA aktivasi:", err);
+      });
+    }
+
+    // Send Activation Link via Email
+    const emailHtml = `
+      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; color: #333; line-height: 1.6;">
+        <h2 style="color: #0f0f30;">Halo ${displayName},</h2>
+        <p>Selamat bergabung! Akun Mitra Referral <strong>Telko.Store</strong> Anda telah berhasil didaftarkan.</p>
+        
+        <div style="background-color: #f7f7fb; border: 1px solid #e5e7eb; border-radius: 12px; padding: 20px; margin: 24px 0;">
+          <h3 style="margin-top: 0; color: #2d2d6b; font-size: 16px;">Data Referral Anda:</h3>
+          <ul style="list-style: none; padding: 0; margin: 0;">
+            <li style="margin-bottom: 8px;"><strong>Email Login:</strong> ${email}</li>
+            <li style="margin-bottom: 8px;"><strong>Link Referral:</strong> <a href="${links.canonicalUrl}" style="color: #d11f26;">${links.canonicalUrl}</a></li>
+          </ul>
+          
+          <div style="margin-top: 20px; text-align: center;">
+            <p style="font-size: 14px; margin-bottom: 8px; color: #666;">QR Code Referral Anda:</p>
+            <img src="${qrCodeUrl}" alt="QR Code" width="150" height="150" style="border-radius: 8px; border: 1px solid #eee; padding: 4px; background: white;" />
+          </div>
+        </div>
+        
+        <p><em>(Anda bisa menggunakan Link/QR Code di atas untuk disebar ke pelanggan Anda)</em></p>
+        
+        <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;" />
+        
+        <h3 style="color: #d11f26;">LANGKAH PENTING:</h3>
+        <p>Silakan klik tombol di bawah ini untuk <strong>mengatur password</strong> dan mengaktifkan akun Anda:</p>
+        
+        <div style="text-align: center; margin: 32px 0;">
+          <a href="${activationUrl}" style="display: inline-block; background-color: #0f0f30; color: white; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-weight: bold;">Aktifkan Akun & Buat Password</a>
+        </div>
+        
+        <p style="font-size: 13px; color: #666;">Jika tombol tidak bisa diklik, silakan copy-paste link berikut ke browser Anda:<br>
+        <a href="${activationUrl}" style="color: #0f0f30; word-break: break-all;">${activationUrl}</a></p>
+        
+        <p style="font-size: 12px; color: #999; margin-top: 40px; text-align: center;">
+          Pesan ini dikirim secara otomatis. Harap jangan membalas pesan ini (No Reply).
+        </p>
+      </div>
+    `;
+
+    // Background Email send
+    sendEmail({
+      to: email,
+      subject: "Aktivasi Akun Mitra Referral Telko.Store",
+      html: emailHtml,
+    }).catch((err) => {
+      console.error("Gagal mengirim Email aktivasi:", err);
+    });
+
     return NextResponse.json({
       success: true,
-      message: "Akun referral berhasil dibuat.",
+      message: "Akun referral berhasil dibuat dan link aktivasi telah dikirim via WA & Email.",
       data: {
         userId,
         profileId,
         slug,
         email,
-        password: generatedPassword,
+        activationToken,
         links,
       },
     });
@@ -229,3 +312,4 @@ export async function POST(request) {
     );
   }
 }
+

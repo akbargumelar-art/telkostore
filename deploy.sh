@@ -63,6 +63,7 @@ echo "🗄️ Running database migrations..."
 npm run db:migrate-admin-password
 npm run db:migrate-site-banners
 npm run db:migrate-referral
+npm run db:migrate-user-activation
 echo "✅ Database migration selesai"
 echo ""
 
