@@ -60,6 +60,15 @@ export async function PUT(request) {
     const themeKey = body.themeKey !== undefined
       ? String(body.themeKey || "").trim()
       : undefined;
+    const bankName = body.bankName !== undefined
+      ? String(body.bankName || "").trim()
+      : undefined;
+    const bankAccountNumber = body.bankAccountNumber !== undefined
+      ? String(body.bankAccountNumber || "").trim()
+      : undefined;
+    const bankAccountName = body.bankAccountName !== undefined
+      ? String(body.bankAccountName || "").trim()
+      : undefined;
 
     if (email) {
       const existingEmail = await db
@@ -116,6 +125,9 @@ export async function PUT(request) {
         profileUpdate.customReferralAlias = customAlias;
         profileUpdate.isCustomReferralActive = isCustomReferralActive;
       }
+      if (bankName !== undefined) profileUpdate.bankName = bankName || null;
+      if (bankAccountNumber !== undefined) profileUpdate.bankAccountNumber = bankAccountNumber || null;
+      if (bankAccountName !== undefined) profileUpdate.bankAccountName = bankAccountName || null;
 
       await tx
         .update(downlineProfiles)

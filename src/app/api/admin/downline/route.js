@@ -8,6 +8,7 @@ import { downlineProfiles, users } from "@/db/schema.js";
 import { requireAdminSession } from "@/lib/admin-session";
 import { hashPassword, generateTemporaryPassword } from "@/lib/password";
 import {
+  buildReferralLinks,
   generateUniqueCanonicalSlug,
 } from "@/lib/referral";
 import {
@@ -24,6 +25,43 @@ function parseMargin(value) {
   }
 
   return parsed;
+}
+
+function escapeHtml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+async function buildReferralQrAttachment(referralUrl) {
+  const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=500x500&data=${encodeURIComponent(referralUrl)}&margin=10`;
+
+  try {
+    const response = await fetch(qrCodeUrl, { cache: "no-store" });
+    if (!response.ok) {
+      throw new Error(`QR request failed with status ${response.status}`);
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+    return {
+      qrCodeUrl,
+      attachment: {
+        filename: "qr-referral-telko-store.png",
+        content: Buffer.from(arrayBuffer),
+        contentType: "image/png",
+        cid: "referral-qrcode@telko.store",
+      },
+    };
+  } catch (error) {
+    console.error("Gagal menyiapkan QR Code email referral:", error);
+    return {
+      qrCodeUrl,
+      attachment: null,
+    };
+  }
 }
 
 export async function GET(request) {
@@ -89,7 +127,6 @@ export async function POST(request) {
     const displayName = String(body.displayName || body.name || "").trim();
     const email = String(body.email || "").trim().toLowerCase();
     const phone = String(body.phone || "").trim();
-    const providedPassword = String(body.password || "").trim();
     const bannerTitle = String(body.bannerTitle || "").trim();
     const bannerSubtitle = String(body.bannerSubtitle || "").trim();
     const bannerImageUrl = String(body.bannerImageUrl || "").trim();
@@ -143,8 +180,8 @@ export async function POST(request) {
       }
     }
 
-    const generatedPassword =
-      providedPassword.length >= 8 ? providedPassword : generateTemporaryPassword(10);
+    // Always generate a temp password (mitra will set their own via activation link)
+    const generatedPassword = generateTemporaryPassword(10);
     const userId = existingUser ? existingUser.id : `DLN-${nanoid(10)}`;
     const profileId = `DLP-${nanoid(10)}`;
     const slug = await generateUniqueCanonicalSlug(displayName);
@@ -175,9 +212,6 @@ export async function POST(request) {
         };
         if (!existingUser.passwordHash) {
           updateData.passwordHash = hashPassword(generatedPassword);
-        } else if (providedPassword) {
-          // If admin explicitly provided a password, overwrite the old one
-          updateData.passwordHash = hashPassword(providedPassword);
         }
         
         if (existingUser.role === "user") {
@@ -218,7 +252,9 @@ export async function POST(request) {
     // Send Activation Link via WA
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://telko.store";
     const activationUrl = `${baseUrl}/mitra/aktivasi?token=${activationToken}`;
-    const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=500x500&data=${encodeURIComponent(links.canonicalUrl)}&margin=10`;
+    const { qrCodeUrl, attachment: qrCodeAttachment } = await buildReferralQrAttachment(
+      links.canonicalUrl
+    );
     
     const waMessage = `Halo *${displayName}*,
 
@@ -245,49 +281,93 @@ _(Link ini hanya untuk Anda, jangan bagikan ke siapapun)_`;
     }
 
     // Send Activation Link via Email
+    const safeDisplayName = escapeHtml(displayName);
+    const safeEmail = escapeHtml(email);
+    const safeReferralLink = escapeHtml(links.canonicalUrl);
+    const safeActivationUrl = escapeHtml(activationUrl);
+    const qrCodeImageHtml = qrCodeAttachment
+      ? '<img src="cid:referral-qrcode@telko.store" alt="QR Code Referral" width="180" height="180" style="display:block; margin:0 auto; border-radius:16px; border:1px solid #e5e7eb; padding:8px; background:#ffffff;" />'
+      : `<img src="${qrCodeUrl}" alt="QR Code Referral" width="180" height="180" style="display:block; margin:0 auto; border-radius:16px; border:1px solid #e5e7eb; padding:8px; background:#ffffff;" />`;
+
     const emailHtml = `
-      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; color: #333; line-height: 1.6;">
-        <h2 style="color: #0f0f30;">Halo ${displayName},</h2>
-        <p>Selamat bergabung! Akun Mitra Referral <strong>Telko.Store</strong> Anda telah berhasil didaftarkan.</p>
-        
-        <div style="background-color: #f7f7fb; border: 1px solid #e5e7eb; border-radius: 12px; padding: 20px; margin: 24px 0;">
-          <h3 style="margin-top: 0; color: #2d2d6b; font-size: 16px;">Data Referral Anda:</h3>
-          <ul style="list-style: none; padding: 0; margin: 0;">
-            <li style="margin-bottom: 8px;"><strong>Email Login:</strong> ${email}</li>
-            <li style="margin-bottom: 8px;"><strong>Link Referral:</strong> <a href="${links.canonicalUrl}" style="color: #d11f26;">${links.canonicalUrl}</a></li>
-          </ul>
-          
-          <div style="margin-top: 20px; text-align: center;">
-            <p style="font-size: 14px; margin-bottom: 8px; color: #666;">QR Code Referral Anda:</p>
-            <img src="${qrCodeUrl}" alt="QR Code" width="150" height="150" style="border-radius: 8px; border: 1px solid #eee; padding: 4px; background: white;" />
+      <div style="margin:0; padding:32px 16px; background:#f5f7fb; font-family:Arial,Helvetica,sans-serif; color:#1f2937;">
+        <div style="max-width:640px; margin:0 auto; background:#ffffff; border-radius:24px; overflow:hidden; border:1px solid #e5e7eb; box-shadow:0 12px 40px rgba(15,23,42,0.08);">
+          <div style="padding:32px 32px 24px; background:linear-gradient(135deg,#0f172a 0%,#1e3a8a 100%); color:#ffffff;">
+            <p style="margin:0; font-size:14px; letter-spacing:0.08em; text-transform:uppercase; opacity:0.82;">Telko.Store Referral</p>
+            <h1 style="margin:12px 0 0; font-size:28px; line-height:1.3; font-weight:800;">Halo ${safeDisplayName}, Selamat bergabung!</h1>
+          </div>
+
+          <div style="padding:32px;">
+            <p style="margin:0 0 20px; font-size:15px; line-height:1.7; color:#4b5563;">
+              Akun Mitra Referral Anda sudah berhasil dibuat. Berikut data login dan link referral yang bisa langsung digunakan.
+            </p>
+
+            <div style="margin:0 0 24px; padding:24px; background:#f8fafc; border:1px solid #dbe4f0; border-radius:20px;">
+              <p style="margin:0 0 16px; font-size:13px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:#64748b;">Data Referral</p>
+              <div style="margin-bottom:14px;">
+                <div style="font-size:12px; font-weight:700; text-transform:uppercase; color:#94a3b8; margin-bottom:6px;">Email Login</div>
+                <div style="font-size:16px; font-weight:700; color:#0f172a; word-break:break-word;">${safeEmail}</div>
+              </div>
+              <div>
+                <div style="font-size:12px; font-weight:700; text-transform:uppercase; color:#94a3b8; margin-bottom:6px;">Link Referral</div>
+                <a href="${safeReferralLink}" style="font-size:15px; font-weight:700; color:#dc2626; text-decoration:none; word-break:break-all;">${safeReferralLink}</a>
+              </div>
+            </div>
+
+            <div style="margin:0 0 24px; padding:24px; background:#ffffff; border:1px dashed #cbd5e1; border-radius:20px; text-align:center;">
+              <p style="margin:0 0 14px; font-size:13px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:#64748b;">QR Code Referral</p>
+              ${qrCodeImageHtml}
+              <p style="margin:14px 0 0; font-size:13px; line-height:1.6; color:#6b7280;">
+                QR code ini langsung bisa disimpan dari email dan dibagikan ke pelanggan.
+              </p>
+            </div>
+
+            <div style="text-align:center; margin:28px 0;">
+              <a href="${safeActivationUrl}" style="display:inline-block; min-width:280px; padding:16px 28px; border-radius:16px; background:#0f172a; color:#ffffff; text-decoration:none; font-size:16px; font-weight:800;">Aktifkan Akun &amp; Buat Password</a>
+            </div>
+
+            <p style="margin:0 0 12px; font-size:13px; line-height:1.7; color:#6b7280;">
+              Jika tombol di atas tidak bisa diklik, salin link berikut ke browser Anda:
+            </p>
+            <p style="margin:0 0 24px; font-size:13px; line-height:1.7; word-break:break-all;">
+              <a href="${safeActivationUrl}" style="color:#1d4ed8; text-decoration:none;">${safeActivationUrl}</a>
+            </p>
+
+            <div style="padding-top:20px; border-top:1px solid #e5e7eb;">
+              <p style="margin:0; font-size:12px; line-height:1.8; color:#9ca3af; text-align:center;">
+                Pesan ini dikirim secara otomatis. Harap jangan membalas pesan ini (No Reply).
+              </p>
+            </div>
           </div>
         </div>
-        
-        <p><em>(Anda bisa menggunakan Link/QR Code di atas untuk disebar ke pelanggan Anda)</em></p>
-        
-        <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;" />
-        
-        <h3 style="color: #d11f26;">LANGKAH PENTING:</h3>
-        <p>Silakan klik tombol di bawah ini untuk <strong>mengatur password</strong> dan mengaktifkan akun Anda:</p>
-        
-        <div style="text-align: center; margin: 32px 0;">
-          <a href="${activationUrl}" style="display: inline-block; background-color: #0f0f30; color: white; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-weight: bold;">Aktifkan Akun & Buat Password</a>
-        </div>
-        
-        <p style="font-size: 13px; color: #666;">Jika tombol tidak bisa diklik, silakan copy-paste link berikut ke browser Anda:<br>
-        <a href="${activationUrl}" style="color: #0f0f30; word-break: break-all;">${activationUrl}</a></p>
-        
-        <p style="font-size: 12px; color: #999; margin-top: 40px; text-align: center;">
-          Pesan ini dikirim secara otomatis. Harap jangan membalas pesan ini (No Reply).
-        </p>
       </div>
     `;
+
+    const emailText = [
+      `Halo ${displayName}, Selamat bergabung!`,
+      "",
+      "Akun Mitra Referral Telko.Store Anda sudah berhasil dibuat.",
+      "",
+      "Data Referral:",
+      `- Email Login: ${email}`,
+      `- Link Referral: ${links.canonicalUrl}`,
+      qrCodeUrl ? `- QR Code Referral: ${qrCodeUrl}` : null,
+      "",
+      "Aktifkan akun & buat password melalui link berikut:",
+      activationUrl,
+      "",
+      "Pesan ini dikirim secara otomatis. Harap jangan membalas pesan ini (No Reply).",
+    ]
+      .filter(Boolean)
+      .join("\n");
 
     // Background Email send
     sendEmail({
       to: email,
       subject: "Aktivasi Akun Mitra Referral Telko.Store",
       html: emailHtml,
+      text: emailText,
+      attachments: qrCodeAttachment ? [qrCodeAttachment] : [],
     }).catch((err) => {
       console.error("Gagal mengirim Email aktivasi:", err);
     });

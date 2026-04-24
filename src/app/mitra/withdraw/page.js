@@ -7,6 +7,7 @@ import { formatDateTime, formatRupiah } from "@/lib/referral-client";
 export default function MitraWithdrawPage() {
   const [rows, setRows] = useState([]);
   const [stats, setStats] = useState(null);
+  const [bankInfo, setBankInfo] = useState(null); // saved bank info from profile
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [showModal, setShowModal] = useState(false);
@@ -15,16 +16,34 @@ export default function MitraWithdrawPage() {
 
   const fetchData = async () => {
     setLoading(true);
-    const [withdrawalsRes, statsRes] = await Promise.all([
+    const [withdrawalsRes, statsRes, profileRes] = await Promise.all([
       fetch("/api/mitra/withdrawals", { cache: "no-store" }),
       fetch("/api/mitra/stats", { cache: "no-store" }),
+      fetch("/api/mitra/profile", { cache: "no-store" }),
     ]);
 
     const withdrawalsData = await withdrawalsRes.json();
     const statsData = await statsRes.json();
+    const profileData = await profileRes.json();
 
     if (withdrawalsData.success) setRows(withdrawalsData.data || []);
     if (statsData.success) setStats(statsData.data?.stats || null);
+
+    // Load saved bank info from mitra profile
+    if (profileData.success && profileData.data) {
+      const p = profileData.data;
+      const savedBank = {
+        bankName: p.bankName || "",
+        accountNumber: p.bankAccountNumber || "",
+        accountName: p.bankAccountName || "",
+      };
+      setBankInfo(savedBank);
+      // Pre-fill form with saved bank info
+      if (savedBank.bankName) {
+        setForm(savedBank);
+      }
+    }
+
     setLoading(false);
   };
 
@@ -47,13 +66,14 @@ export default function MitraWithdrawPage() {
     if (data.success) {
       setMessage({ type: "success", text: data.message });
       setShowModal(false);
-      setForm({ bankName: "", accountNumber: "", accountName: "" });
       fetchData(); // Refresh data
     } else {
       setMessage({ type: "error", text: data.error || "Gagal mengajukan penarikan." });
     }
     setSubmitting(false);
   };
+
+  const hasSavedBank = bankInfo && bankInfo.bankName && bankInfo.accountNumber && bankInfo.accountName;
 
   const getStatusMeta = (status) => {
     switch (status) {
@@ -99,6 +119,28 @@ export default function MitraWithdrawPage() {
           {message.text}
         </div>
       )}
+
+      {/* Saved Bank Info Card */}
+      <div className="rounded-[24px] border border-gray-100 bg-white p-5 shadow-sm">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400 mb-3">
+          Rekening Tersimpan
+        </p>
+        {hasSavedBank ? (
+          <div className="flex flex-col gap-1">
+            <p className="text-base font-black text-navy">
+              {bankInfo.bankName} — {bankInfo.accountNumber}
+            </p>
+            <p className="text-sm text-gray-500">
+              a/n {bankInfo.accountName}
+            </p>
+            <p className="mt-1 text-xs text-emerald-600 font-semibold">✅ Terverifikasi via WA</p>
+          </div>
+        ) : (
+          <p className="text-sm text-gray-400">
+            Belum ada rekening tersimpan. Rekening akan tersimpan saat pertama kali withdraw.
+          </p>
+        )}
+      </div>
 
       <div className="grid gap-4 md:grid-cols-2">
         <div className="rounded-[24px] border border-gray-100 bg-white p-5 shadow-sm">
@@ -176,6 +218,26 @@ export default function MitraWithdrawPage() {
             <p className="mt-2 text-sm text-gray-500">
               Total saldo yang akan ditarik: <strong className="text-navy">{formatRupiah(stats?.approvedCommission || 0)}</strong>
             </p>
+
+            {hasSavedBank && (
+              <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                <p className="text-xs font-bold uppercase tracking-wider text-emerald-700 mb-2">
+                  Rekening Tersimpan
+                </p>
+                <p className="text-sm font-bold text-navy">
+                  {bankInfo.bankName} — {bankInfo.accountNumber}
+                </p>
+                <p className="text-sm text-gray-600">a/n {bankInfo.accountName}</p>
+                <button
+                  type="button"
+                  onClick={() => setForm({ bankName: bankInfo.bankName, accountNumber: bankInfo.accountNumber, accountName: bankInfo.accountName })}
+                  className="mt-3 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white"
+                >
+                  Gunakan Rekening Ini
+                </button>
+              </div>
+            )}
+
             <form onSubmit={handleSubmit} className="mt-6 space-y-4">
               <div>
                 <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-gray-500">

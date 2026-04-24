@@ -36,6 +36,9 @@ export const downlineProfiles = mysqlTable("downline_profiles", {
   bannerImageUrl: text("banner_image_url"),
   themeKey: varchar("theme_key", { length: 40 }).default("sunrise").notNull(),
   promoRedirectPath: varchar("promo_redirect_path", { length: 255 }).default("/").notNull(),
+  bankName: varchar("bank_name", { length: 100 }),
+  bankAccountNumber: varchar("bank_account_number", { length: 100 }),
+  bankAccountName: varchar("bank_account_name", { length: 255 }),
   createdAt: varchar("created_at", { length: 50 }).$defaultFn(() => new Date().toISOString()),
   updatedAt: varchar("updated_at", { length: 50 }).$defaultFn(() => new Date().toISOString()),
 });

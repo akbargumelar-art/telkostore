@@ -18,7 +18,6 @@ const initialForm = {
   displayName: "",
   email: "",
   phone: "",
-  password: "",
   marginPerTransaction: "50",
   bannerTitle: "",
   bannerSubtitle: "",
@@ -177,9 +176,9 @@ export default function AdminDownlinePage() {
         <div className="rounded-[28px] border border-emerald-200 bg-emerald-50 p-5 shadow-sm">
           <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
             <div>
-              <h2 className="text-lg font-black text-emerald-900">Akun Referral Baru Siap Dipakai</h2>
+              <h2 className="text-lg font-black text-emerald-900">Akun Referral Baru Berhasil Dibuat</h2>
               <p className="mt-1 text-sm text-emerald-800">
-                Simpan kredensial awal ini untuk diberikan ke mitra yang baru dibuat.
+                Link aktivasi sudah dikirim via WhatsApp & Email. Mitra akan membuat password sendiri melalui link tersebut.
               </p>
             </div>
             <button
@@ -190,14 +189,10 @@ export default function AdminDownlinePage() {
             </button>
           </div>
 
-          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             <div className="rounded-2xl bg-white p-4 ring-1 ring-emerald-200">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400">Email</p>
               <p className="mt-1 break-all text-sm font-semibold text-navy">{createdInfo.email}</p>
-            </div>
-            <div className="rounded-2xl bg-white p-4 ring-1 ring-emerald-200">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400">Password Awal</p>
-              <p className="mt-1 break-all text-sm font-semibold text-navy">{createdInfo.password}</p>
             </div>
             <div className="rounded-2xl bg-white p-4 ring-1 ring-emerald-200">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400">Canonical Link</p>
@@ -207,8 +202,8 @@ export default function AdminDownlinePage() {
               <button
                 onClick={() =>
                   handleCopy(
-                    `Email: ${createdInfo.email}\nPassword: ${createdInfo.password}\nLink: ${createdInfo.links.canonicalUrl}`,
-                    "kredensial referral"
+                    `Email: ${createdInfo.email}\nLink: ${createdInfo.links.canonicalUrl}`,
+                    "data referral"
                   )
                 }
                 className="flex h-full w-full items-center justify-center rounded-2xl gradient-navy px-4 py-4 text-sm font-bold text-white"
@@ -359,7 +354,7 @@ export default function AdminDownlinePage() {
               <div>
                 <h2 className="text-xl font-black text-navy">Tambah Referral Baru</h2>
                 <p className="mt-1 text-sm text-gray-500">
-                  Superadmin cukup isi data akun. Canonical link akan digenerate otomatis oleh sistem.
+                  Isi data akun mitra. Link aktivasi untuk membuat password akan dikirim otomatis via WA & Email.
                 </p>
               </div>
               <button
@@ -406,16 +401,7 @@ export default function AdminDownlinePage() {
                     className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm focus:border-navy focus:outline-none focus:ring-2 focus:ring-navy/10"
                   />
                 </div>
-                <div>
-                  <label className="mb-1 block text-xs font-semibold text-gray-600">Password Awal (opsional)</label>
-                  <input
-                    type="text"
-                    value={form.password}
-                    onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
-                    placeholder="Kosongkan untuk generate otomatis"
-                    className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm focus:border-navy focus:outline-none focus:ring-2 focus:ring-navy/10"
-                  />
-                </div>
+
                 <div>
                   <label className="mb-1 block text-xs font-semibold text-gray-600">Margin per Transaksi</label>
                   <input
