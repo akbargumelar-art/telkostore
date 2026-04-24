@@ -117,38 +117,69 @@ export async function POST(request) {
       );
     }
 
-    const existingEmail = await db
-      .select({ id: users.id })
+    const existingUserRows = await db
+      .select()
       .from(users)
       .where(eq(users.email, email))
       .limit(1);
 
-    if (existingEmail.length > 0) {
-      return NextResponse.json(
-        { success: false, error: "Email referral sudah dipakai." },
-        { status: 409 }
-      );
+    const existingUser = existingUserRows[0];
+
+    if (existingUser) {
+      // Check if already a downline
+      const existingProfile = await db
+        .select({ id: downlineProfiles.id })
+        .from(downlineProfiles)
+        .where(eq(downlineProfiles.userId, existingUser.id))
+        .limit(1);
+
+      if (existingProfile.length > 0) {
+        return NextResponse.json(
+          { success: false, error: "Email ini sudah memiliki akun referral." },
+          { status: 409 }
+        );
+      }
     }
 
     const generatedPassword =
       providedPassword.length >= 8 ? providedPassword : generateTemporaryPassword(10);
-    const userId = `DLN-${nanoid(10)}`;
+    const userId = existingUser ? existingUser.id : `DLN-${nanoid(10)}`;
     const profileId = `DLP-${nanoid(10)}`;
     const slug = await generateUniqueCanonicalSlug(displayName);
     const now = new Date().toISOString();
 
     await db.transaction(async (tx) => {
-      await tx.insert(users).values({
-        id: userId,
-        name: displayName,
-        email,
-        phone: phone || null,
-        role: "downline",
-        passwordHash: hashPassword(generatedPassword),
-        provider: "manual",
-        providerId: null,
-        createdAt: now,
-      });
+      if (!existingUser) {
+        // Create new user
+        await tx.insert(users).values({
+          id: userId,
+          name: displayName,
+          email,
+          phone: phone || null,
+          role: "downline",
+          passwordHash: hashPassword(generatedPassword),
+          provider: "manual",
+          providerId: null,
+          createdAt: now,
+        });
+      } else {
+        // Update existing user (set password if they don't have one, update role if they are just a "user")
+        const updateData = {};
+        if (!existingUser.passwordHash) {
+          updateData.passwordHash = hashPassword(generatedPassword);
+        } else if (providedPassword) {
+          // If admin explicitly provided a password, overwrite the old one
+          updateData.passwordHash = hashPassword(providedPassword);
+        }
+        
+        if (existingUser.role === "user") {
+          updateData.role = "downline";
+        }
+        
+        if (Object.keys(updateData).length > 0) {
+          await tx.update(users).set(updateData).where(eq(users.id, existingUser.id));
+        }
+      }
 
       await tx.insert(downlineProfiles).values({
         id: profileId,
