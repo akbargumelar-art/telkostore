@@ -4,6 +4,40 @@
 
 ## ✅ Apa yang sudah selesai dilakukan
 
+### 23. Update Operasional Produk, Stok Voucher, dan Cleanup Sandbox (23 April 2026)
+
+#### a. Manajemen Produk: Nonaktif vs Hapus Permanen
+- Aksi hapus produk di `/control/produk` diperjelas menjadi **Nonaktifkan** untuk soft-delete (`is_active = false`), sehingga produk hilang dari toko tanpa merusak histori transaksi.
+- Daftar produk admin sekarang default menampilkan **Aktif saja**, dengan filter tambahan **Non-aktif saja** dan **Semua status**.
+- Ditambahkan aksi **Hapus Permanen** per produk dan bulk untuk kasus salah input produk.
+- Hapus permanen produk dilindungi guard: produk yang masih dipakai `orders` atau `voucher_codes` akan ditolak agar histori transaksi/kode voucher tidak rusak.
+- Pesan API/UI diubah agar tidak lagi menampilkan "berhasil dihapus" untuk aksi yang sebenarnya hanya menonaktifkan produk.
+
+#### b. Stok Voucher Internet Berbasis Kode Voucher
+- Ditambahkan helper `src/lib/product-stock.js` untuk menghitung stok voucher internet dari jumlah kode `available` dikurangi pesanan pending/paid yang belum mendapat kode.
+- API publik `GET /api/products` dan `GET /api/products/[id]` kini mengembalikan stok voucher internet hasil perhitungan, bukan stok manual di tabel produk.
+- Admin produk menampilkan badge `Auto` untuk produk voucher internet dan input stok manual dinonaktifkan pada kategori tersebut.
+- Penambahan, penghapusan, redeem, fail, dan release kode voucher otomatis menyinkronkan stok produk terkait.
+- Checkout voucher internet memakai perhitungan stok kode voucher dan transaction guard agar stok tidak minus saat transaksi bersamaan.
+
+#### c. Hapus Riwayat Pesanan Khusus Superadmin
+- Ditambahkan `DELETE /api/admin/orders` untuk menghapus riwayat pesanan, hanya bisa diakses oleh token `adminType = superadmin`.
+- Halaman `/control/pesanan` kini menampilkan tombol **Hapus Terpilih** untuk superadmin saat ada pesanan dicentang.
+- Superadmin juga dapat memakai **Hapus Hasil Filter** untuk cleanup transaksi sandbox berdasarkan filter status/search saat ini.
+- Aksi hapus hasil filter wajib mengetik `HAPUS PESANAN` sebagai pengaman, terutama jika filter sedang `Semua`.
+- Saat pesanan dihapus, data `payments` terkait ikut dibersihkan, voucher `reserved` dilepas kembali ke `available`, relasi order pada voucher selesai/gagal dibersihkan, dan stok voucher disinkronkan ulang.
+
+#### d. Filter Tanggal Pesanan
+- Halaman `/control/pesanan` ditambahkan filter tanggal **Dari** dan **Sampai** untuk membatasi riwayat berdasarkan `created_at`.
+- API `GET /api/admin/orders` menerima query `createdFrom` dan `createdTo`, sehingga filter status/search/tanggal berjalan konsisten.
+- Aksi superadmin **Hapus Hasil Filter** ikut memakai rentang tanggal aktif, cocok untuk membersihkan transaksi sandbox pada periode tertentu.
+- Ditambahkan validasi UI agar tanggal mulai tidak lebih besar dari tanggal akhir, serta tombol **Reset Tanggal** saat filter tanggal aktif.
+
+#### e. Verifikasi dan Deploy
+- `npm run build` sudah dijalankan dan lolos setelah perubahan produk, cleanup pesanan, dan filter tanggal.
+- Perubahan sudah dipush ke GitHub `main`.
+- Commit tambahan: `fdedd60`, `44693dd`, `73bd855`.
+
 ### 22. Update Lengkap 23 April 2026 - Auth, Control Panel, Payment Sync, dan Auto-Redeem
 
 #### a. Payment Gateway dan Sinkronisasi Status
@@ -50,7 +84,7 @@
 #### g. Verifikasi dan Deploy
 - `npm run build` sudah dijalankan dan lolos pada rangkaian perubahan utama.
 - Semua perubahan terbaru sudah dipush ke GitHub `main`.
-- Commit penting hari ini: `d15deff`, `bba75e3`, `d353766`, `910ff11`, `d49fd88`, `0a18b15`, `fe3c4fc`, `2241341`, `9cc862a`, `35d420b`, `0045e77`.
+- Commit penting hari ini: `d15deff`, `bba75e3`, `d353766`, `910ff11`, `d49fd88`, `0a18b15`, `fe3c4fc`, `2241341`, `9cc862a`, `35d420b`, `0045e77`, `fdedd60`, `44693dd`, `73bd855`.
 
 #### h. Catatan Operasional
 - VPS update standar:

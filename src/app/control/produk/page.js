@@ -58,6 +58,7 @@ export default function AdminProdukPage() {
   const [selected, setSelected] = useState(new Set());
   const [bulkAction, setBulkAction] = useState("");
   const [bulkProcessing, setBulkProcessing] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [importData, setImportData] = useState("");
   const [importResult, setImportResult] = useState(null);
@@ -295,26 +296,42 @@ export default function AdminProdukPage() {
   };
 
   const handleExport = async () => {
+    setExporting(true);
     try {
       const res = await fetch("/api/admin/products/bulk", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "export" }),
       });
-      const data = await res.json();
-      if (data.success) {
-        const blob = new Blob([JSON.stringify(data.data, null, 2)], { type: "application/json" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `produk-export-${new Date().toISOString().slice(0,10)}.json`;
-        a.click();
-        URL.revokeObjectURL(url);
-        setSuccess(`${data.count} produk berhasil diexport`);
-        setTimeout(() => setSuccess(""), 3000);
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => null);
+        throw new Error(errorData?.error || "Gagal export produk");
       }
+
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const disposition = res.headers.get("content-disposition") || "";
+      const filenameMatch = disposition.match(/filename="([^"]+)"/i);
+      const filename = filenameMatch?.[1] || `produk-export-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      const exportCount = res.headers.get("x-export-count");
+
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+
+      setSuccess(
+        exportCount
+          ? `${exportCount} produk berhasil diexport ke Excel`
+          : "Produk berhasil diexport ke Excel"
+      );
+      setTimeout(() => setSuccess(""), 3000);
     } catch (err) {
       console.error(err);
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -383,8 +400,13 @@ export default function AdminProdukPage() {
           <button onClick={() => setShowImport(true)} className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50">
             <Upload size={14} /> Import
           </button>
-          <button onClick={handleExport} className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50">
-            <Download size={14} /> Export
+          <button
+            onClick={handleExport}
+            disabled={exporting}
+            className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {exporting ? <div className="w-4 h-4 rounded-full border-2 border-gray-300 border-t-navy animate-spin" /> : <Download size={14} />}
+            {exporting ? "Exporting..." : "Export Excel"}
           </button>
           <button onClick={openCreate} className="gradient-red text-white font-bold px-5 py-2.5 rounded-xl text-sm hover:opacity-95 transition-opacity flex items-center gap-2">
             <Plus size={16} /> Tambah Produk

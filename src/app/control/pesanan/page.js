@@ -48,11 +48,21 @@ const statusOptions = [
   { value: "failed", label: "Gagal" },
 ];
 
+function toStartOfDayIso(date) {
+  return date ? new Date(`${date}T00:00:00`).toISOString() : "";
+}
+
+function toEndOfDayIso(date) {
+  return date ? new Date(`${date}T23:59:59.999`).toISOString() : "";
+}
+
 export default function AdminPesananPage() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [updating, setUpdating] = useState(false);
   const [success, setSuccess] = useState("");
@@ -83,6 +93,8 @@ export default function AdminPesananPage() {
       const params = new URLSearchParams();
       if (search) params.set("search", search);
       if (filterStatus !== "all") params.set("status", filterStatus);
+      if (dateFrom) params.set("createdFrom", toStartOfDayIso(dateFrom));
+      if (dateTo) params.set("createdTo", toEndOfDayIso(dateTo));
 
       const res = await fetch(`/api/admin/orders?${params}`);
       const data = await res.json();
@@ -104,9 +116,29 @@ export default function AdminPesananPage() {
 
   const handleSearch = (e) => {
     e.preventDefault();
+    if (dateFrom && dateTo && dateFrom > dateTo) {
+      setError("Tanggal mulai tidak boleh lebih besar dari tanggal akhir");
+      setTimeout(() => setError(""), 4000);
+      return;
+    }
+
     setLoading(true);
+    setSelectedIds(new Set());
     fetchOrders();
   };
+
+  const clearDateFilters = () => {
+    setDateFrom("");
+    setDateTo("");
+    setSelectedIds(new Set());
+    setLoading(true);
+  };
+
+  useEffect(() => {
+    if (!dateFrom && !dateTo) {
+      fetchOrders();
+    }
+  }, [dateFrom, dateTo]);
 
   const handleUpdateStatus = async (orderId, newStatus) => {
     setUpdating(true);
@@ -218,8 +250,9 @@ export default function AdminPesananPage() {
   const handleDeleteFiltered = async () => {
     if (!isSuperadmin || !pagination?.total) return;
 
+    const hasDateFilter = Boolean(dateFrom || dateTo);
     const scope =
-      filterStatus === "all" && !search
+      filterStatus === "all" && !search && !hasDateFilter
         ? "SEMUA riwayat pesanan"
         : `${pagination.total} riwayat pesanan sesuai filter saat ini`;
     const typed = window.prompt(
@@ -237,6 +270,8 @@ export default function AdminPesananPage() {
           deleteMatching: true,
           status: filterStatus,
           search,
+          createdFrom: toStartOfDayIso(dateFrom),
+          createdTo: toEndOfDayIso(dateTo),
           confirmText: typed,
         }),
       });
@@ -374,8 +409,8 @@ export default function AdminPesananPage() {
       )}
 
       {/* Filters */}
-      <div className="bg-white rounded-2xl border border-gray-100 p-4 mb-4 flex flex-col md:flex-row gap-3">
-        <form onSubmit={handleSearch} className="flex-1 flex gap-2">
+      <div className="bg-white rounded-2xl border border-gray-100 p-4 mb-4 flex flex-col gap-3">
+        <form onSubmit={handleSearch} className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_auto_auto_auto_auto] gap-2">
           <div className="relative flex-1">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
@@ -384,7 +419,38 @@ export default function AdminPesananPage() {
               className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy focus:ring-2 focus:ring-navy/10"
             />
           </div>
+          <div className="flex items-center gap-2">
+            <label className="text-xs font-semibold text-gray-500 shrink-0" htmlFor="order-date-from">Dari</label>
+            <input
+              id="order-date-from"
+              type="date"
+              value={dateFrom}
+              max={dateTo || undefined}
+              onChange={(e) => setDateFrom(e.target.value)}
+              className="w-full lg:w-40 px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy focus:ring-2 focus:ring-navy/10"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-xs font-semibold text-gray-500 shrink-0" htmlFor="order-date-to">Sampai</label>
+            <input
+              id="order-date-to"
+              type="date"
+              value={dateTo}
+              min={dateFrom || undefined}
+              onChange={(e) => setDateTo(e.target.value)}
+              className="w-full lg:w-40 px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy focus:ring-2 focus:ring-navy/10"
+            />
+          </div>
           <button type="submit" className="px-4 py-2.5 bg-navy text-white rounded-xl text-sm font-semibold hover:opacity-90 shrink-0">Cari</button>
+          {(dateFrom || dateTo) && (
+            <button
+              type="button"
+              onClick={clearDateFilters}
+              className="px-4 py-2.5 bg-gray-100 text-gray-600 rounded-xl text-sm font-semibold hover:bg-gray-200 shrink-0"
+            >
+              Reset Tanggal
+            </button>
+          )}
         </form>
         <div className="flex gap-2 overflow-x-auto hide-scrollbar">
           {statusOptions.map((opt) => (

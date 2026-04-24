@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import db from "@/db/index.js";
 import { orders, payments, voucherCodes } from "@/db/schema.js";
-import { and, desc, eq, inArray, like, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, like, lte, or, sql } from "drizzle-orm";
 import { verifyAdminToken } from "@/lib/jwt";
 import { syncVoucherProductStock } from "@/lib/product-stock";
 import { reconcileVisiblePendingOrders } from "@/lib/payment-reconciliation";
@@ -45,11 +45,17 @@ async function requireSuperadmin() {
   return { ok: true, tokenData };
 }
 
-function buildOrderConditions({ status, search }) {
+function buildOrderConditions({ status, search, createdFrom, createdTo }) {
   const conditions = [];
 
   if (status && status !== "all") {
     conditions.push(eq(orders.status, status));
+  }
+  if (createdFrom && !Number.isNaN(Date.parse(createdFrom))) {
+    conditions.push(gte(orders.createdAt, createdFrom));
+  }
+  if (createdTo && !Number.isNaN(Date.parse(createdTo))) {
+    conditions.push(lte(orders.createdAt, createdTo));
   }
   if (search) {
     conditions.push(
@@ -82,11 +88,18 @@ export async function GET(request) {
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status");
     const search = searchParams.get("search");
+    const createdFrom = searchParams.get("createdFrom");
+    const createdTo = searchParams.get("createdTo");
     const page = parseInt(searchParams.get("page") || "1");
     const limit = parseInt(searchParams.get("limit") || "50");
     const offset = (page - 1) * limit;
 
-    const conditions = buildOrderConditions({ status, search });
+    const conditions = buildOrderConditions({
+      status,
+      search,
+      createdFrom,
+      createdTo,
+    });
 
     let query = db.select().from(orders);
     query = applyConditions(query, conditions);
@@ -137,6 +150,8 @@ export async function DELETE(request) {
       deleteMatching = false,
       status = "all",
       search = "",
+      createdFrom = "",
+      createdTo = "",
       confirmText = "",
     } = body || {};
 
@@ -150,7 +165,12 @@ export async function DELETE(request) {
     let targetOrders = [];
 
     if (deleteMatching) {
-      const conditions = buildOrderConditions({ status, search });
+      const conditions = buildOrderConditions({
+        status,
+        search,
+        createdFrom,
+        createdTo,
+      });
       let targetQuery = db
         .select({
           id: orders.id,

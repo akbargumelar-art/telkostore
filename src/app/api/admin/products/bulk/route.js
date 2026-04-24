@@ -1,6 +1,7 @@
 // POST /api/admin/products/bulk — Bulk operations on products
-// Supports: import, delete, toggle-active, update-price, update-stock
+// Supports: import, delete, toggle-active, update-price, update-stock, export
 import { NextResponse } from "next/server";
+import * as XLSX from "xlsx";
 import db from "@/db/index.js";
 import { products, categories, orders, voucherCodes } from "@/db/schema.js";
 import { count, eq, inArray } from "drizzle-orm";
@@ -9,6 +10,14 @@ import { usesVoucherCodeStock, withComputedVoucherStocks } from "@/lib/product-s
 
 function toNumber(value) {
   return Number(value || 0);
+}
+
+function formatBooleanLabel(value) {
+  return value ? "Ya" : "Tidak";
+}
+
+function normalizeCell(value) {
+  return value ?? "";
 }
 
 export async function POST(request) {
@@ -326,10 +335,117 @@ export async function POST(request) {
       case "export": {
         const allProducts = await db.select().from(products);
         const exportedProducts = await withComputedVoucherStocks(allProducts);
-        return NextResponse.json({
-          success: true,
-          data: exportedProducts,
-          count: exportedProducts.length,
+        const allCategories = await db
+          .select({
+            id: categories.id,
+            name: categories.name,
+          })
+          .from(categories);
+
+        const categoryMap = new Map(
+          allCategories.map((category) => [category.id, category.name])
+        );
+        const headers = [
+          "ID",
+          "Nama Produk",
+          "Kategori ID",
+          "Kategori",
+          "Tipe",
+          "Deskripsi",
+          "Nominal",
+          "Harga",
+          "Harga Asli",
+          "Stok",
+          "Mode Stok",
+          "Voucher Tersedia",
+          "Voucher Ditahan",
+          "Validitas",
+          "Kuota",
+          "Nama Game",
+          "Icon Game",
+          "Promo",
+          "Flash Sale",
+          "Aktif",
+          "Dibuat Pada",
+          "Diubah Pada",
+        ];
+
+        const rows = exportedProducts.map((product) => ({
+          ID: product.id,
+          "Nama Produk": product.name,
+          "Kategori ID": product.categoryId,
+          Kategori: categoryMap.get(product.categoryId) || product.categoryId,
+          Tipe: product.type,
+          Deskripsi: normalizeCell(product.description),
+          Nominal: product.nominal ?? "",
+          Harga: product.price,
+          "Harga Asli": product.originalPrice ?? "",
+          Stok: product.stock ?? 0,
+          "Mode Stok":
+            product.stockMode === "voucher-codes"
+              ? "Otomatis dari kode voucher"
+              : "Manual",
+          "Voucher Tersedia": product.voucherAvailableCount ?? "",
+          "Voucher Ditahan": product.voucherHeldCount ?? "",
+          Validitas: normalizeCell(product.validity),
+          Kuota: normalizeCell(product.quota),
+          "Nama Game": normalizeCell(product.gameName),
+          "Icon Game": normalizeCell(product.gameIcon),
+          Promo: formatBooleanLabel(product.isPromo),
+          "Flash Sale": formatBooleanLabel(product.isFlashSale),
+          Aktif: formatBooleanLabel(product.isActive),
+          "Dibuat Pada": normalizeCell(product.createdAt),
+          "Diubah Pada": normalizeCell(product.updatedAt),
+        }));
+
+        const workbook = XLSX.utils.book_new();
+        const worksheet = XLSX.utils.json_to_sheet(rows, { header: headers });
+
+        worksheet["!cols"] = [
+          { wch: 22 },
+          { wch: 36 },
+          { wch: 18 },
+          { wch: 20 },
+          { wch: 12 },
+          { wch: 40 },
+          { wch: 12 },
+          { wch: 14 },
+          { wch: 14 },
+          { wch: 10 },
+          { wch: 24 },
+          { wch: 18 },
+          { wch: 16 },
+          { wch: 16 },
+          { wch: 12 },
+          { wch: 20 },
+          { wch: 12 },
+          { wch: 12 },
+          { wch: 12 },
+          { wch: 12 },
+          { wch: 24 },
+          { wch: 24 },
+        ];
+        worksheet["!autofilter"] = {
+          ref: `A1:V${Math.max(rows.length + 1, 1)}`,
+        };
+
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Produk");
+
+        const buffer = XLSX.write(workbook, {
+          type: "buffer",
+          bookType: "xlsx",
+        });
+        const exportedAt = new Date().toISOString().slice(0, 10);
+
+        return new NextResponse(new Uint8Array(buffer), {
+          status: 200,
+          headers: {
+            "Content-Type":
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "Content-Disposition": `attachment; filename="produk-export-${exportedAt}.xlsx"`,
+            "Cache-Control": "no-store",
+            "X-Export-Count": String(exportedProducts.length),
+          },
         });
       }
 
