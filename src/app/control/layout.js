@@ -27,8 +27,15 @@ const allNavItems = [
   { href: "/control/produk", label: "Produk", icon: Package, superadminOnly: false },
   { href: "/control/pesanan", label: "Pesanan", icon: ShoppingCart, superadminOnly: false },
   { href: "/control/voucher", label: "Voucher", icon: Ticket, superadminOnly: false },
-  { href: "/control/downline", label: "Referral", icon: HandCoins, superadminOnly: true },
-  { href: "/control/downline/withdrawals", label: "Withdrawals", icon: Banknote, superadminOnly: true },
+  { 
+    href: "/control/downline", 
+    label: "Referral", 
+    icon: HandCoins, 
+    superadminOnly: true,
+    subItems: [
+      { href: "/control/downline/withdrawals", label: "Withdrawals" }
+    ]
+  },
   { href: "/control/banner", label: "Banner", icon: ImageIcon, superadminOnly: true },
   { href: "/control/users", label: "Users", icon: Users, superadminOnly: true },
   { href: "/control/profil", label: "Profil", icon: User, superadminOnly: false },
@@ -54,24 +61,53 @@ function SidebarContent({ pathname, onLogout, navItems }) {
 
       <nav className="flex-1 px-3 py-4 space-y-1">
         {navItems.map((item) => {
-          const isActive =
-            pathname === item.href ||
-            (item.href !== "/control" && pathname.startsWith(item.href));
+          let isActive = false;
+          if (item.href === "/control") {
+            isActive = pathname === "/control";
+          } else {
+            isActive = pathname === item.href || pathname.startsWith(item.href + "/");
+          }
+
           const Icon = item.icon;
           return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                isActive
-                  ? "gradient-navy text-white shadow-md"
-                  : "text-gray-600 hover:bg-gray-100 hover:text-navy"
-              }`}
-            >
-              <Icon size={18} />
-              {item.label}
-              {isActive && <ChevronRight size={14} className="ml-auto" />}
-            </Link>
+            <div key={item.href} className="flex flex-col gap-1">
+              <Link
+                href={item.href}
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                  isActive && !item.subItems
+                    ? "gradient-navy text-white shadow-md"
+                    : isActive && item.subItems
+                    ? "bg-gray-100 text-navy font-bold"
+                    : "text-gray-600 hover:bg-gray-100 hover:text-navy"
+                }`}
+              >
+                <Icon size={18} />
+                {item.label}
+                {isActive && !item.subItems && <ChevronRight size={14} className="ml-auto" />}
+              </Link>
+
+              {isActive && item.subItems && (
+                <div className="pl-9 pr-2 space-y-1 mt-1 border-l-2 border-gray-100 ml-5">
+                  {item.subItems.map((sub) => {
+                    const isSubActive =
+                      pathname === sub.href || pathname.startsWith(sub.href + "/");
+                    return (
+                      <Link
+                        key={sub.href}
+                        href={sub.href}
+                        className={`block px-3 py-2 rounded-xl text-xs font-medium transition-all ${
+                          isSubActive
+                            ? "gradient-navy text-white shadow-md"
+                            : "text-gray-500 hover:bg-gray-100 hover:text-navy"
+                        }`}
+                      >
+                        {sub.label}
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           );
         })}
       </nav>

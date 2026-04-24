@@ -72,28 +72,40 @@ export default function AdminDownlinePage() {
   const handleCreate = async (event) => {
     event.preventDefault();
     setCreating(true);
+    setMessage("");
 
-    const res = await fetch("/api/admin/downline", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        ...form,
-        marginPerTransaction: Number(form.marginPerTransaction || 0),
-      }),
-    });
-    const data = await res.json();
+    try {
+      const res = await fetch("/api/admin/downline", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...form,
+          marginPerTransaction: Number(form.marginPerTransaction || 0),
+        }),
+      });
 
-    setCreating(false);
-    if (!data.success) {
-      setMessage(data.error || "Gagal membuat akun referral.");
-      return;
+      let data;
+      try {
+        data = await res.json();
+      } catch (e) {
+        throw new Error("Server mengembalikan response yang tidak valid (bukan JSON).");
+      }
+
+      if (!data.success) {
+        setMessage(data.error || "Gagal membuat akun referral.");
+      } else {
+        setCreatedInfo(data.data);
+        setShowCreateModal(false);
+        setForm(initialForm);
+        setMessage("Akun referral berhasil dibuat.");
+        fetchRows();
+      }
+    } catch (error) {
+      console.error("handleCreate error:", error);
+      setMessage(error.message || "Terjadi kesalahan pada sistem.");
+    } finally {
+      setCreating(false);
     }
-
-    setCreatedInfo(data.data);
-    setShowCreateModal(false);
-    setForm(initialForm);
-    setMessage("Akun referral berhasil dibuat.");
-    fetchRows();
   };
 
   const statCards = [
@@ -350,6 +362,11 @@ export default function AdminDownlinePage() {
             </div>
 
             <form onSubmit={handleCreate} className="mt-6 space-y-4">
+              {message && !createdInfo && (
+                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">
+                  {message}
+                </div>
+              )}
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
                   <label className="mb-1 block text-xs font-semibold text-gray-600">Nama Display</label>
