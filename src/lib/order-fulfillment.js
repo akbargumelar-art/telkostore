@@ -16,6 +16,7 @@ import {
   formatRupiahServer,
 } from "@/lib/whatsapp";
 import { ensureVoucherFulfillment, isVoucherProduct } from "@/lib/voucher";
+import { syncReferralCommissionForOrder } from "@/lib/referral-commission";
 
 function serializePayload(value) {
   if (value == null) return null;
@@ -235,6 +236,8 @@ async function applyDigiflazzResultToOrder(order, digiflazzData, callbacks = {})
     ...updateData,
     status: nextStatus,
   };
+
+  await syncReferralCommissionForOrder(nextOrder);
 
   await notifyDigiflazzOrderUpdate(order, nextOrder, digiflazzData, callbacks);
 

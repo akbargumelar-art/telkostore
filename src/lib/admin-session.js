@@ -23,6 +23,8 @@ export function getAdminPermissions(adminType = "superadmin") {
     manageUsers: isSuperadmin,
     manageSettings: isSuperadmin,
     manageBanners: isSuperadmin,
+    manageDownline: isSuperadmin,
+    manageReferralPayout: isSuperadmin,
     editProfile: adminType === "admin",
   };
 }

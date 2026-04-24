@@ -1,8 +1,75 @@
 # Telko.Store — Progress Report
 
-**Log Terakhir:** 23 April 2026
+**Log Terakhir:** 24 April 2026
 
 ## ✅ Apa yang sudah selesai dilakukan
+
+### 24. Integrasi Digiflazz, Perbaikan Admin Control, dan Stabilitas Deploy VPS (24 April 2026)
+
+#### a. Export Produk Admin ke Excel
+- Tombol export di halaman `/control/produk` diubah dari JSON menjadi file Excel `.xlsx`.
+- Backend bulk export sekarang membuat workbook Excel dengan sheet `Produk`, header kolom yang lebih rapi, dan response download attachment.
+- Frontend export di halaman admin produk diubah agar mengunduh blob Excel langsung dengan nama file bertanggal.
+- Dependency `xlsx` ditambahkan ke project dan build lokal lolos.
+
+#### b. Perbaikan Hapus Permanen Produk dan Riwayat Pesanan
+- Flow hapus permanen produk diperbaiki agar alasan kegagalan tampil jelas di UI, terutama jika produk masih terkait `orders` atau `voucher_codes`.
+- Guard backend untuk hard-delete tetap dipertahankan agar histori transaksi dan relasi voucher tidak rusak.
+- Fitur hapus riwayat pesanan yang sebelumnya terasa tidak jalan untuk akun admin diperbaiki pada jalur API dan UI operasional.
+- Perubahan ini dipush ke GitHub dengan commit `3c60c55`.
+
+#### c. Perbaikan Logout Admin dan Proteksi `/control`
+- Ditemukan bahwa logout lama mencoba menghapus cookie `admin_token` via JavaScript, padahal cookie login diset sebagai `httpOnly`.
+- Ditambahkan endpoint logout server-side `POST /api/admin/auth/logout` untuk menghapus cookie dengan atribut yang benar.
+- Tombol logout di layout admin diubah agar memanggil endpoint logout tersebut.
+- Setelah deploy bersih, akses ulang ke `/control` kembali diarahkan ke `/control/login` jika belum login.
+- Perubahan ini dipush ke GitHub dengan commit `a3e247b`.
+
+#### d. Integrasi Supplier Fulfillment Digiflazz
+- Ditambahkan helper baru `src/lib/digiflazz.js` untuk konfigurasi, signature, normalisasi status, request transaksi, dan verifikasi webhook Digiflazz.
+- Ditambahkan orchestrator `src/lib/order-fulfillment.js` untuk menyatukan jalur fulfillment pasca-pembayaran: voucher internal, Digiflazz, atau manual.
+- Ditambahkan endpoint webhook `POST /api/webhook/digiflazz`.
+- Tabel `products` diperluas dengan kolom `supplier_name`, `supplier_sku_code`, dan `is_digiflazz_enabled`.
+- Ditambahkan tabel baru `digiflazz_transactions` untuk menyimpan jejak transaksi supplier.
+- Ditambahkan script migrasi `npm run db:migrate-digiflazz`.
+- Admin produk sekarang bisa menandai produk memakai Digiflazz dan mengisi SKU supplier dari dashboard.
+- Integrasi ini tidak melakukan import katalog otomatis dari Digiflazz. Produk tetap dikelola di database lokal, lalu fulfillment diarahkan ke Digiflazz per produk.
+- Kategori `voucher-internet` sengaja tetap memakai flow voucher internal dan diblok agar tidak memakai Digiflazz.
+- Perubahan integrasi Digiflazz dipush ke GitHub dengan commit `1eec2fb`.
+
+#### e. Debugging Deploy VPS dan Insiden Produksi
+- Setelah deploy, sempat terjadi tampilan rusak karena browser memuat aset/chunk lama yang tidak cocok dengan build baru.
+- Ditemukan proses PM2 lama/orphan masih menahan port lama sehingga domain tetap melayani instance Next.js lama.
+- Dilakukan cleanup proses PM2, rebuild bersih, dan penyesuaian start command agar Next.js berjalan stabil di bawah PM2.
+- Nginx akhirnya diarahkan ke instance aktif Telko.Store di port `3100`.
+- Verifikasi akhir menunjukkan `https://telko.store/control` merespons `307` ke `/control/login`, menandakan proteksi admin sudah aktif.
+
+#### f. Root Cause Produk Kosong Setelah Deploy
+- Setelah styling pulih, daftar produk sempat kosong walau aplikasi hidup normal.
+- Penyebab utamanya adalah **schema mismatch**: kode baru sudah membaca kolom Digiflazz di tabel `products`, tetapi migrasi database di VPS belum dijalankan.
+- Setelah `npm run db:migrate-digiflazz` dijalankan, endpoint `GET /api/products` kembali normal dan data produk muncul lagi.
+- Kesimpulan operasional:
+  - koneksi database aplikasi valid via `DATABASE_URL`
+  - masalah produk kosong bukan karena route `/config`
+  - route admin settings yang benar tetap `/control/pengaturan`
+  - masalah murni berasal dari migrasi schema yang belum diterapkan di VPS
+
+#### g. Catatan Deploy 24 April 2026
+- Urutan update aman untuk perubahan Digiflazz:
+  ```bash
+  cd /var/www/telkostore
+  git pull origin main
+  npm install
+  npm run db:migrate-digiflazz
+  npm run build
+  pm2 restart telkostore --update-env
+  ```
+- Jika terjadi mismatch aset/build di production, lakukan rebuild bersih dan pastikan tidak ada proses Next.js lama yang masih memegang port lama.
+- Commit terkait rangkaian update 24 April:
+  - `e28637e`
+  - `3c60c55`
+  - `a3e247b`
+  - `1eec2fb`
 
 ### 23. Update Operasional Produk, Stok Voucher, dan Cleanup Sandbox (23 April 2026)
 

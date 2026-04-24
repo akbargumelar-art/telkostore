@@ -13,6 +13,7 @@ import {
   buildGroupPaymentFailedMsg,
 } from "@/lib/whatsapp";
 import { releaseVoucher } from "@/lib/voucher";
+import { syncReferralCommissionForOrder } from "@/lib/referral-commission";
 
 const POLLABLE_GATEWAYS = new Set(["midtrans", "pakasir"]);
 const MIDTRANS_FAILURE_STATUSES = new Set(["deny", "cancel", "expire", "failure"]);
@@ -181,6 +182,9 @@ async function markOrderAsFailed(order, paymentData, options = {}) {
   }
 
   const updatedOrder = await getOrderById(order.id);
+  if (updatedOrder) {
+    await syncReferralCommissionForOrder(updatedOrder);
+  }
 
   return {
     changed: true,

@@ -8,6 +8,7 @@ import { reconcileVisiblePendingOrders } from "@/lib/payment-reconciliation";
 import { ensurePostPaymentFulfillment } from "@/lib/order-fulfillment";
 import { sendWhatsAppNotification, sendGroupNotification } from "@/lib/whatsapp";
 import { requireAdminSession } from "@/lib/admin-session";
+import { syncReferralCommissionForOrder } from "@/lib/referral-commission";
 
 const DELETE_CONFIRM_TEXT = "HAPUS PESANAN";
 const DELETE_CHUNK_SIZE = 250;
@@ -315,14 +316,18 @@ export async function PUT(request) {
         .set(updates)
         .where(eq(orders.id, orderId));
 
+      const [updatedOrder] = await db
+        .select()
+        .from(orders)
+        .where(eq(orders.id, orderId))
+        .limit(1);
+
+      if (updatedOrder) {
+        await syncReferralCommissionForOrder(updatedOrder);
+      }
+
       if (["paid", "processing", "completed"].includes(status)) {
         try {
-          const [updatedOrder] = await db
-            .select()
-            .from(orders)
-            .where(eq(orders.id, orderId))
-            .limit(1);
-
           if (updatedOrder) {
             await ensurePostPaymentFulfillment(
               updatedOrder,

@@ -160,13 +160,18 @@ npm run db:migrate-site-banners
 echo "   ✅ Site banner migration complete"
 echo ""
 
-echo "🔨 Step 8: Building Next.js..."
+echo "🗄️ Step 8: Running referral migration..."
+npm run db:migrate-referral
+echo "   ✅ Referral migration complete"
+echo ""
+
+echo "🔨 Step 9: Building Next.js..."
 npm run build
 echo "   ✅ Build complete"
 echo ""
 
-# ===== STEP 9: RESTART PM2 =====
-echo "🔄 Step 9: Restarting application..."
+# ===== STEP 10: RESTART PM2 =====
+echo "🔄 Step 10: Restarting application..."
 if command -v pm2 &> /dev/null; then
   restart_pm2_app
   pm2 save 2>/dev/null
@@ -197,8 +202,8 @@ else
   HEALTH_URL="http://127.0.0.1:3000/api/health"
 fi
 
-# ===== STEP 10: HEALTH CHECK =====
-echo "🏥 Step 10: Health check..."
+# ===== STEP 11: HEALTH CHECK =====
+echo "🏥 Step 11: Health check..."
 sleep 3  # Wait for app to start
 
 echo "   Checking: $HEALTH_URL"

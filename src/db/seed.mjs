@@ -24,9 +24,31 @@ async function seed() {
       image TEXT,
       phone VARCHAR(20),
       role VARCHAR(20) DEFAULT 'user',
+      password_hash VARCHAR(255),
       provider VARCHAR(50),
       provider_id VARCHAR(255),
       created_at VARCHAR(50)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await connection.execute(`
+    CREATE TABLE IF NOT EXISTS downline_profiles (
+      id VARCHAR(100) PRIMARY KEY,
+      user_id VARCHAR(100) NOT NULL UNIQUE,
+      slug VARCHAR(120) NOT NULL UNIQUE,
+      custom_referral_alias VARCHAR(120) UNIQUE,
+      is_custom_referral_active BOOLEAN DEFAULT FALSE,
+      display_name VARCHAR(255) NOT NULL,
+      margin_per_transaction DOUBLE NOT NULL DEFAULT 0,
+      is_referral_active BOOLEAN DEFAULT TRUE,
+      banner_title VARCHAR(255),
+      banner_subtitle TEXT,
+      banner_image_url TEXT,
+      theme_key VARCHAR(40) NOT NULL DEFAULT 'sunrise',
+      promo_redirect_path VARCHAR(255) NOT NULL DEFAULT '/',
+      created_at VARCHAR(50),
+      updated_at VARCHAR(50),
+      FOREIGN KEY (user_id) REFERENCES users(id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
 
@@ -88,11 +110,21 @@ async function seed() {
       midtrans_order_id VARCHAR(100),
       whatsapp_sent BOOLEAN DEFAULT FALSE,
       notes TEXT,
+      downline_user_id VARCHAR(100),
+      downline_profile_id VARCHAR(100),
+      downline_slug VARCHAR(120),
+      downline_custom_alias VARCHAR(120),
+      downline_display_name VARCHAR(255),
+      downline_margin_snapshot DOUBLE,
+      referral_source VARCHAR(40),
+      referral_attributed_at VARCHAR(50),
       created_at VARCHAR(50),
       updated_at VARCHAR(50),
       paid_at VARCHAR(50),
       completed_at VARCHAR(50),
-      FOREIGN KEY (product_id) REFERENCES products(id)
+      FOREIGN KEY (product_id) REFERENCES products(id),
+      FOREIGN KEY (downline_user_id) REFERENCES users(id),
+      FOREIGN KEY (downline_profile_id) REFERENCES downline_profiles(id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
 
@@ -165,6 +197,45 @@ async function seed() {
       UNIQUE KEY uq_digiflazz_ref (ref_id),
       INDEX idx_digiflazz_order (order_id),
       INDEX idx_digiflazz_status (status)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await connection.execute(`
+    CREATE TABLE IF NOT EXISTS referral_commissions (
+      id VARCHAR(100) PRIMARY KEY,
+      order_id VARCHAR(100) NOT NULL UNIQUE,
+      downline_user_id VARCHAR(100) NOT NULL,
+      downline_profile_id VARCHAR(100) NOT NULL,
+      downline_slug_snapshot VARCHAR(120) NOT NULL,
+      downline_custom_alias_snapshot VARCHAR(120),
+      downline_display_name_snapshot VARCHAR(255),
+      commission_amount DOUBLE NOT NULL DEFAULT 0,
+      status VARCHAR(20) NOT NULL DEFAULT 'pending',
+      status_reason TEXT,
+      tracked_at VARCHAR(50),
+      approved_at VARCHAR(50),
+      paid_at VARCHAR(50),
+      created_at VARCHAR(50),
+      updated_at VARCHAR(50),
+      FOREIGN KEY (order_id) REFERENCES orders(id),
+      FOREIGN KEY (downline_user_id) REFERENCES users(id),
+      FOREIGN KEY (downline_profile_id) REFERENCES downline_profiles(id),
+      INDEX idx_referral_commissions_profile_status (downline_profile_id, status)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await connection.execute(`
+    CREATE TABLE IF NOT EXISTS referral_clicks (
+      id VARCHAR(100) PRIMARY KEY,
+      downline_profile_id VARCHAR(100) NOT NULL,
+      slug VARCHAR(120) NOT NULL,
+      custom_alias VARCHAR(120),
+      ip_hash VARCHAR(128) NOT NULL,
+      user_agent TEXT,
+      landing_path VARCHAR(255),
+      created_at VARCHAR(50),
+      FOREIGN KEY (downline_profile_id) REFERENCES downline_profiles(id),
+      INDEX idx_referral_clicks_profile_created (downline_profile_id, created_at)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
 

@@ -12,11 +12,30 @@ export const users = mysqlTable("users", {
   email: varchar("email", { length: 255 }).unique(),
   image: text("image"),
   phone: varchar("phone", { length: 20 }),
-  role: varchar("role", { length: 20 }).default("user"), // user, admin
+  role: varchar("role", { length: 20 }).default("user"), // user, admin, downline
   passwordHash: varchar("password_hash", { length: 255 }),
   provider: varchar("provider", { length: 50 }), // google, facebook
   providerId: varchar("provider_id", { length: 255 }),
   createdAt: varchar("created_at", { length: 50 }).$defaultFn(() => new Date().toISOString()),
+});
+
+// ===== DOWNLINE PROFILES =====
+export const downlineProfiles = mysqlTable("downline_profiles", {
+  id: varchar("id", { length: 100 }).primaryKey(),
+  userId: varchar("user_id", { length: 100 }).references(() => users.id).notNull().unique(),
+  slug: varchar("slug", { length: 120 }).notNull().unique(),
+  customReferralAlias: varchar("custom_referral_alias", { length: 120 }).unique(),
+  isCustomReferralActive: boolean("is_custom_referral_active").default(false),
+  displayName: varchar("display_name", { length: 255 }).notNull(),
+  marginPerTransaction: double("margin_per_transaction").default(0).notNull(),
+  isReferralActive: boolean("is_referral_active").default(true),
+  bannerTitle: varchar("banner_title", { length: 255 }),
+  bannerSubtitle: text("banner_subtitle"),
+  bannerImageUrl: text("banner_image_url"),
+  themeKey: varchar("theme_key", { length: 40 }).default("sunrise").notNull(),
+  promoRedirectPath: varchar("promo_redirect_path", { length: 255 }).default("/").notNull(),
+  createdAt: varchar("created_at", { length: 50 }).$defaultFn(() => new Date().toISOString()),
+  updatedAt: varchar("updated_at", { length: 50 }).$defaultFn(() => new Date().toISOString()),
 });
 
 // ===== CATEGORIES =====
@@ -74,6 +93,14 @@ export const orders = mysqlTable("orders", {
   midtransOrderId: varchar("midtrans_order_id", { length: 100 }), // Midtrans order_id
   whatsappSent: boolean("whatsapp_sent").default(false),
   notes: text("notes"),
+  downlineUserId: varchar("downline_user_id", { length: 100 }).references(() => users.id),
+  downlineProfileId: varchar("downline_profile_id", { length: 100 }).references(() => downlineProfiles.id),
+  downlineSlug: varchar("downline_slug", { length: 120 }),
+  downlineCustomAlias: varchar("downline_custom_alias", { length: 120 }),
+  downlineDisplayName: varchar("downline_display_name", { length: 255 }),
+  downlineMarginSnapshot: double("downline_margin_snapshot"),
+  referralSource: varchar("referral_source", { length: 40 }),
+  referralAttributedAt: varchar("referral_attributed_at", { length: 50 }),
   createdAt: varchar("created_at", { length: 50 }).$defaultFn(() => new Date().toISOString()),
   updatedAt: varchar("updated_at", { length: 50 }).$defaultFn(() => new Date().toISOString()),
   paidAt: varchar("paid_at", { length: 50 }),
@@ -137,6 +164,53 @@ export const digiflazzTransactions = mysqlTable("digiflazz_transactions", {
   rawResponse: text("raw_response"),
   createdAt: varchar("created_at", { length: 50 }).$defaultFn(() => new Date().toISOString()),
   updatedAt: varchar("updated_at", { length: 50 }).$defaultFn(() => new Date().toISOString()),
+});
+
+// ===== REFERRAL COMMISSIONS =====
+export const referralCommissions = mysqlTable("referral_commissions", {
+  id: varchar("id", { length: 100 }).primaryKey(),
+  orderId: varchar("order_id", { length: 100 }).references(() => orders.id).notNull().unique(),
+  downlineUserId: varchar("downline_user_id", { length: 100 }).references(() => users.id).notNull(),
+  downlineProfileId: varchar("downline_profile_id", { length: 100 }).references(() => downlineProfiles.id).notNull(),
+  downlineSlugSnapshot: varchar("downline_slug_snapshot", { length: 120 }).notNull(),
+  downlineCustomAliasSnapshot: varchar("downline_custom_alias_snapshot", { length: 120 }),
+  downlineDisplayNameSnapshot: varchar("downline_display_name_snapshot", { length: 255 }),
+  commissionAmount: double("commission_amount").default(0).notNull(),
+  status: varchar("status", { length: 20 }).default("pending").notNull(), // pending, approved, void, paid, processing
+  statusReason: text("status_reason"),
+  trackedAt: varchar("tracked_at", { length: 50 }),
+  approvedAt: varchar("approved_at", { length: 50 }),
+  paidAt: varchar("paid_at", { length: 50 }),
+  withdrawalId: varchar("withdrawal_id", { length: 100 }), // null unless being withdrawn
+  createdAt: varchar("created_at", { length: 50 }).$defaultFn(() => new Date().toISOString()),
+  updatedAt: varchar("updated_at", { length: 50 }).$defaultFn(() => new Date().toISOString()),
+});
+
+// ===== REFERRAL WITHDRAWALS =====
+export const referralWithdrawals = mysqlTable("referral_withdrawals", {
+  id: varchar("id", { length: 100 }).primaryKey(),
+  downlineProfileId: varchar("downline_profile_id", { length: 100 }).references(() => downlineProfiles.id).notNull(),
+  amount: double("amount").notNull(),
+  bankName: varchar("bank_name", { length: 100 }).notNull(),
+  accountNumber: varchar("account_number", { length: 100 }).notNull(),
+  accountName: varchar("account_name", { length: 255 }).notNull(),
+  status: varchar("status", { length: 20 }).default("pending").notNull(), // pending, processing, completed, rejected
+  adminNotes: text("admin_notes"),
+  processedAt: varchar("processed_at", { length: 50 }),
+  createdAt: varchar("created_at", { length: 50 }).$defaultFn(() => new Date().toISOString()),
+  updatedAt: varchar("updated_at", { length: 50 }).$defaultFn(() => new Date().toISOString()),
+});
+
+// ===== REFERRAL CLICKS =====
+export const referralClicks = mysqlTable("referral_clicks", {
+  id: varchar("id", { length: 100 }).primaryKey(),
+  downlineProfileId: varchar("downline_profile_id", { length: 100 }).references(() => downlineProfiles.id).notNull(),
+  slug: varchar("slug", { length: 120 }).notNull(),
+  customAlias: varchar("custom_alias", { length: 120 }),
+  ipHash: varchar("ip_hash", { length: 128 }).notNull(),
+  userAgent: text("user_agent"),
+  landingPath: varchar("landing_path", { length: 255 }),
+  createdAt: varchar("created_at", { length: 50 }).$defaultFn(() => new Date().toISOString()),
 });
 
 // ===== SITE BANNERS =====

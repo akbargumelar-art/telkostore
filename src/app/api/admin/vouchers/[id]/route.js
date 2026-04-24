@@ -12,6 +12,7 @@ import {
   buildOrderCompletedMsg,
 } from "@/lib/whatsapp";
 import { requireAdminSession } from "@/lib/admin-session";
+import { syncReferralCommissionForOrder } from "@/lib/referral-commission";
 
 // PUT — Update voucher status (redeem / fail / release)
 export async function PUT(request, { params }) {
@@ -65,6 +66,13 @@ export async function PUT(request, { params }) {
               notes: `Voucher ${voucher.code} berhasil di-redeem`,
             })
             .where(eq(orders.id, order.id));
+
+          await syncReferralCommissionForOrder({
+            ...order,
+            status: "completed",
+            completedAt: now,
+            updatedAt: now,
+          });
 
           // Send completion notification to buyer
           try {

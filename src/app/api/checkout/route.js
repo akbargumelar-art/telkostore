@@ -30,6 +30,10 @@ import {
   getVoucherStockBreakdown,
   usesVoucherCodeStock,
 } from "@/lib/product-stock";
+import {
+  buildOrderReferralSnapshot,
+  resolveReferralFromRequest,
+} from "@/lib/referral";
 
 export async function POST(request) {
   // Rate limiting
@@ -89,6 +93,7 @@ export async function POST(request) {
     }
 
     const product = productResult[0];
+    const referralAttribution = await resolveReferralFromRequest(request);
 
     const voucherValidation = validateVoucherInternetCheckout(product, phoneNumber);
     if (!voucherValidation.valid) {
@@ -211,6 +216,10 @@ export async function POST(request) {
         snapRedirectUrl: paymentData.snapRedirectUrl,
         midtransOrderId: externalOrderId,
         notes: notes,
+        ...buildOrderReferralSnapshot(
+          referralAttribution,
+          referralAttribution?.source || "slug"
+        ),
         createdAt: nowIso,
         updatedAt: nowIso,
       });

@@ -9,6 +9,7 @@ import { eq, and, sql, count } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { buildVoucherDeliveryMsg } from "@/lib/whatsapp";
 import { getOperatorName, validateVoucherInternetCheckout } from "@/lib/utils";
+import { syncReferralCommissionForOrder } from "@/lib/referral-commission";
 
 const MAX_ASSIGN_RETRIES = 3;
 
@@ -538,6 +539,13 @@ export async function autoRedeemAndComplete(order, voucher, callbacks = {}) {
           notes: `Voucher ${voucher.code} auto-redeemed berhasil`,
         })
         .where(eq(orders.id, order.id));
+
+      await syncReferralCommissionForOrder({
+        ...order,
+        status: "completed",
+        completedAt: now,
+        updatedAt: now,
+      });
 
       // Notify buyer — voucher redeemed & order completed
       if (sendWA) {

@@ -19,6 +19,7 @@ import {
 import { cancelNotification } from "@/lib/notification-scheduler";
 import { isVoucherProduct } from "@/lib/voucher";
 import { ensurePostPaymentFulfillment } from "@/lib/order-fulfillment";
+import { syncReferralCommissionForOrder } from "@/lib/referral-commission";
 
 export async function POST(request, { params }) {
   try {
@@ -286,6 +287,7 @@ async function applyStatusUpdate(order, newStatus, statusUpdates, paymentData) {
     .limit(1);
 
   const currentOrder = updatedOrder || { ...order, status: newStatus, ...statusUpdates };
+  await syncReferralCommissionForOrder(currentOrder);
 
   if (newStatus !== "pending") {
     cancelNotification(order.id);

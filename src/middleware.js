@@ -84,11 +84,13 @@ async function verifyJwtEdge(token, adminSecret) {
 // Routes restricted to superadmin only
 const SUPERADMIN_ONLY_PAGES = [
   "/control/banner",
+  "/control/downline",
   "/control/users",
   "/control/pengaturan",
 ];
 const SUPERADMIN_ONLY_API = [
   "/api/admin/banners",
+  "/api/admin/downline",
   "/api/admin/users",
   "/api/admin/settings",
 ];

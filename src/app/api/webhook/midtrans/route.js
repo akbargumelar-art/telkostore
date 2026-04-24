@@ -16,6 +16,7 @@ import { verifySignature } from "@/lib/midtrans";
 import { cancelNotification } from "@/lib/notification-scheduler";
 import { ensurePostPaymentFulfillment } from "@/lib/order-fulfillment";
 import { isVoucherProduct, releaseVoucher } from "@/lib/voucher";
+import { syncReferralCommissionForOrder } from "@/lib/referral-commission";
 
 export async function GET() {
   return NextResponse.json({
@@ -147,17 +148,18 @@ export async function POST(request) {
       .set({ status: newStatus, ...statusUpdates })
       .where(eq(orders.id, order.id));
 
+    const currentOrder = {
+      ...order,
+      ...statusUpdates,
+      status: newStatus,
+    };
+    await syncReferralCommissionForOrder(currentOrder);
+
     if (newStatus !== "pending") {
       cancelNotification(order.id);
     }
 
     if ((newStatus === "paid" || newStatus === "completed") && !order.whatsappSent) {
-      const currentOrder = {
-        ...order,
-        ...statusUpdates,
-        status: newStatus,
-      };
-
       try {
         await sendWhatsAppNotification(
           order.guestPhone,

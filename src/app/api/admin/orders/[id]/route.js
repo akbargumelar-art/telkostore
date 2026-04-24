@@ -12,6 +12,7 @@ import {
 } from "@/lib/whatsapp";
 import { ensurePostPaymentFulfillment } from "@/lib/order-fulfillment";
 import { requireAdminSession } from "@/lib/admin-session";
+import { syncReferralCommissionForOrder } from "@/lib/referral-commission";
 
 export async function GET(request, { params }) {
   const auth = await requireAdminSession();
@@ -83,6 +84,10 @@ export async function PUT(request, { params }) {
       .from(orders)
       .where(eq(orders.id, id))
       .limit(1);
+
+    if (updatedOrder && status && status !== order.status) {
+      await syncReferralCommissionForOrder(updatedOrder);
+    }
 
     // Send WhatsApp notifications based on status change
     if (status === "completed" && order.status !== "completed") {
