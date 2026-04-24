@@ -115,6 +115,10 @@ export default function Header() {
   const router = useRouter();
   const { data: session, status } = useSession();
 
+  if (pathname.startsWith("/control") || pathname.startsWith("/mitra")) {
+    return null;
+  }
+
   const isHome = pathname === "/";
   const isProductPage = pathname.startsWith("/product/");
   const isAuthenticated = status === "authenticated" && Boolean(session?.user);

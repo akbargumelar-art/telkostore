@@ -15,6 +15,10 @@ const navItems = [
 export default function BottomNav() {
   const pathname = usePathname();
 
+  if (pathname.startsWith("/control") || pathname.startsWith("/mitra")) {
+    return null;
+  }
+
   return (
     <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 glass-bottom" style={{ boxShadow: '0 -4px 20px rgba(0,0,0,0.06)' }}>
       <div className="flex items-end justify-around px-2 pt-2 pb-2" style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}>
