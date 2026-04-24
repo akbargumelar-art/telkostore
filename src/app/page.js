@@ -1,18 +1,20 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import BannerSlider from "@/components/BannerSlider";
 import CategoryTabs from "@/components/CategoryTabs";
 import Sidebar from "@/components/Sidebar";
 import ProductCard from "@/components/ProductCard";
 import FlashSaleBanner from "@/components/FlashSaleBanner";
 import CategoryIcon from "@/components/CategoryIcon";
-import { ArrowRight, Sparkles, TrendingUp, Filter } from "lucide-react";
+import { ArrowRight, Filter, Search, Sparkles, TrendingUp } from "lucide-react";
 import Link from "next/link";
 
 const isProductAvailable = (product) => Number(product.stock ?? 0) > 0;
 
-export default function HomePage() {
+function HomePageContent() {
+  const searchParams = useSearchParams();
   const [activeCategory, setActiveCategory] = useState("all");
   const [activeValidity, setActiveValidity] = useState("all");
   const [stockFilter, setStockFilter] = useState("all");
@@ -20,6 +22,9 @@ export default function HomePage() {
   const [categories, setCategories] = useState([]);
   const [flashSaleProducts, setFlashSaleProducts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const searchQuery = (searchParams.get("search") || "").trim();
+  const normalizedSearchQuery = searchQuery.toLowerCase();
+  const categoryFromUrl = searchParams.get("category") || "all";
 
   // Fetch products and categories from API
   useEffect(() => {
@@ -50,16 +55,60 @@ export default function HomePage() {
     fetchData();
   }, []);
 
+  useEffect(() => {
+    if (categoryFromUrl === "all") {
+      setActiveCategory("all");
+      return;
+    }
+
+    if (categories.some((category) => category.id === categoryFromUrl)) {
+      setActiveCategory(categoryFromUrl);
+    }
+  }, [categories, categoryFromUrl]);
+
   // Reset validity filter when category changes
   useEffect(() => {
     setActiveValidity("all");
   }, [activeCategory]);
+
+  const categoryNameById = useMemo(
+    () =>
+      categories.reduce((acc, category) => {
+        acc[category.id] = category.name;
+        return acc;
+      }, {}),
+    [categories]
+  );
+
+  const matchesSearch = useCallback(
+    (product) => {
+      if (!normalizedSearchQuery) return true;
+
+      const haystack = [
+        product.name,
+        product.description,
+        product.quota,
+        product.validity,
+        product.gameName,
+        categoryNameById[product.categoryId],
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      return haystack.includes(normalizedSearchQuery);
+    },
+    [categoryNameById, normalizedSearchQuery]
+  );
+
+  const hasSearch = Boolean(searchQuery);
 
   // Get unique validity values for current category
   const validityOptions = useMemo(() => {
     if (activeCategory === "all") return [];
     const categoryProducts = products
       .filter((p) => p.categoryId === activeCategory)
+      .filter(matchesSearch)
       .filter((p) => stockFilter !== "available" || isProductAvailable(p));
     const validities = [...new Set(categoryProducts.map((p) => p.validity).filter(Boolean))];
     // Sort by number of days
@@ -68,7 +117,7 @@ export default function HomePage() {
       const numB = parseInt(b) || 0;
       return numA - numB;
     });
-  }, [activeCategory, products, stockFilter]);
+  }, [activeCategory, matchesSearch, products, stockFilter]);
 
   useEffect(() => {
     if (
@@ -84,6 +133,7 @@ export default function HomePage() {
     if (activeCategory !== "all") {
       result = result.filter((p) => p.categoryId === activeCategory);
     }
+    result = result.filter(matchesSearch);
     if (activeValidity !== "all") {
       result = result.filter((p) => p.validity === activeValidity);
     }
@@ -91,7 +141,7 @@ export default function HomePage() {
       result = result.filter(isProductAvailable);
     }
     return result;
-  }, [activeCategory, activeValidity, products, stockFilter]);
+  }, [activeCategory, activeValidity, matchesSearch, products, stockFilter]);
 
   const availableProductCount = useMemo(
     () => filteredProducts.filter((p) => Number(p.stock ?? 0) > 0).length,
@@ -101,6 +151,7 @@ export default function HomePage() {
   const getProductsByCategory = (catId) =>
     products
       .filter((p) => p.categoryId === catId)
+      .filter(matchesSearch)
       .filter((p) => stockFilter !== "available" || isProductAvailable(p));
 
   const visibleFlashSaleProducts = useMemo(
@@ -110,8 +161,9 @@ export default function HomePage() {
           (p) =>
             activeCategory === "all" || p.categoryId === activeCategory
         )
+        .filter(matchesSearch)
         .filter((p) => stockFilter !== "available" || isProductAvailable(p)),
-    [activeCategory, flashSaleProducts, stockFilter]
+    [activeCategory, flashSaleProducts, matchesSearch, stockFilter]
   );
 
   const activeCategoryData = categories.find((c) => c.id === activeCategory);
@@ -274,7 +326,12 @@ export default function HomePage() {
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <h2 className="text-navy font-extrabold text-lg md:text-xl flex items-center gap-2">
-                    {activeCategory === "all" ? (
+                    {hasSearch ? (
+                      <>
+                        <Search size={20} className="text-tred" />
+                        Hasil Pencarian
+                      </>
+                    ) : activeCategory === "all" ? (
                       <>
                         <TrendingUp size={20} className="text-tred" />
                         Semua Produk
@@ -293,6 +350,9 @@ export default function HomePage() {
                   </h2>
                   <p className="text-gray-400 text-xs mt-0.5">
                     {availableProductCount} produk tersedia
+                    {hasSearch && (
+                      <> {"\u2022"} kata kunci: "{searchQuery}"</>
+                    )}
                     {activeValidity !== "all" && (
                       <> {"\u2022"} Masa aktif: {activeValidity}</>
                     )}
@@ -360,7 +420,7 @@ export default function HomePage() {
               )}
 
               {/* Category Sub-sections for "All" view */}
-              {activeCategory === "all" ? (
+              {activeCategory === "all" && !hasSearch ? (
                 filteredProducts.length > 0 ? (
                   <div className="space-y-8">
                     {categories.map((cat) => {
@@ -417,7 +477,9 @@ export default function HomePage() {
                   ) : (
                     <div className="col-span-full text-center py-12">
                       <p className="text-gray-400 text-sm">
-                        {stockFilter === "available"
+                        {hasSearch
+                          ? "Tidak ada produk yang cocok dengan pencarian"
+                          : stockFilter === "available"
                           ? "Tidak ada produk dengan stok tersedia"
                           : "Tidak ada produk ditemukan"}
                       </p>
@@ -461,5 +523,21 @@ export default function HomePage() {
         </div>
       </div>
     </>
+  );
+}
+
+function HomePageFallback() {
+  return (
+    <div className="max-w-7xl mx-auto px-4 md:px-6 pt-4 md:pt-6">
+      <div className="h-40 md:h-56 rounded-2xl bg-white border border-gray-100 animate-pulse" />
+    </div>
+  );
+}
+
+export default function HomePage() {
+  return (
+    <Suspense fallback={<HomePageFallback />}>
+      <HomePageContent />
+    </Suspense>
   );
 }

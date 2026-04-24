@@ -9,7 +9,11 @@ import { products, orders } from "@/db/schema.js";
 import { eq, and, gt, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
-import { isValidIndonesianNumber } from "@/lib/utils";
+import {
+  VOUCHER_REGION_APPROVAL_TEXT,
+  isValidIndonesianNumber,
+  validateVoucherInternetCheckout,
+} from "@/lib/utils";
 import {
   sendWhatsAppNotification,
   sendGroupNotification,
@@ -41,7 +45,14 @@ export async function POST(request) {
   }
   try {
     const body = await request.json();
-    const { productId, phoneNumber, paymentMethod, gameData, targetData: customTargetData } = body;
+    const {
+      productId,
+      phoneNumber,
+      paymentMethod,
+      gameData,
+      targetData: customTargetData,
+      voucherRegionApproved,
+    } = body;
 
     // Validate input
     if (!productId || !phoneNumber) {
@@ -78,6 +89,27 @@ export async function POST(request) {
     }
 
     const product = productResult[0];
+
+    const voucherValidation = validateVoucherInternetCheckout(product, phoneNumber);
+    if (!voucherValidation.valid) {
+      return NextResponse.json(
+        { success: false, error: voucherValidation.message || "Nomor tidak cocok dengan produk" },
+        { status: 400 }
+      );
+    }
+
+    if (
+      product.categoryId === "voucher-internet" &&
+      voucherRegionApproved !== true
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `${VOUCHER_REGION_APPROVAL_TEXT} Setujui ketentuan ini sebelum checkout.`,
+        },
+        { status: 400 }
+      );
+    }
 
     const managedByVoucherCodes = usesVoucherCodeStock(product);
 

@@ -2,7 +2,15 @@
 
 import { useState, useEffect, useMemo, use, useCallback, useRef } from "react";
 import Link from "next/link";
-import { formatRupiah, calculateDiscount, isValidIndonesianNumber, getOperatorName } from "@/lib/utils";
+import {
+  VOUCHER_REGION_APPROVAL_TEXT,
+  calculateDiscount,
+  formatRupiah,
+  getOperatorName,
+  getVoucherInternetRequirement,
+  isValidIndonesianNumber,
+  validateVoucherInternetCheckout,
+} from "@/lib/utils";
 import ProductCard from "@/components/ProductCard";
 import CategoryIcon from "@/components/CategoryIcon";
 import {
@@ -88,6 +96,7 @@ export default function ProductPage({ params }) {
   const [checkoutError, setCheckoutError] = useState("");
   const [showConfirm, setShowConfirm] = useState(false);
   const [activeGatewayLabel, setActiveGatewayLabel] = useState("");
+  const [voucherRegionApproved, setVoucherRegionApproved] = useState(false);
 
   // Refs for auto-scroll
   const phoneRef = useRef(null);
@@ -224,6 +233,7 @@ export default function ProductPage({ params }) {
 
   // Determine if this is a game voucher product
   const isGameVoucher = selectedProduct.categoryId === "voucher-game";
+  const isVoucherInternet = selectedProduct.categoryId === "voucher-internet";
   const gameConfig = isGameVoucher
     ? (GAME_ID_CONFIG[selectedProduct.gameName] || DEFAULT_GAME_CONFIG)
     : null;
@@ -252,6 +262,25 @@ export default function ProductPage({ params }) {
   const detectedOperator = phoneReadyForPayment
     ? getOperatorName(phoneNumber)
     : null;
+  const voucherRequirement = useMemo(
+    () => getVoucherInternetRequirement(selectedProduct),
+    [selectedProduct]
+  );
+  const voucherValidation = useMemo(
+    () => validateVoucherInternetCheckout(selectedProduct, phoneNumber),
+    [selectedProduct, phoneNumber]
+  );
+  const voucherValidationMessage =
+    isVoucherInternet &&
+    phoneNumber.length >= MIN_PHONE_LENGTH &&
+    !voucherValidation.valid
+      ? voucherValidation.message
+      : "";
+  const requiresVoucherRegionApproval =
+    isVoucherInternet && voucherRequirement.requiresRegionApproval;
+  const isCheckoutBlockedByVoucherRules =
+    Boolean(voucherValidationMessage) ||
+    (requiresVoucherRegionApproval && !voucherRegionApproved);
 
   // Check if game ID fields are all filled
   const isGameIdValid = () => {
@@ -266,10 +295,15 @@ export default function ProductPage({ params }) {
   const isStep2Complete = isGameVoucher
     ? (isGameIdValid() && phoneReadyForPayment)
     : phoneReadyForPayment;
+  const canCheckout = isStep2Complete && !isCheckoutBlockedByVoucherRules;
 
   const handlePhoneChange = (e) => {
     const value = e.target.value.replace(/\D/g, "");
     setPhoneNumber(value);
+    setCheckoutError("");
+    if (isVoucherInternet) {
+      setVoucherRegionApproved(false);
+    }
 
     if (isGameVoucher) {
       // For game vouchers, phone is secondary — check game ID + phone
@@ -311,6 +345,7 @@ export default function ProductPage({ params }) {
   const handleGameIdChange = (key, value) => {
     const newData = { ...gameIdData, [key]: value };
     setGameIdData(newData);
+    setCheckoutError("");
 
     // Check if all game fields valid + phone valid
     const allFieldsFilled = gameConfig.fields.every((field) => {
@@ -331,6 +366,8 @@ export default function ProductPage({ params }) {
 
   const handleSelectVariant = (variantId) => {
     setSelectedVariant(variantId);
+    setCheckoutError("");
+    setVoucherRegionApproved(false);
     // Reset game ID data when switching variant (different game may need different fields)
     const newProduct = allVariants.find((p) => p.id === variantId);
     if (newProduct && newProduct.gameName !== selectedProduct.gameName) {
@@ -351,12 +388,20 @@ export default function ProductPage({ params }) {
   // [FIX 4.3] Show confirmation dialog before checkout
   const handleCheckoutClick = () => {
     if (!isStep2Complete) return;
+    if (voucherValidationMessage) {
+      setCheckoutError(voucherValidationMessage);
+      return;
+    }
+    if (requiresVoucherRegionApproval && !voucherRegionApproved) {
+      setCheckoutError(`${VOUCHER_REGION_APPROVAL_TEXT} Centang persetujuan untuk lanjut ke checkout.`);
+      return;
+    }
     setCheckoutError("");
     setShowConfirm(true);
   };
 
   const handleCheckout = async () => {
-    if (isCheckingOut || !isStep2Complete) return;
+    if (isCheckingOut || !canCheckout) return;
     setShowConfirm(false);
 
     setIsCheckingOut(true);
@@ -367,6 +412,10 @@ export default function ProductPage({ params }) {
         productId: selectedVariant,
         phoneNumber,
       };
+
+      if (isVoucherInternet) {
+        bodyData.voucherRegionApproved = voucherRegionApproved;
+      }
 
       // Include game data if it's a game voucher
       if (isGameVoucher) {
@@ -433,6 +482,21 @@ export default function ProductPage({ params }) {
               <span className="text-gray-500">{isGameVoucher ? "No. HP" : "No. Tujuan"}</span>
               <span className="font-semibold text-gray-800">{phoneNumber}</span>
             </div>
+            {isVoucherInternet && (
+              <>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Jenis Voucher</span>
+                  <span className="font-semibold text-gray-800">
+                    {voucherRequirement.label || "Telkomsel atau byU"}
+                  </span>
+                </div>
+                <div className="rounded-xl border border-yellow-200 bg-yellow-50 px-3 py-2">
+                  <p className="text-[11px] text-yellow-800">
+                    {VOUCHER_REGION_APPROVAL_TEXT}
+                  </p>
+                </div>
+              </>
+            )}
             <div className="border-t border-gray-200 pt-2">
               <div className="flex justify-between items-center">
                 <span className="text-sm font-bold text-navy">Total</span>
@@ -825,6 +889,60 @@ export default function ProductPage({ params }) {
                       Nomor HP digunakan untuk notifikasi status pesanan via WhatsApp.
                     </p>
                   )}
+                  {isVoucherInternet && (
+                    <div className="mt-3 space-y-2.5">
+                      <div
+                        className={`rounded-xl border px-3 py-3 ${
+                          voucherValidationMessage
+                            ? "border-tred/20 bg-tred-50"
+                            : "border-blue-200 bg-blue-50"
+                        }`}
+                      >
+                        <p
+                          className={`text-xs font-bold ${
+                            voucherValidationMessage ? "text-tred" : "text-navy"
+                          }`}
+                        >
+                          Ketentuan voucher internet
+                        </p>
+                        <p
+                          className={`text-[11px] mt-1 leading-relaxed ${
+                            voucherValidationMessage ? "text-tred" : "text-gray-600"
+                          }`}
+                        >
+                          {voucherRequirement.hint}
+                        </p>
+                        {voucherValidationMessage ? (
+                          <p className="text-[11px] mt-2 flex items-center gap-1 text-tred">
+                            <AlertCircle size={12} />
+                            {voucherValidationMessage}
+                          </p>
+                        ) : (
+                          phoneReadyForPayment && (
+                            <p className="text-[11px] mt-2 flex items-center gap-1 text-success">
+                              <CheckCircle2 size={12} />
+                              Nomor sesuai dengan ketentuan produk voucher internet ini.
+                            </p>
+                          )
+                        )}
+                      </div>
+
+                      <label className="flex items-start gap-3 rounded-xl border border-yellow-200 bg-yellow-50 px-3 py-3">
+                        <input
+                          type="checkbox"
+                          checked={voucherRegionApproved}
+                          onChange={(e) => {
+                            setVoucherRegionApproved(e.target.checked);
+                            setCheckoutError("");
+                          }}
+                          className="mt-0.5 h-4 w-4 rounded border-yellow-300 text-tred focus:ring-tred"
+                        />
+                        <span className="text-[11px] leading-relaxed text-yellow-800">
+                          Saya setuju dan memahami bahwa {VOUCHER_REGION_APPROVAL_TEXT}
+                        </span>
+                      </label>
+                    </div>
+                  )}
                 </div>
 
                 {/* Step 3: Summary & Checkout */}
@@ -891,6 +1009,30 @@ export default function ProductPage({ params }) {
                         </span>
                       </div>
                     )}
+                    {isVoucherInternet && (
+                      <>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-500">Jenis Voucher</span>
+                          <span className="font-semibold text-gray-800">
+                            {voucherRequirement.label || "Telkomsel atau byU"}
+                          </span>
+                        </div>
+                        <div className="rounded-xl border border-yellow-200 bg-yellow-50 px-3 py-2">
+                          <p className="text-[11px] text-yellow-800">
+                            {VOUCHER_REGION_APPROVAL_TEXT}
+                          </p>
+                          <p
+                            className={`text-[11px] mt-1 ${
+                              voucherRegionApproved ? "text-green-700" : "text-yellow-800"
+                            }`}
+                          >
+                            {voucherRegionApproved
+                              ? "Persetujuan area sudah diberikan."
+                              : "Setujui ketentuan area sebelum checkout."}
+                          </p>
+                        </div>
+                      </>
+                    )}
                     <div className="border-t border-gray-200 pt-2.5">
                       <div className="flex justify-between items-center">
                         <span className="text-sm font-bold text-navy">
@@ -904,7 +1046,9 @@ export default function ProductPage({ params }) {
                   </div>
 
                   <p className="text-gray-400 text-[10px] mt-2 text-center">
-                    Kamu akan memilih metode pembayaran di halaman berikutnya
+                    {isVoucherInternet && !voucherRegionApproved
+                      ? "Setujui ketentuan area voucher internet untuk lanjut ke pembayaran"
+                      : "Kamu akan memilih metode pembayaran di halaman berikutnya"}
                   </p>
 
                   {checkoutError && (
@@ -918,7 +1062,7 @@ export default function ProductPage({ params }) {
                     onClick={handleCheckoutClick}
                     disabled={
                       currentStep < 3 ||
-                      !isStep2Complete ||
+                      !canCheckout ||
                       isCheckingOut
                     }
                     className="w-full mt-4 gradient-red text-white font-bold text-base py-3.5 rounded-xl shadow-lg shadow-tred/20 hover:opacity-95 transition-opacity btn-ripple disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"

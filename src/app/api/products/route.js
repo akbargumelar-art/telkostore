@@ -2,7 +2,7 @@
 import { NextResponse } from "next/server";
 import db from "@/db/index.js";
 import { products } from "@/db/schema.js";
-import { eq, and, like } from "drizzle-orm";
+import { and, eq, like, or } from "drizzle-orm";
 import { withComputedVoucherStocks } from "@/lib/product-stock";
 
 export async function GET(request) {
@@ -25,7 +25,15 @@ export async function GET(request) {
       conditions.push(eq(products.isPromo, true));
     }
     if (search) {
-      conditions.push(like(products.name, `%${search}%`));
+      conditions.push(
+        or(
+          like(products.name, `%${search}%`),
+          like(products.description, `%${search}%`),
+          like(products.quota, `%${search}%`),
+          like(products.validity, `%${search}%`),
+          like(products.gameName, `%${search}%`)
+        )
+      );
     }
 
     const result = await db

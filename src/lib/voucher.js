@@ -8,6 +8,7 @@ import { voucherCodes, products, orders } from "@/db/schema.js";
 import { eq, and, sql, count } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { buildVoucherDeliveryMsg } from "@/lib/whatsapp";
+import { getOperatorName, validateVoucherInternetCheckout } from "@/lib/utils";
 
 const MAX_ASSIGN_RETRIES = 3;
 
@@ -68,17 +69,9 @@ export function getRedeemInstructions(provider, code, phone) {
  * Detect provider from phone number prefix
  */
 export function detectProviderFromPhone(phone) {
-  if (!phone) return null;
-  const cleaned = phone.replace(/\D/g, "");
-
-  // byU prefix
-  if (cleaned.startsWith("0851")) return "byu";
-
-  // Telkomsel/Simpati prefixes
-  const simpatiPrefixes = [
-    "0811", "0812", "0813", "0821", "0822", "0823", "0852", "0853",
-  ];
-  if (simpatiPrefixes.some((p) => cleaned.startsWith(p))) return "simpati";
+  const operator = getOperatorName(phone);
+  if (operator === "byU") return "byu";
+  if (operator === "Telkomsel") return "simpati";
 
   return null;
 }
@@ -95,7 +88,16 @@ export function detectProviderFromPhone(phone) {
  * @param {number} [_retryCount=0] - Internal retry counter (do not pass manually)
  * @returns {object|null} The assigned voucher, or null if none available
  */
-export async function assignVoucherToOrder(orderId, productId, customerPhone, preferredProvider, _retryCount = 0) {
+export async function assignVoucherToOrder(
+  orderId,
+  productId,
+  customerPhone,
+  preferredProvider,
+  options = {},
+  _retryCount = 0
+) {
+  const allowProviderFallback = options.allowProviderFallback === true;
+
   if (_retryCount >= MAX_ASSIGN_RETRIES) {
     console.warn(`⚠️ Voucher assignment exhausted ${MAX_ASSIGN_RETRIES} retries for order ${orderId}`);
     return null;
@@ -144,9 +146,16 @@ export async function assignVoucherToOrder(orderId, productId, customerPhone, pr
       return voucher;
     });
 
-    if (!result && preferredProvider) {
+    if (!result && preferredProvider && allowProviderFallback) {
       // If provider-specific search failed, try without provider filter
-      return assignVoucherToOrder(orderId, productId, customerPhone, null, _retryCount + 1);
+      return assignVoucherToOrder(
+        orderId,
+        productId,
+        customerPhone,
+        null,
+        { allowProviderFallback: false },
+        _retryCount + 1
+      );
     }
 
     // Re-fetch the full voucher data after transaction commit
@@ -164,7 +173,14 @@ export async function assignVoucherToOrder(orderId, productId, customerPhone, pr
     // Deadlock or lock wait timeout — retry
     if (err.code === "ER_LOCK_DEADLOCK" || err.code === "ER_LOCK_WAIT_TIMEOUT") {
       console.warn(`🔄 Voucher assignment lock conflict, retrying (${_retryCount + 1}/${MAX_ASSIGN_RETRIES})...`);
-      return assignVoucherToOrder(orderId, productId, customerPhone, preferredProvider, _retryCount + 1);
+      return assignVoucherToOrder(
+        orderId,
+        productId,
+        customerPhone,
+        preferredProvider,
+        options,
+        _retryCount + 1
+      );
     }
     throw err;
   }
@@ -308,14 +324,50 @@ export async function ensureVoucherFulfillment(order, callbacks = {}, options = 
 
   let voucher = await getVoucherByOrderId(order.id);
   let assigned = false;
+  const targetPhone = order.targetData || order.guestPhone;
+  const voucherValidation = validateVoucherInternetCheckout(
+    {
+      id: order.productId,
+      categoryId: "voucher-internet",
+      name: order.productName,
+    },
+    targetPhone
+  );
+
+  if (!voucherValidation.valid) {
+    if (sendGroup && options.notifyWhenInvalidTarget !== false) {
+      try {
+        await sendGroup(
+          `*VOUCHER INTERNET BUTUH TINDAKAN ADMIN*\n\n` +
+            `Order: ${order.id}\n` +
+            `Produk: ${order.productName}\n` +
+            `Nomor tujuan: ${targetPhone}\n\n` +
+            `${voucherValidation.message}`
+        );
+      } catch (waErr) {
+        console.error("WA voucher invalid target notification failed:", waErr.message);
+      }
+    }
+
+    return {
+      isVoucher: true,
+      voucher: null,
+      assigned: false,
+      autoRedeemTriggered: false,
+      skippedReason: "invalid_target_for_product",
+      validationMessage: voucherValidation.message,
+    };
+  }
 
   if (!voucher) {
-    const detectedProvider = detectProviderFromPhone(order.targetData || order.guestPhone);
+    const detectedProvider =
+      voucherValidation.matchedProvider || detectProviderFromPhone(targetPhone);
     voucher = await assignVoucherToOrder(
       order.id,
       order.productId,
       order.guestPhone,
-      detectedProvider
+      detectedProvider,
+      { allowProviderFallback: false }
     );
 
     if (!voucher) {
@@ -346,7 +398,7 @@ export async function ensureVoucherFulfillment(order, callbacks = {}, options = 
       const instructions = getRedeemInstructions(
         voucher.provider,
         voucher.code,
-        order.targetData || order.guestPhone
+        targetPhone
       );
       await sendWA(
         order.guestPhone,
