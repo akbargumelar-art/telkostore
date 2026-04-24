@@ -7,6 +7,7 @@ import { products, categories, orders, voucherCodes } from "@/db/schema.js";
 import { count, eq, inArray } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { usesVoucherCodeStock, withComputedVoucherStocks } from "@/lib/product-stock";
+import { normalizeDigiflazzProductConfig } from "@/lib/digiflazz";
 
 function toNumber(value) {
   return Number(value || 0);
@@ -78,6 +79,14 @@ export async function POST(request) {
 
           try {
             const id = item.id || `${item.categoryId}-${nanoid(8).toLowerCase()}`;
+            const digiflazzConfig = normalizeDigiflazzProductConfig(
+              {
+                supplierName: item.supplierName,
+                supplierSkuCode: item.supplierSkuCode,
+                isDigiflazzEnabled: item.isDigiflazzEnabled,
+              },
+              item.categoryId
+            );
 
             await db.insert(products).values({
               id,
@@ -95,6 +104,9 @@ export async function POST(request) {
               quota: item.quota || null,
               gameName: item.gameName || null,
               gameIcon: item.gameIcon || null,
+              supplierName: digiflazzConfig.supplierName,
+              supplierSkuCode: digiflazzConfig.supplierSkuCode,
+              isDigiflazzEnabled: digiflazzConfig.isDigiflazzEnabled,
               isPromo: item.isPromo === true || item.isPromo === "true",
               isFlashSale: item.isFlashSale === true || item.isFlashSale === "true",
               isActive: item.isActive !== false && item.isActive !== "false",
@@ -363,6 +375,9 @@ export async function POST(request) {
           "Kuota",
           "Nama Game",
           "Icon Game",
+          "Supplier",
+          "SKU Digiflazz",
+          "Digiflazz Aktif",
           "Promo",
           "Flash Sale",
           "Aktif",
@@ -391,6 +406,9 @@ export async function POST(request) {
           Kuota: normalizeCell(product.quota),
           "Nama Game": normalizeCell(product.gameName),
           "Icon Game": normalizeCell(product.gameIcon),
+          Supplier: normalizeCell(product.supplierName),
+          "SKU Digiflazz": normalizeCell(product.supplierSkuCode),
+          "Digiflazz Aktif": formatBooleanLabel(product.isDigiflazzEnabled),
           Promo: formatBooleanLabel(product.isPromo),
           "Flash Sale": formatBooleanLabel(product.isFlashSale),
           Aktif: formatBooleanLabel(product.isActive),
@@ -419,6 +437,9 @@ export async function POST(request) {
           { wch: 12 },
           { wch: 20 },
           { wch: 12 },
+          { wch: 14 },
+          { wch: 18 },
+          { wch: 16 },
           { wch: 12 },
           { wch: 12 },
           { wch: 12 },
@@ -426,7 +447,7 @@ export async function POST(request) {
           { wch: 24 },
         ];
         worksheet["!autofilter"] = {
-          ref: `A1:V${Math.max(rows.length + 1, 1)}`,
+          ref: `A1:Y${Math.max(rows.length + 1, 1)}`,
         };
 
         XLSX.utils.book_append_sheet(workbook, worksheet, "Produk");

@@ -57,6 +57,9 @@ async function seed() {
       quota VARCHAR(50),
       game_name VARCHAR(100),
       game_icon VARCHAR(50),
+      supplier_name VARCHAR(50),
+      supplier_sku_code VARCHAR(100),
+      is_digiflazz_enabled BOOLEAN DEFAULT FALSE,
       is_promo BOOLEAN DEFAULT FALSE,
       is_flash_sale BOOLEAN DEFAULT FALSE,
       is_active BOOLEAN DEFAULT TRUE,
@@ -139,6 +142,28 @@ async function seed() {
       INDEX idx_voucher_product (product_id),
       INDEX idx_voucher_status (status),
       INDEX idx_voucher_order (order_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await connection.execute(`
+    CREATE TABLE IF NOT EXISTS digiflazz_transactions (
+      id VARCHAR(100) PRIMARY KEY,
+      order_id VARCHAR(100) NOT NULL,
+      ref_id VARCHAR(100) NOT NULL,
+      buyer_sku_code VARCHAR(100) NOT NULL,
+      customer_no VARCHAR(255) NOT NULL,
+      status VARCHAR(30) NOT NULL,
+      message TEXT,
+      sn TEXT,
+      buyer_last_saldo DOUBLE,
+      raw_request TEXT,
+      raw_response TEXT,
+      created_at VARCHAR(50),
+      updated_at VARCHAR(50),
+      FOREIGN KEY (order_id) REFERENCES orders(id),
+      UNIQUE KEY uq_digiflazz_ref (ref_id),
+      INDEX idx_digiflazz_order (order_id),
+      INDEX idx_digiflazz_status (status)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
 

@@ -95,26 +95,47 @@ export default function ControlLayout({ children }) {
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [adminType, setAdminType] = useState(null);
+  const [checkingSession, setCheckingSession] = useState(true);
 
   useEffect(() => {
-    if (pathname === "/control/login") return;
+    if (pathname === "/control/login") {
+      setCheckingSession(false);
+      return;
+    }
 
-    fetch("/api/admin/me")
+    fetch("/api/admin/me", { cache: "no-store" })
       .then((res) => res.json())
       .then((data) => {
         if (data.success) {
           setAdminType(data.adminType);
+          return;
         }
+        setAdminType(null);
+        router.replace("/control/login");
       })
-      .catch(() => {});
-  }, [pathname]);
+      .catch(() => {
+        setAdminType(null);
+        router.replace("/control/login");
+      })
+      .finally(() => {
+        setCheckingSession(false);
+      });
+  }, [pathname, router]);
 
   if (pathname === "/control/login") {
     return children;
   }
 
+  if (checkingSession) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="w-10 h-10 rounded-full border-4 border-gray-200 border-t-navy animate-spin" />
+      </div>
+    );
+  }
+
   // Filter nav items based on admin type
-  const navItems = adminType === "superadmin" || adminType === null
+  const navItems = adminType === "superadmin"
     ? allNavItems
     : allNavItems.filter((item) => !item.superadminOnly);
 

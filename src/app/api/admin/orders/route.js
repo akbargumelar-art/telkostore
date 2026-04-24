@@ -7,7 +7,7 @@ import { and, desc, eq, gte, inArray, like, lte, or, sql } from "drizzle-orm";
 import { verifyAdminToken } from "@/lib/jwt";
 import { syncVoucherProductStock } from "@/lib/product-stock";
 import { reconcileVisiblePendingOrders } from "@/lib/payment-reconciliation";
-import { ensureVoucherFulfillment } from "@/lib/voucher";
+import { ensurePostPaymentFulfillment } from "@/lib/order-fulfillment";
 import { sendWhatsAppNotification, sendGroupNotification } from "@/lib/whatsapp";
 
 const DELETE_CONFIRM_TEXT = "HAPUS PESANAN";
@@ -316,7 +316,7 @@ export async function PUT(request) {
             .limit(1);
 
           if (updatedOrder) {
-            await ensureVoucherFulfillment(
+            await ensurePostPaymentFulfillment(
               updatedOrder,
               {
                 sendWA: sendWhatsAppNotification,
@@ -329,8 +329,8 @@ export async function PUT(request) {
               }
             );
           }
-        } catch (voucherErr) {
-          console.error(`Bulk voucher fulfillment failed for ${orderId}:`, voucherErr.message);
+        } catch (fulfillmentErr) {
+          console.error(`Bulk fulfillment failed for ${orderId}:`, fulfillmentErr.message);
         }
       }
 

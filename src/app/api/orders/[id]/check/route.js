@@ -7,7 +7,7 @@ import { eq, and, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { createCoreClient } from "@/lib/midtrans";
 import { checkPakasirTransaction } from "@/lib/pakasir";
-import { checkDokuTransaction } from "@/lib/doku";
+import { isDigiflazzEnabledProduct } from "@/lib/digiflazz";
 import {
   sendWhatsAppNotification,
   sendGroupNotification,
@@ -17,7 +17,8 @@ import {
   buildGroupPaymentFailedMsg,
 } from "@/lib/whatsapp";
 import { cancelNotification } from "@/lib/notification-scheduler";
-import { isVoucherProduct, ensureVoucherFulfillment } from "@/lib/voucher";
+import { isVoucherProduct } from "@/lib/voucher";
+import { ensurePostPaymentFulfillment } from "@/lib/order-fulfillment";
 
 export async function POST(request, { params }) {
   try {
@@ -112,13 +113,17 @@ async function checkMidtransStatus(order) {
         .from(products)
         .where(eq(products.id, order.productId))
         .limit(1);
-      const productType = productResult[0]?.type || "virtual";
+      const product = productResult[0];
+      const productType = product?.type || "virtual";
       const voucherProduct = await isVoucherProduct(order.productId);
+      const digiflazzProduct = isDigiflazzEnabledProduct(product);
 
       statusUpdates.paidAt = now;
       statusUpdates.paymentMethod = payment_type;
 
       if (voucherProduct) {
+        newStatus = "paid";
+      } else if (digiflazzProduct) {
         newStatus = "paid";
       } else if (productType === "virtual") {
         newStatus = "completed";
@@ -186,13 +191,17 @@ async function checkPakasirStatus(order) {
       .from(products)
       .where(eq(products.id, order.productId))
       .limit(1);
-    const productType = productResult[0]?.type || "virtual";
+    const product = productResult[0];
+    const productType = product?.type || "virtual";
     const voucherProduct = await isVoucherProduct(order.productId);
+    const digiflazzProduct = isDigiflazzEnabledProduct(product);
 
     statusUpdates.paidAt = txDetail.completed_at || now;
     statusUpdates.paymentMethod = paymentMethod;
 
     if (voucherProduct) {
+      newStatus = "paid";
+    } else if (digiflazzProduct) {
       newStatus = "paid";
     } else if (productType === "virtual") {
       newStatus = "completed";
@@ -310,7 +319,7 @@ async function applyStatusUpdate(order, newStatus, statusUpdates, paymentData) {
     }
 
     try {
-      await ensureVoucherFulfillment(
+      await ensurePostPaymentFulfillment(
         currentOrder,
         {
           sendWA: sendWhatsAppNotification,
@@ -343,7 +352,7 @@ async function applyStatusUpdate(order, newStatus, statusUpdates, paymentData) {
     }
   } else if (newStatus === "completed" || newStatus === "paid") {
     try {
-      await ensureVoucherFulfillment(
+      await ensurePostPaymentFulfillment(
         currentOrder,
         {
           sendWA: sendWhatsAppNotification,

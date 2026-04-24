@@ -10,7 +10,7 @@ import {
   buildOrderProcessingMsg,
   formatRupiahServer,
 } from "@/lib/whatsapp";
-import { ensureVoucherFulfillment } from "@/lib/voucher";
+import { ensurePostPaymentFulfillment } from "@/lib/order-fulfillment";
 
 export async function GET(request, { params }) {
   try {
@@ -129,7 +129,7 @@ export async function PUT(request, { params }) {
       ["paid", "processing", "completed"].includes(status)
     ) {
       try {
-        await ensureVoucherFulfillment(
+        await ensurePostPaymentFulfillment(
           updatedOrder,
           {
             sendWA: sendWhatsAppNotification,

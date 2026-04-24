@@ -46,6 +46,9 @@ export const products = mysqlTable("products", {
   quota: varchar("quota", { length: 50 }), // "12GB", "5GB"
   gameName: varchar("game_name", { length: 100 }),
   gameIcon: varchar("game_icon", { length: 50 }),
+  supplierName: varchar("supplier_name", { length: 50 }),
+  supplierSkuCode: varchar("supplier_sku_code", { length: 100 }),
+  isDigiflazzEnabled: boolean("is_digiflazz_enabled").default(false),
   isPromo: boolean("is_promo").default(false),
   isFlashSale: boolean("is_flash_sale").default(false),
   isActive: boolean("is_active").default(true),
@@ -115,6 +118,23 @@ export const voucherCodes = mysqlTable("voucher_codes", {
   customerPhone: varchar("customer_phone", { length: 20 }),
   redeemedAt: varchar("redeemed_at", { length: 50 }),
   redeemResponse: text("redeem_response"),
+  createdAt: varchar("created_at", { length: 50 }).$defaultFn(() => new Date().toISOString()),
+  updatedAt: varchar("updated_at", { length: 50 }).$defaultFn(() => new Date().toISOString()),
+});
+
+// ===== DIGIFLAZZ TRANSACTIONS =====
+export const digiflazzTransactions = mysqlTable("digiflazz_transactions", {
+  id: varchar("id", { length: 100 }).primaryKey(),
+  orderId: varchar("order_id", { length: 100 }).references(() => orders.id).notNull(),
+  refId: varchar("ref_id", { length: 100 }).notNull(),
+  buyerSkuCode: varchar("buyer_sku_code", { length: 100 }).notNull(),
+  customerNo: varchar("customer_no", { length: 255 }).notNull(),
+  status: varchar("status", { length: 30 }).notNull(), // pending, success, failed
+  message: text("message"),
+  sn: text("sn"),
+  buyerLastSaldo: double("buyer_last_saldo"),
+  rawRequest: text("raw_request"),
+  rawResponse: text("raw_response"),
   createdAt: varchar("created_at", { length: 50 }).$defaultFn(() => new Date().toISOString()),
   updatedAt: varchar("updated_at", { length: 50 }).$defaultFn(() => new Date().toISOString()),
 });

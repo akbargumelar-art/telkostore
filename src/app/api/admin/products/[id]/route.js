@@ -4,6 +4,7 @@ import db from "@/db/index.js";
 import { products } from "@/db/schema.js";
 import { eq } from "drizzle-orm";
 import { syncVoucherProductStock, usesVoucherCodeStock } from "@/lib/product-stock";
+import { normalizeDigiflazzProductConfig } from "@/lib/digiflazz";
 
 // PUT — Update product
 export async function PUT(request, { params }) {
@@ -36,6 +37,26 @@ export async function PUT(request, { params }) {
         if (field === "stock" && managedByVoucherCodes) continue;
         updateData[field] = body[field];
       }
+    }
+
+    if (
+      body.supplierName !== undefined ||
+      body.supplierSkuCode !== undefined ||
+      body.isDigiflazzEnabled !== undefined ||
+      body.categoryId !== undefined
+    ) {
+      const digiflazzConfig = normalizeDigiflazzProductConfig(
+        {
+          supplierName: body.supplierName ?? currentProduct.supplierName,
+          supplierSkuCode: body.supplierSkuCode ?? currentProduct.supplierSkuCode,
+          isDigiflazzEnabled: body.isDigiflazzEnabled ?? currentProduct.isDigiflazzEnabled,
+        },
+        targetCategoryId
+      );
+
+      updateData.supplierName = digiflazzConfig.supplierName;
+      updateData.supplierSkuCode = digiflazzConfig.supplierSkuCode;
+      updateData.isDigiflazzEnabled = digiflazzConfig.isDigiflazzEnabled;
     }
 
     updateData.updatedAt = new Date().toISOString();

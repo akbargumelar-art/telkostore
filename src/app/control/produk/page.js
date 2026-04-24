@@ -39,6 +39,7 @@ const emptyForm = {
   name: "", categoryId: "pulsa", type: "virtual", description: "",
   nominal: "", price: "", originalPrice: "", stock: 999,
   validity: "", quota: "", gameName: "", gameIcon: "",
+  supplierName: "", supplierSkuCode: "", isDigiflazzEnabled: false,
   isPromo: false, isFlashSale: false,
 };
 
@@ -65,6 +66,7 @@ export default function AdminProdukPage() {
   const [bulkStockValue, setBulkStockValue] = useState(999);
   const fileInputRef = useRef(null);
   const stockManagedByVoucherCodes = form.categoryId === "voucher-internet";
+  const digiflazzAllowed = form.categoryId !== "voucher-internet";
   const selectedProducts = products.filter((product) => selected.has(product.id));
   const hasSelectedManualStock = selectedProducts.some((product) => product.stockMode !== "voucher-codes");
   const hasSelectedVoucherManagedStock = selectedProducts.some((product) => product.stockMode === "voucher-codes");
@@ -128,6 +130,9 @@ export default function AdminProdukPage() {
       quota: product.quota || "",
       gameName: product.gameName || "",
       gameIcon: product.gameIcon || "",
+      supplierName: product.supplierName || "",
+      supplierSkuCode: product.supplierSkuCode || "",
+      isDigiflazzEnabled: product.isDigiflazzEnabled || false,
       isPromo: product.isPromo || false,
       isFlashSale: product.isFlashSale || false,
     });
@@ -140,6 +145,10 @@ export default function AdminProdukPage() {
       setError("Nama dan harga wajib diisi");
       return;
     }
+    if (form.isDigiflazzEnabled && !form.supplierSkuCode.trim()) {
+      setError("SKU Digiflazz wajib diisi jika produk memakai Digiflazz");
+      return;
+    }
 
     setSaving(true);
     setError("");
@@ -147,6 +156,8 @@ export default function AdminProdukPage() {
     try {
       const payload = {
         ...form,
+        supplierName: form.isDigiflazzEnabled ? "digiflazz" : null,
+        supplierSkuCode: form.isDigiflazzEnabled ? form.supplierSkuCode.trim() : null,
         price: Number(form.price),
         originalPrice: form.originalPrice ? Number(form.originalPrice) : null,
         nominal: form.nominal ? Number(form.nominal) : null,
@@ -536,6 +547,11 @@ export default function AdminProdukPage() {
                         <div>
                           <p className="font-semibold text-gray-800">{p.name}</p>
                           <p className="text-[11px] text-gray-400 truncate max-w-[200px]">{p.id}</p>
+                          {p.isDigiflazzEnabled && (
+                            <p className="text-[10px] text-emerald-700 mt-1">
+                              Digiflazz{p.supplierSkuCode ? ` • ${p.supplierSkuCode}` : ""}
+                            </p>
+                          )}
                         </div>
                       </div>
                     </td>
@@ -634,7 +650,16 @@ export default function AdminProdukPage() {
                 </div>
                 <div>
                   <label className="text-xs font-semibold text-gray-600 mb-1 block">Kategori *</label>
-                  <select value={form.categoryId} onChange={(e) => setForm({...form, categoryId: e.target.value})}
+                  <select value={form.categoryId} onChange={(e) => {
+                    const nextCategory = e.target.value;
+                    setForm({
+                      ...form,
+                      categoryId: nextCategory,
+                      ...(nextCategory === "voucher-internet"
+                        ? { supplierName: "", supplierSkuCode: "", isDigiflazzEnabled: false }
+                        : {}),
+                    });
+                  }}
                     className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy bg-white">
                     {categoryOptions.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
@@ -705,6 +730,56 @@ export default function AdminProdukPage() {
                   <input value={form.gameIcon} onChange={(e) => setForm({...form, gameIcon: e.target.value})}
                     className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy" placeholder="🎯"/>
                 </div>
+                <div className="col-span-2 rounded-2xl border border-gray-200 bg-gray-50/70 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-gray-800">Fulfillment Supplier</p>
+                      <p className="text-[11px] text-gray-500 mt-1">
+                        Digiflazz dipakai hanya untuk fulfillment setelah pembayaran berhasil. Voucher internet tetap memakai flow internal.
+                      </p>
+                    </div>
+                    <label className={`flex items-center gap-2 text-sm font-medium ${digiflazzAllowed ? "text-gray-700" : "text-gray-400"}`}>
+                      <input
+                        type="checkbox"
+                        checked={form.isDigiflazzEnabled}
+                        disabled={!digiflazzAllowed}
+                        onChange={(e) => setForm({
+                          ...form,
+                          isDigiflazzEnabled: e.target.checked,
+                          supplierName: e.target.checked ? "digiflazz" : "",
+                          supplierSkuCode: e.target.checked ? form.supplierSkuCode : "",
+                        })}
+                        className="rounded"
+                      />
+                      Pakai Digiflazz
+                    </label>
+                  </div>
+                  {!digiflazzAllowed && (
+                    <p className="text-[11px] text-amber-700 mt-3">
+                      Voucher internet wajib tetap memakai stok kode voucher internal.
+                    </p>
+                  )}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
+                    <div>
+                      <label className="text-xs font-semibold text-gray-600 mb-1 block">Supplier</label>
+                      <input
+                        value={form.isDigiflazzEnabled ? "digiflazz" : "manual"}
+                        readOnly
+                        className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-white text-gray-600"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-gray-600 mb-1 block">SKU Digiflazz</label>
+                      <input
+                        value={form.supplierSkuCode}
+                        onChange={(e) => setForm({...form, supplierSkuCode: e.target.value.toUpperCase()})}
+                        disabled={!form.isDigiflazzEnabled}
+                        className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-navy disabled:bg-white disabled:text-gray-400"
+                        placeholder="Contoh: TSEL10 / ML5"
+                      />
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <div className="flex items-center gap-4 pt-2">
@@ -745,9 +820,9 @@ export default function AdminProdukPage() {
             <div className="p-5 space-y-4">
               <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs text-blue-700">
                 <p className="font-semibold mb-1">Format JSON:</p>
-                <code className="block bg-white/60 rounded p-2 text-[10px] leading-relaxed">{`[{"name":"Pulsa 5K","categoryId":"pulsa","price":6500,"stock":999}]`}</code>
+                <code className="block bg-white/60 rounded p-2 text-[10px] leading-relaxed">{`[{"name":"Pulsa 5K","categoryId":"pulsa","price":6500,"stock":999,"isDigiflazzEnabled":true,"supplierSkuCode":"TSEL5"}]`}</code>
                 <p className="mt-2 font-semibold">Format CSV:</p>
-                <code className="block bg-white/60 rounded p-2 text-[10px]">name,categoryId,price,stock</code>
+                <code className="block bg-white/60 rounded p-2 text-[10px]">name,categoryId,price,stock,isDigiflazzEnabled,supplierSkuCode</code>
               </div>
               <div>
                 <input ref={fileInputRef} type="file" accept=".json,.csv" onChange={handleImportFile} className="hidden" />

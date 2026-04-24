@@ -9,6 +9,7 @@ import {
   usesVoucherCodeStock,
   withComputedVoucherStocks,
 } from "@/lib/product-stock";
+import { normalizeDigiflazzProductConfig } from "@/lib/digiflazz";
 
 // GET — List all products (including inactive) for admin
 export async function GET(request) {
@@ -59,7 +60,8 @@ export async function POST(request) {
     const {
       name, categoryId, type, description, nominal,
       price, originalPrice, stock, validity, quota,
-      gameName, gameIcon, isPromo, isFlashSale,
+      gameName, gameIcon, supplierName, supplierSkuCode,
+      isDigiflazzEnabled, isPromo, isFlashSale,
     } = body;
 
     if (!name || !categoryId || !price) {
@@ -82,6 +84,10 @@ export async function POST(request) {
     const now = new Date().toISOString();
 
     const managedByVoucherCodes = usesVoucherCodeStock(categoryId);
+    const digiflazzConfig = normalizeDigiflazzProductConfig(
+      { supplierName, supplierSkuCode, isDigiflazzEnabled },
+      categoryId
+    );
 
     await db.insert(products).values({
       id,
@@ -97,6 +103,9 @@ export async function POST(request) {
       quota: quota || null,
       gameName: gameName || null,
       gameIcon: gameIcon || null,
+      supplierName: digiflazzConfig.supplierName,
+      supplierSkuCode: digiflazzConfig.supplierSkuCode,
+      isDigiflazzEnabled: digiflazzConfig.isDigiflazzEnabled,
       isPromo: isPromo || false,
       isFlashSale: isFlashSale || false,
       isActive: true,
