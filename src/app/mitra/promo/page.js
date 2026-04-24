@@ -1,6 +1,6 @@
 "use client";
 
-import { Copy, Save } from "lucide-react";
+import { Copy, Save, Download, QrCode } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import PromoVisualCard from "@/components/referral/PromoVisualCard";
@@ -116,6 +116,25 @@ export default function MitraPromoPage() {
     }
 
     setSaving(false);
+  };
+
+  const handleDownloadQR = async () => {
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=500x500&data=${encodeURIComponent(liveProfile.promoDefaults.preferredUrl)}&margin=10`;
+    try {
+      const response = await fetch(qrUrl);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `QR-Referral-${liveProfile.slug}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Download failed", error);
+      alert("Gagal mengunduh QR Code otomatis. Silakan coba klik kanan pada gambar QR dan pilih 'Save Image As'.");
+    }
   };
 
   if (loading || !payload || !liveProfile) {
@@ -310,6 +329,37 @@ export default function MitraPromoPage() {
                   <p className="mt-2 break-all text-sm font-semibold text-navy">{item.value}</p>
                 </div>
               ))}
+            </div>
+
+            <div className="mt-4 space-y-3">
+              <div className="flex flex-col sm:flex-row items-center gap-5 rounded-2xl border border-gray-100 bg-gray-50 p-5">
+                <div className="shrink-0 rounded-xl border border-gray-200 bg-white p-2 shadow-sm">
+                  <img 
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(preferredUrl)}&margin=10`} 
+                    alt="QR Code Referral" 
+                    className="h-[120px] w-[120px] object-contain"
+                  />
+                </div>
+                <div className="flex-1 text-center sm:text-left">
+                  <div className="flex items-center justify-center sm:justify-start gap-2">
+                    <QrCode size={16} className="text-navy" />
+                    <h3 className="text-sm font-bold text-navy">QR Code Referral</h3>
+                  </div>
+                  <p className="mt-1 text-xs text-gray-500">
+                    Scan QR code ini untuk menuju link pilihan kamu. Cocok untuk dicetak dan diletakkan di meja kasir atau toko fisikmu.
+                  </p>
+                  <div className="mt-4 flex justify-center sm:justify-start">
+                    <button
+                      type="button"
+                      onClick={handleDownloadQR}
+                      className="inline-flex items-center gap-2 rounded-xl bg-navy px-4 py-2.5 text-xs font-bold text-white shadow-md transition-opacity hover:opacity-90"
+                    >
+                      <Download size={14} />
+                      Download QR Code (PNG)
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div className="mt-4 space-y-3">
