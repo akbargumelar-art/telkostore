@@ -13,7 +13,7 @@ import { sendWhatsAppNotification, sendGroupNotification } from "@/lib/whatsapp"
 const DELETE_CONFIRM_TEXT = "HAPUS PESANAN";
 const DELETE_CHUNK_SIZE = 250;
 
-async function requireSuperadmin() {
+async function requireAdminAccess() {
   const cookieStore = await cookies();
   const adminToken = cookieStore.get("admin_token")?.value;
   const tokenData = verifyAdminToken(adminToken);
@@ -24,20 +24,6 @@ async function requireSuperadmin() {
       response: NextResponse.json(
         { success: false, error: "Unauthorized" },
         { status: 401 }
-      ),
-    };
-  }
-
-  const adminType = tokenData.adminType || "superadmin";
-  if (adminType !== "superadmin") {
-    return {
-      ok: false,
-      response: NextResponse.json(
-        {
-          success: false,
-          error: "Akses ditolak. Hanya superadmin yang dapat menghapus riwayat pesanan.",
-        },
-        { status: 403 }
       ),
     };
   }
@@ -138,10 +124,10 @@ export async function GET(request) {
   }
 }
 
-// DELETE /api/admin/orders - delete order history, superadmin only
+// DELETE /api/admin/orders - delete order history, authenticated admin only
 export async function DELETE(request) {
   try {
-    const auth = await requireSuperadmin();
+    const auth = await requireAdminAccess();
     if (!auth.ok) return auth.response;
 
     const body = await request.json();

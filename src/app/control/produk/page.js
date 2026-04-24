@@ -447,6 +447,13 @@ export default function AdminProdukPage() {
         </div>
       )}
 
+      {error && !showModal && !showImport && (
+        <div className="mb-4 bg-red-50 border border-red-200 rounded-xl p-3 flex items-center gap-2 animate-fade-in">
+          <AlertCircle size={14} className="text-red-600" />
+          <p className="text-red-600 text-sm font-medium">{error}</p>
+        </div>
+      )}
+
       {/* Filters */}
       <div className="bg-white rounded-2xl border border-gray-100 p-4 mb-4 flex flex-col md:flex-row gap-3">
         <form onSubmit={handleSearch} className="flex-1 flex gap-2">

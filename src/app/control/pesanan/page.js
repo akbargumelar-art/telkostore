@@ -76,7 +76,7 @@ export default function AdminPesananPage() {
   const [bulkUpdating, setBulkUpdating] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [filterDeleting, setFilterDeleting] = useState(false);
-  const isSuperadmin = adminType === "superadmin";
+  const canDeleteHistory = adminType === "superadmin" || adminType === "admin";
 
   const fetchAdminInfo = async () => {
     try {
@@ -212,7 +212,7 @@ export default function AdminPesananPage() {
   };
 
   const handleDeleteSelected = async () => {
-    if (!isSuperadmin || selectedIds.size === 0) return;
+    if (!canDeleteHistory || selectedIds.size === 0) return;
     if (!confirm(`Hapus permanen ${selectedIds.size} riwayat pesanan terpilih? Aksi ini tidak bisa dibatalkan.`)) return;
 
     setBulkDeleting(true);
@@ -248,7 +248,7 @@ export default function AdminPesananPage() {
   };
 
   const handleDeleteFiltered = async () => {
-    if (!isSuperadmin || !pagination?.total) return;
+    if (!canDeleteHistory || !pagination?.total) return;
 
     const hasDateFilter = Boolean(dateFrom || dateTo);
     const scope =
@@ -312,7 +312,7 @@ export default function AdminPesananPage() {
           </p>
         </div>
         <div className="flex items-center gap-2 self-start flex-wrap">
-          {isSuperadmin && pagination?.total > 0 && (
+          {canDeleteHistory && pagination?.total > 0 && (
             <button
               onClick={handleDeleteFiltered}
               disabled={filterDeleting}
@@ -385,7 +385,7 @@ export default function AdminPesananPage() {
               )}
             </button>
           </div>
-          {isSuperadmin && (
+          {canDeleteHistory && (
             <button
               onClick={handleDeleteSelected}
               disabled={bulkDeleting}
