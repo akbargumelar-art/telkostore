@@ -240,6 +240,42 @@ async function seed() {
   `);
 
   await connection.execute(`
+    CREATE TABLE IF NOT EXISTS referral_level_rules (
+      id VARCHAR(100) PRIMARY KEY,
+      name VARCHAR(100) NOT NULL,
+      min_transactions INT NOT NULL DEFAULT 0,
+      max_transactions INT NULL,
+      commission_amount DOUBLE NOT NULL DEFAULT 0,
+      sort_order INT NOT NULL DEFAULT 0,
+      is_active BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at VARCHAR(50),
+      updated_at VARCHAR(50),
+      INDEX idx_referral_level_rules_active_sort (is_active, sort_order)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await connection.execute(`
+    CREATE TABLE IF NOT EXISTS referral_monthly_levels (
+      id VARCHAR(100) PRIMARY KEY,
+      downline_profile_id VARCHAR(100) NOT NULL,
+      period_month VARCHAR(7) NOT NULL,
+      basis_period_month VARCHAR(7) NOT NULL,
+      total_transactions INT NOT NULL DEFAULT 0,
+      current_month_transactions INT NOT NULL DEFAULT 0,
+      applied_level_rule_id VARCHAR(100),
+      applied_level_name VARCHAR(100),
+      applied_commission_amount DOUBLE NOT NULL DEFAULT 0,
+      uses_legacy_margin BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at VARCHAR(50),
+      updated_at VARCHAR(50),
+      FOREIGN KEY (downline_profile_id) REFERENCES downline_profiles(id),
+      FOREIGN KEY (applied_level_rule_id) REFERENCES referral_level_rules(id),
+      UNIQUE KEY uq_referral_monthly_levels_profile_period (downline_profile_id, period_month),
+      INDEX idx_referral_monthly_levels_period (period_month)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await connection.execute(`
     CREATE TABLE IF NOT EXISTS site_banners (
       id VARCHAR(100) PRIMARY KEY,
       title VARCHAR(255) NOT NULL,
@@ -348,6 +384,43 @@ async function seed() {
 
   console.log("✅ Gateway settings seeded!");
 
+  // ===== SEED REFERRAL LEVEL RULES =====
+  console.log("📦 Seeding referral level rules...");
+
+  const referralLevelDefaults = [
+    { id: "RLR-BRONZE", name: "Bronze", minTransactions: 0, maxTransactions: 20, commissionAmount: 100, sortOrder: 1, isActive: true },
+    { id: "RLR-SILVER", name: "Silver", minTransactions: 21, maxTransactions: 50, commissionAmount: 150, sortOrder: 2, isActive: true },
+    { id: "RLR-GOLD", name: "Gold", minTransactions: 51, maxTransactions: null, commissionAmount: 200, sortOrder: 3, isActive: true },
+  ];
+
+  for (const rule of referralLevelDefaults) {
+    await connection.execute(
+      `INSERT INTO referral_level_rules (id, name, min_transactions, max_transactions, commission_amount, sort_order, is_active, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE
+         name=VALUES(name),
+         min_transactions=VALUES(min_transactions),
+         max_transactions=VALUES(max_transactions),
+         commission_amount=VALUES(commission_amount),
+         sort_order=VALUES(sort_order),
+         is_active=VALUES(is_active),
+         updated_at=VALUES(updated_at)`,
+      [
+        rule.id,
+        rule.name,
+        rule.minTransactions,
+        rule.maxTransactions,
+        rule.commissionAmount,
+        rule.sortOrder,
+        rule.isActive,
+        now,
+        now,
+      ]
+    );
+  }
+
+  console.log(`✅ ${referralLevelDefaults.length} referral level rules seeded!`);
+
   // ===== SEED SITE BANNERS =====
   console.log("📦 Seeding site banners...");
 
@@ -391,6 +464,7 @@ async function seed() {
   const [[{ count: oCount }]] = await connection.execute("SELECT COUNT(*) as count FROM orders");
   const [[{ count: payCount }]] = await connection.execute("SELECT COUNT(*) as count FROM payments");
   const [[{ count: gwCount }]] = await connection.execute("SELECT COUNT(*) as count FROM gateway_settings");
+  const [[{ count: referralLevelRuleCount }]] = await connection.execute("SELECT COUNT(*) as count FROM referral_level_rules");
   const [[{ count: bannerCount }]] = await connection.execute("SELECT COUNT(*) as count FROM site_banners");
 
   console.log(`\n📊 Database summary:`);
@@ -399,6 +473,7 @@ async function seed() {
   console.log(`   Orders: ${oCount}`);
   console.log(`   Payments: ${payCount}`);
   console.log(`   Gateway Settings: ${gwCount}`);
+  console.log(`   Referral Level Rules: ${referralLevelRuleCount}`);
   console.log(`   Site Banners: ${bannerCount}`);
   console.log(`\n🎉 MySQL seed complete!`);
 

@@ -1,8 +1,88 @@
 # Telko.Store — Progress Report
 
-**Log Terakhir:** 24 April 2026
+**Log Terakhir:** 25 April 2026
 
 ## ✅ Apa yang sudah selesai dilakukan
+
+### 27. Duitku Popup Native + Referral Multi-Level Bulanan (25 April 2026)
+
+#### a. Popup asli `duitku.js` tanpa mengubah single active gateway
+- Integrasi Duitku di frontend ditingkatkan dari redirect-style menjadi popup native `duitku.js` sesuai flow POP. Checkout produk sekarang mencoba membuka popup memakai `reference` Duitku, dengan fallback aman ke `paymentUrl` lama bila script popup gagal dimuat.
+- Halaman tracking order `/order/[id]` juga ikut mendukung relaunch popup Duitku untuk order `pending`, jadi user tidak lagi dipaksa kembali ke redirect full-page hanya untuk melanjutkan pembayaran.
+- Callback popup Duitku dipakai hanya untuk UX redirect ke `/payment/finish`; source of truth status pembayaran tetap webhook Duitku dan sinkronisasi order server-side.
+- File utama yang ditambahkan/diubah untuk flow ini:
+  - `src/lib/duitku-client.js`
+  - `src/app/api/checkout/route.js`
+  - `src/app/product/[id]/page.js`
+  - `src/app/order/[id]/page.js`
+  - `src/app/api/orders/[id]/route.js`
+
+#### b. Referral multi-level berdasarkan performa bulan sebelumnya
+- Ditambahkan tabel baru:
+  - `referral_level_rules` untuk rule level yang bisa diatur superadmin
+  - `referral_monthly_levels` untuk snapshot operasional level aktif per mitra per bulan
+- Ditambahkan helper `src/lib/referral-levels.js` untuk menghitung level aktif bulan berjalan berdasarkan **jumlah transaksi referral sukses bulan sebelumnya**.
+- Definisi transaksi yang dihitung dibuat eksplisit: status `paid`, `processing`, dan `completed`, memakai waktu sukses pembayaran (`paidAt`/`completedAt`) dengan boundary bulan **Asia/Jakarta**, agar rollover bulanan lebih sesuai operasional Indonesia.
+- Komisi order baru sekarang tidak lagi langsung mengambil `marginPerTransaction` flat. Saat checkout, sistem menghitung level aktif mitra lalu menyimpan nominal komisi aktif itu ke `orders.downline_margin_snapshot`.
+- Histori lama tetap aman karena ledger komisi tetap bersumber dari snapshot per-order; perubahan rule level di admin tidak mengubah nominal komisi order yang sudah pernah dibuat.
+
+#### c. Dashboard admin & mitra untuk level referral
+- Superadmin sekarang bisa mengelola rule level referral via endpoint baru `GET/PUT /api/admin/referral-levels` dan UI di `/control/downline`.
+- Halaman admin referral menampilkan rule level aktif, mode fallback legacy, serta ringkasan level aktif tiap mitra (level aktif, komisi aktif, transaksi sukses bulan lalu, dan progres bulan ini).
+- Halaman detail mitra `/control/downline/[id]` dan dashboard mitra `/mitra` diperluas agar menampilkan:
+  - level aktif saat ini
+  - komisi aktif per transaksi
+  - total transaksi sukses bulan lalu
+  - total transaksi sukses bulan ini
+  - target ke level berikutnya
+- Field `marginPerTransaction` tetap dipertahankan sebagai **komisi fallback legacy** untuk kompatibilitas dan skenario saat rule level nonaktif/tidak cocok.
+
+#### d. Migration, seed, dan deploy
+- Ditambahkan migration baru `src/db/migrate-add-referral-levels.mjs` yang aman dan idempotent.
+- `deploy.sh` sekarang ikut menjalankan migration referral level agar VPS langsung siap tanpa langkah SQL manual tambahan.
+- `src/db/seed.mjs` diperluas untuk membuat tabel referral level dan menanamkan default rule:
+  - Bronze: `0-20` transaksi -> `100`
+  - Silver: `21-50` transaksi -> `150`
+  - Gold: `51+` transaksi -> `200`
+
+#### e. Verifikasi
+- `npm run build` lolos setelah seluruh perubahan Duitku popup + referral level digabungkan.
+
+### 26. Integrasi Duitku POP, Finalisasi Aktivasi Mitra, dan Sinkronisasi Voucher Gagal (25 April 2026)
+
+#### a. Integrasi Duitku POP sebagai Payment Gateway ke-4
+- Ditambahkan provider baru `duitku` ke arsitektur payment existing tanpa mengubah pola **single active gateway**. Customer tetap tidak memilih gateway; checkout otomatis mengikuti gateway aktif dari admin settings.
+- Ditambahkan helper `src/lib/duitku.js` untuk membaca konfigurasi admin/env, membentuk signature request `Create Invoice`, dan memverifikasi signature callback Duitku.
+- Ditambahkan endpoint webhook `POST /api/webhook/duitku` dengan parsing `x-www-form-urlencoded`, validasi amount, update status order/payment, dan pola idempotent yang konsisten dengan gateway lain.
+- Checkout sekarang mengenali gateway `duitku` melalui `src/app/api/checkout/route.js`, sedangkan halaman finish payment tetap memakai webhook/callback server-to-server sebagai source of truth, bukan redirect client-side.
+- Admin settings dan resolver gateway aktif diperluas agar mengenali `duitku`, tetap menjaga hanya satu gateway aktif pada satu waktu.
+- Env baru yang dipakai:
+  - `DUITKU_MERCHANT_CODE`
+  - `DUITKU_API_KEY`
+  - `DUITKU_IS_PRODUCTION`
+- Callback publik yang perlu didaftarkan di dashboard Duitku: `/api/webhook/duitku`
+
+#### b. Finalisasi Aktivasi Mandiri Mitra
+- Ditambahkan helper terpusat `src/lib/referral-activation.mjs` untuk menyatukan aturan aktivasi referral: expiry link, status login, notifikasi sukses/expired, dan ringkasan pengiriman aktivasi.
+- Schema `users` diperluas dengan kolom `activation_token_expires_at`, beserta pembaruan migrasi `src/db/migrate-add-user-activation.mjs`.
+- Saat admin membuat akun mitra, sistem sekarang menyimpan masa berlaku token aktivasi, mengirim status kirim Email/WhatsApp yang lebih jelas, dan mencegah email role internal tertentu dipakai ulang sebagai referral.
+- Login mitra sekarang otomatis ditolak jika akun belum diaktivasi atau token aktivasi sudah kedaluwarsa. Halaman `/mitra/aktivasi` dan `/mitra/login` juga menampilkan state yang lebih jelas untuk kasus sukses, expired, atau redirect ke login.
+- Build lokal untuk rangkaian perubahan aktivasi berhasil lolos dan patch dipush dengan commit `63b8cf7`.
+
+#### c. Konsistensi Status Gagal Payment dan Release Voucher Internet
+- Webhook Midtrans, Pakasir, DOKU, dan Duitku sudah lebih dulu menyamakan perilaku: jika payment gateway mengirim status gagal/batal/expired, maka order internal Telko.Store ikut berubah menjadi `failed`.
+- Untuk produk kategori `voucher-internet`, kode voucher yang sebelumnya `reserved` akan otomatis dilepas kembali ke status `available` melalui helper `releaseVoucher(orderId)`.
+- Celah pada jalur manual `POST /api/orders/[id]/check` kini sudah ditutup. Jika user menekan "cek status" dan gateway terbaca `failed`, voucher internet juga ikut dilepas kembali ke stok tersedia.
+- Patch konsistensi ini dipush dengan commit `9360096`.
+
+#### d. Catatan Deploy VPS 25 April 2026
+- Deploy produksi dilakukan aman melalui workflow GitHub -> VPS tanpa mengubah port, bind, PM2 name, atau konfigurasi runtime existing.
+- Di VPS, perubahan lokal lama sempat menghalangi `git pull`, lalu diamankan terlebih dahulu memakai `git stash --include-untracked` sebelum menjalankan `bash deploy.sh`.
+- Deploy berhasil menjalankan `npm install --legacy-peer-deps`, seluruh migrasi runtime, `npm run build`, restart PM2 `telkostore`, dan health check `https://telko.store/api/health`.
+- Commit yang terdeploy pada rangkaian update 25 April 2026:
+  - `88dcb68` - integrasi Duitku POP
+  - `63b8cf7` - finalisasi aktivasi mitra
+  - `9360096` - release voucher saat status check gagal
 
 ### 25. Sistem Komisi Referral (Mitra) & Penyempurnaan UI (24 April 2026)
 
@@ -26,6 +106,8 @@
   - **WhatsApp**: Pesan otomatis berisi data login, link referral, dan link download QR Code.
   - **Email HTML (Nodemailer)**: Email berdesain premium yang memuat data profil, link referral, dan gambar QR Code yang tertanam langsung di dalam badan email.
 - **Set Password Mandiri**: Mitra diarahkan ke halaman `/mitra/aktivasi` untuk membuat password mereka sendiri secara aman. Setelah password disimpan, status akun otomatis berubah menjadi **Verified**.
+- **Session Bypass**: Halaman aktivasi ini tidak dibatasi oleh session proteksi *dashboard*, sehingga bisa langsung diakses tanpa perlu login.
+- **Pengecekan Token Cerdas**: Halaman aktivasi otomatis memverifikasi token saat dimuat (`GET /api/mitra/auth/activate?token=...`). Jika token sudah pernah digunakan, layar otomatis menampilkan status "Sudah Diverifikasi" beserta tombol pintasan langsung menuju portal login.
 - **Indikator Verified**: Admin dapat memantau status aktivasi mitra (Verified/Belum Aktivasi) langsung dari daftar downline di dashboard control.
 
 #### e. Pembaruan Teknis & Infrastruktur
@@ -36,6 +118,7 @@
 #### c. Manajemen Referral oleh Superadmin (`/control/downline`)
 - Dibuat panel khusus di dashboard Admin untuk mengelola semua akun Mitra. Fitur ini dilindungi hak akses khusus `superadminOnly`.
 - **Buat Akun Mitra**: Superadmin bisa membuat akun mitra baru. Jika email sudah ada di sistem (baik user biasa atau admin sekalipun), sistem akan otomatis mengupgrade peran/mengaitkan profil Mitra ke akun tersebut tanpa memunculkan error duplikat.
+- **Edit & Hapus Mitra**: Dari halaman detail tiap mitra (`/control/downline/[id]`), Superadmin dapat mengubah data mitra (nama, email, no WA, dsb) jika terjadi kesalahan input. Jika diperlukan, Superadmin juga dapat menghapus akun mitra secara permanen (`DELETE` method), yang otomatis membersihkan data user terkait.
 - **Approval Pencairan (Payout)**: Superadmin dapat melihat riwayat *withdrawal* dan mengubah statusnya (`pending` -> `processing` -> `completed/rejected`).
 - **Real-time Statistics**: Superadmin dapat melihat data agregat performa seluruh mitra (Total Profit Approved, Paid, dll).
 

@@ -3,7 +3,15 @@
 // Drizzle ORM + MySQL
 // ==============================
 
-import { mysqlTable, varchar, int, double, boolean, text } from "drizzle-orm/mysql-core";
+import {
+  mysqlTable,
+  varchar,
+  int,
+  double,
+  boolean,
+  text,
+  uniqueIndex,
+} from "drizzle-orm/mysql-core";
 
 // ===== USERS (OAuth accounts) =====
 export const users = mysqlTable("users", {
@@ -218,6 +226,48 @@ export const referralClicks = mysqlTable("referral_clicks", {
   landingPath: varchar("landing_path", { length: 255 }),
   createdAt: varchar("created_at", { length: 50 }).$defaultFn(() => new Date().toISOString()),
 });
+
+// ===== REFERRAL LEVEL RULES =====
+export const referralLevelRules = mysqlTable("referral_level_rules", {
+  id: varchar("id", { length: 100 }).primaryKey(),
+  name: varchar("name", { length: 100 }).notNull(),
+  minTransactions: int("min_transactions").notNull().default(0),
+  maxTransactions: int("max_transactions"),
+  commissionAmount: double("commission_amount").notNull().default(0),
+  sortOrder: int("sort_order").notNull().default(0),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: varchar("created_at", { length: 50 }).$defaultFn(() => new Date().toISOString()),
+  updatedAt: varchar("updated_at", { length: 50 }).$defaultFn(() => new Date().toISOString()),
+});
+
+// ===== REFERRAL MONTHLY LEVEL SNAPSHOTS =====
+export const referralMonthlyLevels = mysqlTable(
+  "referral_monthly_levels",
+  {
+    id: varchar("id", { length: 100 }).primaryKey(),
+    downlineProfileId: varchar("downline_profile_id", { length: 100 })
+      .references(() => downlineProfiles.id)
+      .notNull(),
+    periodMonth: varchar("period_month", { length: 7 }).notNull(),
+    basisPeriodMonth: varchar("basis_period_month", { length: 7 }).notNull(),
+    totalTransactions: int("total_transactions").notNull().default(0),
+    currentMonthTransactions: int("current_month_transactions").notNull().default(0),
+    appliedLevelRuleId: varchar("applied_level_rule_id", { length: 100 }).references(
+      () => referralLevelRules.id
+    ),
+    appliedLevelName: varchar("applied_level_name", { length: 100 }),
+    appliedCommissionAmount: double("applied_commission_amount").notNull().default(0),
+    usesLegacyMargin: boolean("uses_legacy_margin").notNull().default(false),
+    createdAt: varchar("created_at", { length: 50 }).$defaultFn(() => new Date().toISOString()),
+    updatedAt: varchar("updated_at", { length: 50 }).$defaultFn(() => new Date().toISOString()),
+  },
+  (table) => ({
+    profilePeriodUnique: uniqueIndex("uq_referral_monthly_levels_profile_period").on(
+      table.downlineProfileId,
+      table.periodMonth
+    ),
+  })
+);
 
 // ===== SITE BANNERS =====
 export const siteBanners = mysqlTable("site_banners", {

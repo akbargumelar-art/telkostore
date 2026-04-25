@@ -63,6 +63,7 @@ export async function GET(request, { params }) {
         targetData: currentOrder.targetData,
         status: currentOrder.status,
         paymentMethod: currentOrder.paymentMethod,
+        paymentGateway: currentOrder.paymentGateway,
         guestPhone: currentOrder.guestPhone,
         snapRedirectUrl: currentOrder.snapRedirectUrl,
         createdAt: currentOrder.createdAt,

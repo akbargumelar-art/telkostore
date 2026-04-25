@@ -4,9 +4,11 @@ import Link from "next/link";
 import {
   Copy,
   HandCoins,
+  Save,
   Plus,
   RefreshCw,
   Search,
+  Trash2,
   X,
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -18,7 +20,7 @@ const initialForm = {
   displayName: "",
   email: "",
   phone: "",
-  marginPerTransaction: "50",
+  marginPerTransaction: "100",
   bannerTitle: "",
   bannerSubtitle: "",
   bannerImageUrl: "",
@@ -26,6 +28,33 @@ const initialForm = {
   promoRedirectPath: "/",
   isReferralActive: true,
 };
+
+function buildEmptyLevelRule() {
+  return {
+    localId: `new-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    id: "",
+    name: "",
+    minTransactions: "0",
+    maxTransactions: "",
+    commissionAmount: "0",
+    isActive: true,
+  };
+}
+
+function normalizeRuleState(rule) {
+  return {
+    localId: rule.localId || rule.id || `rule-${Math.random().toString(36).slice(2, 8)}`,
+    id: rule.id || "",
+    name: rule.name || "",
+    minTransactions: String(rule.minTransactions ?? 0),
+    maxTransactions:
+      rule.maxTransactions === null || rule.maxTransactions === undefined
+        ? ""
+        : String(rule.maxTransactions),
+    commissionAmount: String(rule.commissionAmount ?? 0),
+    isActive: rule.isActive !== false,
+  };
+}
 
 export default function AdminDownlinePage() {
   const [rows, setRows] = useState([]);
@@ -38,6 +67,10 @@ export default function AdminDownlinePage() {
   const [form, setForm] = useState(initialForm);
   const [message, setMessage] = useState("");
   const [createdInfo, setCreatedInfo] = useState(null);
+  const [levelRules, setLevelRules] = useState([]);
+  const [loadingRules, setLoadingRules] = useState(true);
+  const [savingRules, setSavingRules] = useState(false);
+  const [ruleSummary, setRuleSummary] = useState(null);
 
   const fetchRows = async (nextSearch = search, nextStatus = status) => {
     setLoading(true);
@@ -58,8 +91,32 @@ export default function AdminDownlinePage() {
     setLoading(false);
   };
 
+  const fetchLevelRules = async () => {
+    setLoadingRules(true);
+
+    try {
+      const res = await fetch("/api/admin/referral-levels", {
+        cache: "no-store",
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        setLevelRules((data.data || []).map(normalizeRuleState));
+        setRuleSummary(data.summary || null);
+      } else {
+        setMessage(data.error || "Gagal memuat rule referral.");
+      }
+    } catch (error) {
+      console.error("fetchLevelRules error:", error);
+      setMessage("Gagal memuat rule referral.");
+    } finally {
+      setLoadingRules(false);
+    }
+  };
+
   useEffect(() => {
     fetchRows("", "all");
+    fetchLevelRules();
   }, []);
 
   const handleCopy = async (value, label) => {
@@ -104,6 +161,70 @@ export default function AdminDownlinePage() {
       setMessage(error.message || "Terjadi kesalahan pada sistem.");
     } finally {
       setCreating(false);
+    }
+  };
+
+  const handleRuleChange = (localId, key, value) => {
+    setLevelRules((current) =>
+      current.map((rule) =>
+        rule.localId === localId
+          ? {
+              ...rule,
+              [key]: value,
+            }
+          : rule
+      )
+    );
+  };
+
+  const handleAddRule = () => {
+    setLevelRules((current) => [
+      ...current,
+      buildEmptyLevelRule(),
+    ]);
+  };
+
+  const handleRemoveRule = (localId) => {
+    setLevelRules((current) => current.filter((rule) => rule.localId !== localId));
+  };
+
+  const handleSaveRules = async () => {
+    setSavingRules(true);
+    setMessage("");
+
+    try {
+      const payload = levelRules.map((rule, index) => ({
+        id: rule.id || undefined,
+        name: rule.name,
+        minTransactions: Number(rule.minTransactions || 0),
+        maxTransactions:
+          rule.maxTransactions === "" ? null : Number(rule.maxTransactions),
+        commissionAmount: Number(rule.commissionAmount || 0),
+        sortOrder: index + 1,
+        isActive: Boolean(rule.isActive),
+      }));
+
+      const res = await fetch("/api/admin/referral-levels", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rules: payload }),
+      });
+      const data = await res.json();
+
+      if (!data.success) {
+        setMessage(data.error || "Gagal menyimpan rule referral.");
+        return;
+      }
+
+      setLevelRules((data.data || []).map(normalizeRuleState));
+      setRuleSummary(data.summary || null);
+      setMessage("Rule referral berhasil disimpan.");
+      fetchRows();
+    } catch (error) {
+      console.error("handleSaveRules error:", error);
+      setMessage("Gagal menyimpan rule referral.");
+    } finally {
+      setSavingRules(false);
     }
   };
 
@@ -215,6 +336,145 @@ export default function AdminDownlinePage() {
         </div>
       ) : null}
 
+      <section className="rounded-[28px] border border-gray-100 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div className="max-w-3xl">
+            <h2 className="text-lg font-black text-navy">Rule Level Referral Bulanan</h2>
+            <p className="mt-1 text-sm text-gray-500">
+              Level bulan berjalan dihitung dari transaksi referral sukses bulan sebelumnya.
+              Perubahan rule hanya berlaku untuk order baru, sedangkan snapshot komisi order lama tetap.
+            </p>
+            <p className="mt-2 text-xs font-semibold text-gray-400">
+              Status transaksi yang dihitung: paid, processing, dan completed berdasarkan waktu sukses pembayaran.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={handleAddRule}
+              className="inline-flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-bold text-navy shadow-sm"
+            >
+              <Plus size={16} />
+              Tambah Level
+            </button>
+            <button
+              onClick={handleSaveRules}
+              disabled={savingRules || loadingRules}
+              className="inline-flex items-center gap-2 rounded-2xl gradient-navy px-4 py-3 text-sm font-bold text-white shadow-sm disabled:opacity-60"
+            >
+              <Save size={16} />
+              {savingRules ? "Menyimpan..." : "Simpan Rule"}
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          <div className="rounded-2xl bg-gray-50 px-4 py-3">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400">Total Rule</p>
+            <p className="mt-1 text-xl font-black text-navy">{ruleSummary?.totalRules || levelRules.length}</p>
+          </div>
+          <div className="rounded-2xl bg-gray-50 px-4 py-3">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400">Rule Aktif</p>
+            <p className="mt-1 text-xl font-black text-navy">{ruleSummary?.activeRules || 0}</p>
+          </div>
+          <div className="rounded-2xl bg-gray-50 px-4 py-3">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400">Mode</p>
+            <p className="mt-1 text-sm font-bold text-navy">
+              {ruleSummary?.fallbackToLegacy
+                ? "Fallback ke komisi legacy per mitra"
+                : "Multi-level referral aktif"}
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-5 space-y-3">
+          {loadingRules ? (
+            <div className="flex items-center justify-center py-10">
+              <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-navy" />
+            </div>
+          ) : levelRules.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-gray-200 px-4 py-8 text-center text-sm text-gray-500">
+              Belum ada rule level. Jika dibiarkan kosong, sistem akan memakai komisi fallback legacy dari masing-masing mitra.
+            </div>
+          ) : (
+            levelRules.map((rule, index) => (
+              <div key={rule.localId} className="rounded-[24px] border border-gray-100 bg-gray-50 p-4">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-400">
+                      Level {index + 1}
+                    </p>
+                    <p className="text-sm font-semibold text-gray-500">
+                      Urutkan rule dari transaksi terendah ke tertinggi tanpa celah.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => handleRemoveRule(rule.localId)}
+                    className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-bold text-red-600"
+                  >
+                    <Trash2 size={14} />
+                    Hapus
+                  </button>
+                </div>
+
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+                  <div className="xl:col-span-2">
+                    <label className="mb-1 block text-xs font-semibold text-gray-600">Nama Level</label>
+                    <input
+                      type="text"
+                      value={rule.name}
+                      onChange={(event) => handleRuleChange(rule.localId, "name", event.target.value)}
+                      className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm focus:border-navy focus:outline-none focus:ring-2 focus:ring-navy/10"
+                      placeholder="Contoh: Bronze"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold text-gray-600">Min Transaksi</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={rule.minTransactions}
+                      onChange={(event) => handleRuleChange(rule.localId, "minTransactions", event.target.value)}
+                      className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm focus:border-navy focus:outline-none focus:ring-2 focus:ring-navy/10"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold text-gray-600">Max Transaksi</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={rule.maxTransactions}
+                      onChange={(event) => handleRuleChange(rule.localId, "maxTransactions", event.target.value)}
+                      className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm focus:border-navy focus:outline-none focus:ring-2 focus:ring-navy/10"
+                      placeholder="Kosong = tanpa batas"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold text-gray-600">Komisi / Transaksi</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={rule.commissionAmount}
+                      onChange={(event) => handleRuleChange(rule.localId, "commissionAmount", event.target.value)}
+                      className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm focus:border-navy focus:outline-none focus:ring-2 focus:ring-navy/10"
+                    />
+                  </div>
+                </div>
+
+                <label className="mt-3 inline-flex items-center gap-3 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-medium text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={rule.isActive}
+                    onChange={(event) => handleRuleChange(rule.localId, "isActive", event.target.checked)}
+                    className="h-4 w-4 rounded border-gray-300"
+                  />
+                  Rule ini aktif
+                </label>
+              </div>
+            ))
+          )}
+        </div>
+      </section>
+
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {statCards.map((card) => (
           <div key={card.label} className="rounded-[24px] border border-gray-100 bg-white p-5 shadow-sm">
@@ -292,7 +552,10 @@ export default function AdminDownlinePage() {
                     </span>
                   </div>
                   <p className="mt-1 text-sm text-gray-500">
-                    {row.email} • Margin {formatRupiah(row.marginPerTransaction)} / transaksi
+                    {row.email} • Level aktif {row.levelSummary?.activeLevelName || "Legacy"} • Komisi aktif {formatRupiah(row.levelSummary?.activeCommissionAmount ?? row.marginPerTransaction)}
+                  </p>
+                  <p className="mt-1 text-xs text-gray-400">
+                    Dasar bulan lalu {row.levelSummary?.previousMonthSuccessfulTransactions || 0} transaksi sukses • Bulan ini {row.levelSummary?.currentMonthSuccessfulTransactions || 0} transaksi
                   </p>
                   <div className="mt-3 flex flex-wrap gap-2">
                     <button
@@ -403,7 +666,7 @@ export default function AdminDownlinePage() {
                 </div>
 
                 <div>
-                  <label className="mb-1 block text-xs font-semibold text-gray-600">Margin per Transaksi</label>
+                  <label className="mb-1 block text-xs font-semibold text-gray-600">Komisi Fallback Legacy</label>
                   <input
                     type="number"
                     min="0"
@@ -411,6 +674,9 @@ export default function AdminDownlinePage() {
                     onChange={(event) => setForm((current) => ({ ...current, marginPerTransaction: event.target.value }))}
                     className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm focus:border-navy focus:outline-none focus:ring-2 focus:ring-navy/10"
                   />
+                  <p className="mt-1 text-[11px] text-gray-400">
+                    Dipakai hanya saat rule level referral tidak aktif atau tidak cocok.
+                  </p>
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-semibold text-gray-600">Theme Visual</label>

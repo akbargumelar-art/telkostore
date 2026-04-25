@@ -165,6 +165,7 @@ export default function AdminDownlineDetailPage() {
   }
 
   const { profile, recentOrders, commissions } = detail;
+  const levelSummary = profile.levelSummary || null;
 
   return (
     <div className="space-y-6">
@@ -172,7 +173,7 @@ export default function AdminDownlineDetailPage() {
         <div>
           <h1 className="text-2xl font-black text-navy">{profile.displayName}</h1>
           <p className="mt-1 text-sm text-gray-500">
-            Kelola margin, status, slug canonical, dan profil promo referral.
+            Kelola komisi fallback, status, slug canonical, dan profil promo referral.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -227,6 +228,33 @@ export default function AdminDownlineDetailPage() {
         ))}
       </div>
 
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="rounded-[24px] border border-gray-100 bg-white p-5 shadow-sm">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400">Level Aktif</p>
+          <p className="mt-3 text-2xl font-black text-navy">{levelSummary?.activeLevelName || "Legacy"}</p>
+        </div>
+        <div className="rounded-[24px] border border-gray-100 bg-white p-5 shadow-sm">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400">Komisi Aktif</p>
+          <p className="mt-3 text-2xl font-black text-navy">
+            {formatRupiah(levelSummary?.activeCommissionAmount ?? profile.marginPerTransaction)}
+          </p>
+        </div>
+        <div className="rounded-[24px] border border-gray-100 bg-white p-5 shadow-sm">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400">Transaksi Bulan Lalu</p>
+          <p className="mt-3 text-2xl font-black text-navy">
+            {levelSummary?.previousMonthSuccessfulTransactions || 0}
+          </p>
+        </div>
+        <div className="rounded-[24px] border border-gray-100 bg-white p-5 shadow-sm">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400">Target Berikutnya</p>
+          <p className="mt-3 text-lg font-black text-navy">
+            {levelSummary?.nextLevelName
+              ? `${levelSummary.nextLevelName} (${levelSummary.transactionsToNextLevel} trx lagi)`
+              : "Level tertinggi"}
+          </p>
+        </div>
+      </div>
+
       <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
         <form onSubmit={handleSave} className="space-y-5 rounded-[28px] border border-gray-100 bg-white p-5 shadow-sm">
           <div>
@@ -265,7 +293,7 @@ export default function AdminDownlineDetailPage() {
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-semibold text-gray-600">Margin per Transaksi</label>
+              <label className="mb-1 block text-xs font-semibold text-gray-600">Komisi Fallback Legacy</label>
               <input
                 type="number"
                 min="0"
@@ -273,6 +301,9 @@ export default function AdminDownlineDetailPage() {
                 onChange={(event) => setForm((current) => ({ ...current, marginPerTransaction: event.target.value }))}
                 className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm focus:border-navy focus:outline-none focus:ring-2 focus:ring-navy/10"
               />
+              <p className="mt-1 text-[11px] text-gray-400">
+                Dipakai hanya saat rule level referral tidak aktif atau tidak cocok.
+              </p>
             </div>
             <div>
               <label className="mb-1 block text-xs font-semibold text-gray-600">Slug Canonical</label>
@@ -406,7 +437,7 @@ export default function AdminDownlineDetailPage() {
                         {order.id} • {formatDateTime(order.createdAt)}
                       </p>
                       <p className="mt-2 text-sm font-semibold text-navy">
-                        {formatRupiah(order.productPrice)} • Profit {formatRupiah(order.downlineMarginSnapshot)}
+                        {formatRupiah(order.productPrice)} • Komisi snapshot {formatRupiah(order.downlineMarginSnapshot)}
                       </p>
                     </div>
                   );

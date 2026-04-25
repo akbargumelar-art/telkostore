@@ -13,6 +13,7 @@ import {
 } from "@/lib/utils";
 import ProductCard from "@/components/ProductCard";
 import CategoryIcon from "@/components/CategoryIcon";
+import { openDuitkuPopup } from "@/lib/duitku-client";
 import {
   ChevronLeft,
   Check,
@@ -436,7 +437,50 @@ export default function ProductPage({ params }) {
         return;
       }
 
-      // Redirect to Midtrans payment page
+      if (data.data.gateway === "duitku") {
+        try {
+          const buildFinishUrl = (status, result = {}) => {
+            const finishUrl = new URL("/payment/finish", window.location.origin);
+            finishUrl.searchParams.set(
+              "order_id",
+              data.data.midtransOrderId || data.data.orderId || ""
+            );
+            finishUrl.searchParams.set("token", data.data.guestToken || "");
+            finishUrl.searchParams.set("gateway", "duitku");
+
+            if (status) {
+              finishUrl.searchParams.set("status", status);
+            }
+
+            if (result?.resultCode) {
+              finishUrl.searchParams.set("resultCode", result.resultCode);
+            }
+
+            return finishUrl.toString();
+          };
+
+          await openDuitkuPopup({
+            reference: data.data.duitkuReference,
+            paymentUrl: data.data.snapRedirectUrl,
+            onSuccess(result) {
+              window.location.href = buildFinishUrl("", result);
+            },
+            onPending(result) {
+              window.location.href = buildFinishUrl("", result);
+            },
+            onError(result) {
+              window.location.href = buildFinishUrl("error", result);
+            },
+            onClose(result) {
+              window.location.href = buildFinishUrl("unfinish", result);
+            },
+          });
+          return;
+        } catch (duitkuError) {
+          console.error("Duitku popup failed, falling back to redirect:", duitkuError);
+        }
+      }
+
       if (data.data.snapRedirectUrl) {
         window.location.href = data.data.snapRedirectUrl;
       }

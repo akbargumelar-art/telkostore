@@ -170,6 +170,12 @@ export async function POST(request) {
     const nowIso = now.toISOString();
 
     const createPendingOrder = async (tx, gatewayName, paymentData) => {
+      const referralSnapshot = await buildOrderReferralSnapshot(
+        referralAttribution,
+        referralAttribution?.source || "slug",
+        tx
+      );
+
       if (managedByVoucherCodes) {
         await tx.execute(
           sql`SELECT id FROM products WHERE id = ${product.id} LIMIT 1 FOR UPDATE`
@@ -217,10 +223,7 @@ export async function POST(request) {
         snapRedirectUrl: paymentData.snapRedirectUrl,
         midtransOrderId: externalOrderId,
         notes: notes,
-        ...buildOrderReferralSnapshot(
-          referralAttribution,
-          referralAttribution?.source || "slug"
-        ),
+        ...referralSnapshot,
         createdAt: nowIso,
         updatedAt: nowIso,
       });
@@ -386,6 +389,7 @@ export async function POST(request) {
         guestToken,
         snapToken: paymentResult.snapToken || null,
         snapRedirectUrl: paymentResult.paymentUrl || paymentResult.snapRedirectUrl,
+        duitkuReference: paymentResult.reference || null,
         midtransOrderId: externalOrderId,
         gateway: selectedGateway,
         product: {

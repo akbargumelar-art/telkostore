@@ -114,10 +114,8 @@ export default function Header() {
   const pathname = usePathname();
   const router = useRouter();
   const { data: session, status } = useSession();
-
-  if (pathname.startsWith("/control") || pathname.startsWith("/mitra")) {
-    return null;
-  }
+  const shouldHideHeader =
+    pathname.startsWith("/control") || pathname.startsWith("/mitra");
 
   const isHome = pathname === "/";
   const isProductPage = pathname.startsWith("/product/");
@@ -227,6 +225,10 @@ export default function Header() {
     { href: "/promo", label: "Promo", active: pathname === "/promo" },
     { href: "/history", label: "Riwayat", active: pathname === "/history" },
   ];
+
+  if (shouldHideHeader) {
+    return null;
+  }
 
   return (
     <>

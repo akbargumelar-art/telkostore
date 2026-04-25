@@ -19,6 +19,7 @@ import {
   normalizeRedirectPath,
   slugifyReferralSegment,
 } from "@/lib/referral-config";
+import { resolveReferralCommissionSnapshot } from "@/lib/referral-levels";
 
 export const REFERRAL_COOKIE_MAX_AGE = 60 * 60 * 24 * 30;
 export const REFERRAL_COOKIE_KEYS = [
@@ -365,10 +366,16 @@ export function clearReferralCookies(response) {
   }
 }
 
-export function buildOrderReferralSnapshot(profile, source = "slug") {
+export async function buildOrderReferralSnapshot(profile, source = "slug", database = db) {
   if (!profile) {
     return {};
   }
+
+  const { commissionAmount } = await resolveReferralCommissionSnapshot(
+    profile,
+    database,
+    { persist: true }
+  );
 
   return {
     downlineUserId: profile.userId,
@@ -376,7 +383,7 @@ export function buildOrderReferralSnapshot(profile, source = "slug") {
     downlineSlug: profile.slug,
     downlineCustomAlias: profile.customReferralAlias || null,
     downlineDisplayName: profile.displayName || profile.name || null,
-    downlineMarginSnapshot: Number(profile.marginPerTransaction || 0),
+    downlineMarginSnapshot: Number(commissionAmount || 0),
     referralSource: source,
     referralAttributedAt: new Date().toISOString(),
   };

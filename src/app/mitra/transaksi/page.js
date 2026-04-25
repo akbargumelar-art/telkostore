@@ -110,7 +110,7 @@ export default function MitraTransactionsPage() {
                   <div className="text-left md:text-right">
                     <p className="text-base font-black text-navy">{formatRupiah(row.productPrice)}</p>
                     <p className="text-xs text-gray-500">
-                      Profit snapshot {formatRupiah(row.downlineMarginSnapshot)}
+                      Komisi snapshot {formatRupiah(row.downlineMarginSnapshot)}
                     </p>
                   </div>
                 </div>

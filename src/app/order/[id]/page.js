@@ -12,6 +12,7 @@ import {
   ExternalLink,
   RefreshCw,
 } from "lucide-react";
+import { openDuitkuPopup } from "@/lib/duitku-client";
 
 const statusConfig = {
   pending: {
@@ -80,6 +81,7 @@ export default function OrderPage({ params, searchParams }) {
   const [error, setError] = useState(null);
   const [copied, setCopied] = useState(false);
   const [checking, setChecking] = useState(false);
+  const [launchingPayment, setLaunchingPayment] = useState(false);
   const hasCheckedMidtrans = useRef(false);
 
   // Fetch order data
@@ -161,6 +163,59 @@ export default function OrderPage({ params, searchParams }) {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const handlePayNow = async () => {
+    if (!order?.snapRedirectUrl) {
+      return;
+    }
+
+    if (order.paymentGateway !== "duitku") {
+      window.open(order.snapRedirectUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
+
+    setLaunchingPayment(true);
+
+    const buildFinishUrl = (status, result = {}) => {
+      const finishUrl = new URL("/payment/finish", window.location.origin);
+      finishUrl.searchParams.set("order_id", order.id);
+      finishUrl.searchParams.set("token", token || "");
+      finishUrl.searchParams.set("gateway", "duitku");
+
+      if (status) {
+        finishUrl.searchParams.set("status", status);
+      }
+
+      if (result?.resultCode) {
+        finishUrl.searchParams.set("resultCode", result.resultCode);
+      }
+
+      return finishUrl.toString();
+    };
+
+    try {
+      await openDuitkuPopup({
+        paymentUrl: order.snapRedirectUrl,
+        onSuccess(result) {
+          window.location.href = buildFinishUrl("", result);
+        },
+        onPending(result) {
+          window.location.href = buildFinishUrl("", result);
+        },
+        onError(result) {
+          window.location.href = buildFinishUrl("error", result);
+        },
+        onClose(result) {
+          window.location.href = buildFinishUrl("unfinish", result);
+        },
+      });
+    } catch (error) {
+      console.error("Duitku popup relaunch failed, falling back to redirect:", error);
+      window.open(order.snapRedirectUrl, "_blank", "noopener,noreferrer");
+    } finally {
+      setLaunchingPayment(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="max-w-lg mx-auto px-4 py-20 text-center">
@@ -210,15 +265,14 @@ export default function OrderPage({ params, searchParams }) {
       {/* Pay button for pending orders */}
       {order.status === "pending" && order.snapRedirectUrl && (
         <div className="mb-4 space-y-2">
-          <a
-            href={order.snapRedirectUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="block w-full gradient-red text-white font-bold text-center py-3.5 rounded-xl shadow-lg shadow-tred/20 hover:opacity-95 transition-opacity"
+          <button
+            onClick={handlePayNow}
+            disabled={launchingPayment}
+            className="block w-full gradient-red text-white font-bold text-center py-3.5 rounded-xl shadow-lg shadow-tred/20 hover:opacity-95 transition-opacity disabled:opacity-60"
           >
             <ExternalLink size={16} className="inline mr-2" />
-            Bayar Sekarang
-          </a>
+            {launchingPayment ? "Membuka Pembayaran..." : "Bayar Sekarang"}
+          </button>
           <button
             onClick={checkMidtransStatus}
             disabled={checking}

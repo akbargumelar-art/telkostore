@@ -47,6 +47,7 @@ export default function MitraDashboardPage() {
   }
 
   const { profile, stats, recentOrders, recentClicks } = data;
+  const levelSummary = profile.levelSummary || null;
   const statCards = [
     {
       label: "Total Order Referral",
@@ -88,6 +89,9 @@ export default function MitraDashboardPage() {
             <p className="mt-3 max-w-xl text-sm leading-relaxed text-white/76">
               Semua performa referral kamu ada di sini. Kamu bisa cek klik link,
               transaksi terbaru, dan profit yang sudah disetujui atau dibayar.
+            </p>
+            <p className="mt-3 text-sm font-semibold text-white/80">
+              Level aktif bulan ini: {levelSummary?.activeLevelName || "Legacy"} • Komisi aktif {formatRupiah(levelSummary?.activeCommissionAmount ?? profile.marginPerTransaction)}
             </p>
           </div>
 
@@ -131,6 +135,36 @@ export default function MitraDashboardPage() {
             </div>
           );
         })}
+      </section>
+
+      <section className="grid gap-4 md:grid-cols-3">
+        <div className="rounded-[24px] border border-gray-100 bg-white p-5 shadow-sm">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400">Transaksi Bulan Lalu</p>
+          <p className="mt-3 text-2xl font-black text-navy">
+            {levelSummary?.previousMonthSuccessfulTransactions || 0}
+          </p>
+          <p className="mt-1 text-xs text-gray-400">Dipakai sebagai dasar level aktif bulan ini.</p>
+        </div>
+        <div className="rounded-[24px] border border-gray-100 bg-white p-5 shadow-sm">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400">Transaksi Bulan Ini</p>
+          <p className="mt-3 text-2xl font-black text-navy">
+            {levelSummary?.currentMonthSuccessfulTransactions || 0}
+          </p>
+          <p className="mt-1 text-xs text-gray-400">Menjadi penentu level yang berlaku bulan depan.</p>
+        </div>
+        <div className="rounded-[24px] border border-gray-100 bg-white p-5 shadow-sm">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400">Target Berikutnya</p>
+          <p className="mt-3 text-lg font-black text-navy">
+            {levelSummary?.nextLevelName
+              ? `${levelSummary.nextLevelName} (${levelSummary.transactionsToNextLevel} trx lagi)`
+              : "Level tertinggi"}
+          </p>
+          <p className="mt-1 text-xs text-gray-400">
+            {levelSummary?.nextLevelMinTransactions
+              ? `Ambang berikutnya mulai ${levelSummary.nextLevelMinTransactions} transaksi sukses bulan ini.`
+              : "Pertahankan performa referral kamu."}
+          </p>
+        </div>
       </section>
 
       <section className="grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
@@ -267,7 +301,7 @@ export default function MitraDashboardPage() {
                         {formatRupiah(order.productPrice)}
                       </p>
                       <p className="text-xs text-gray-500">
-                        Profit snapshot {formatRupiah(order.downlineMarginSnapshot)}
+                        Komisi snapshot {formatRupiah(order.downlineMarginSnapshot)}
                       </p>
                     </div>
                   </div>

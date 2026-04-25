@@ -134,7 +134,8 @@ function buildProviders() {
         clientSecret: credentials.googleClientSecret,
       })
     );
-  } else {
+  } else if (!globalThis.__telkoGoogleProviderMissingLogged) {
+    globalThis.__telkoGoogleProviderMissingLogged = true;
     console.warn("[auth] Google OAuth disabled: missing client ID or secret");
   }
 
@@ -145,7 +146,8 @@ function buildProviders() {
         clientSecret: credentials.facebookClientSecret,
       })
     );
-  } else {
+  } else if (!globalThis.__telkoFacebookProviderMissingLogged) {
+    globalThis.__telkoFacebookProviderMissingLogged = true;
     console.warn("[auth] Facebook OAuth disabled: missing client ID or secret");
   }
 

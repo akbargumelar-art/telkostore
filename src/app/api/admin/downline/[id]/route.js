@@ -124,7 +124,7 @@ export async function PUT(request, { params }) {
 
     if (marginPerTransaction === null) {
       return NextResponse.json(
-        { success: false, error: "Margin referral tidak valid." },
+        { success: false, error: "Komisi fallback legacy tidak valid." },
         { status: 400 }
       );
     }

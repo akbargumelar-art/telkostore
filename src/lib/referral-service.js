@@ -17,6 +17,7 @@ import {
   referralCommissions,
   users,
 } from "@/db/schema.js";
+import { getReferralLevelSummaryMap } from "@/lib/referral-levels";
 import { buildReferralShareVariants } from "@/lib/referral";
 
 function normalizeNumber(value) {
@@ -49,7 +50,7 @@ export function maskTargetValue(value) {
   return `${raw.slice(0, 3)}***${raw.slice(-2)}`;
 }
 
-function enrichProfile(profile, summary = {}) {
+function enrichProfile(profile, summary = {}, levelSummary = null) {
   const share = buildReferralShareVariants(profile);
 
   return {
@@ -62,6 +63,7 @@ function enrichProfile(profile, summary = {}) {
       redirectUrl: share.redirectUrl,
       preferredUrl: share.preferredUrl,
     },
+    levelSummary,
     stats: {
       totalOrders: normalizeNumber(summary.totalOrders),
       totalRevenue: normalizeNumber(summary.totalRevenue),
@@ -208,8 +210,15 @@ export async function listDownlines(filters = {}, database = db) {
     rows.map((row) => row.profileId),
     database
   );
+  const levelSummaryMap = await getReferralLevelSummaryMap(rows, { persist: false }, database);
 
-  return rows.map((row) => enrichProfile(row, summaryMap.get(row.profileId)));
+  return rows.map((row) =>
+    enrichProfile(
+      row,
+      summaryMap.get(row.profileId),
+      levelSummaryMap.get(row.profileId) || null
+    )
+  );
 }
 
 export async function getDownlineByProfileId(profileId, database = db) {
@@ -228,8 +237,16 @@ export async function getDownlineByProfileId(profileId, database = db) {
     return null;
   }
 
-  const summaryMap = await getProfileSummaryMap([profileId], database);
-  return enrichProfile(profile, summaryMap.get(profileId));
+  const [summaryMap, levelSummaryMap] = await Promise.all([
+    getProfileSummaryMap([profileId], database),
+    getReferralLevelSummaryMap([profile], { persist: true }, database),
+  ]);
+
+  return enrichProfile(
+    profile,
+    summaryMap.get(profileId),
+    levelSummaryMap.get(profileId) || null
+  );
 }
 
 export async function getDownlineOrders(profileId, filters = {}, database = db) {

@@ -156,7 +156,7 @@ export async function POST(request) {
 
     if (marginPerTransaction === null) {
       return NextResponse.json(
-        { success: false, error: "Margin per transaksi tidak valid." },
+        { success: false, error: "Komisi fallback legacy tidak valid." },
         { status: 400 }
       );
     }
