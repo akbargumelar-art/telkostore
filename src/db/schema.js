@@ -15,6 +15,7 @@ export const users = mysqlTable("users", {
   role: varchar("role", { length: 20 }).default("user"), // user, admin, downline
   passwordHash: varchar("password_hash", { length: 255 }),
   activationToken: varchar("activation_token", { length: 255 }),
+  activationTokenExpiresAt: varchar("activation_token_expires_at", { length: 50 }),
   emailVerified: boolean("email_verified").default(false),
   provider: varchar("provider", { length: 50 }), // google, facebook
   providerId: varchar("provider_id", { length: 255 }),

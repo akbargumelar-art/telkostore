@@ -1,11 +1,17 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { Suspense, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Link2, Loader2, ShieldCheck } from "lucide-react";
-import { useState } from "react";
+import { resolveMitraLoginNotice } from "@/lib/referral-activation.mjs";
 
-export default function MitraLoginPage() {
+function MitraLoginContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const activationNotice = useMemo(
+    () => resolveMitraLoginNotice(searchParams.get("activation")),
+    [searchParams]
+  );
   const [form, setForm] = useState({ email: "", password: "" });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -82,6 +88,12 @@ export default function MitraLoginPage() {
             </div>
           </div>
 
+          {activationNotice ? (
+            <div className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
+              {activationNotice.message}
+            </div>
+          ) : null}
+
           <form onSubmit={handleSubmit} className="mt-6 space-y-4">
             <div>
               <label className="mb-1 block text-xs font-semibold text-gray-600">
@@ -133,5 +145,19 @@ export default function MitraLoginPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function MitraLoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[radial-gradient(circle_at_top,_#2d2d6b,_#0f0f30)] px-4 py-10 text-white flex items-center justify-center">
+          Memuat login mitra...
+        </div>
+      }
+    >
+      <MitraLoginContent />
+    </Suspense>
   );
 }

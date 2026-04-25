@@ -4,6 +4,9 @@ import { NextResponse } from "next/server";
 import db from "@/db/index.js";
 import { downlineProfiles, users } from "@/db/schema.js";
 import {
+  evaluateReferralActivation,
+} from "@/lib/referral-activation.mjs";
+import {
   applyDownlineAuthCookie,
   createDownlineToken,
 } from "@/lib/downline-auth";
@@ -28,6 +31,9 @@ export async function POST(request) {
         email: users.email,
         passwordHash: users.passwordHash,
         role: users.role,
+        activationToken: users.activationToken,
+        activationTokenExpiresAt: users.activationTokenExpiresAt,
+        emailVerified: users.emailVerified,
         profileId: downlineProfiles.id,
         isReferralActive: downlineProfiles.isReferralActive,
       })
@@ -47,6 +53,21 @@ export async function POST(request) {
       return NextResponse.json(
         { success: false, error: "Password referral salah." },
         { status: 401 }
+      );
+    }
+
+    const activationStatus = evaluateReferralActivation(account);
+    if (!activationStatus.canLogin) {
+      return NextResponse.json(
+        {
+          success: false,
+          activationRequired: true,
+          activationExpired: activationStatus.isExpired,
+          error: activationStatus.isExpired
+            ? "Link aktivasi referral sudah kadaluarsa. Silakan minta admin mengirim ulang aktivasi."
+            : "Akun referral belum diaktivasi. Silakan cek link aktivasi yang dikirim via email atau WhatsApp.",
+        },
+        { status: 403 }
       );
     }
 

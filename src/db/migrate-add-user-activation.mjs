@@ -2,11 +2,15 @@ import db from "./index.js";
 import { sql } from "drizzle-orm";
 
 async function main() {
-  console.log("Adding 'activation_token' and 'email_verified' columns to users table if needed...");
+  console.log("Adding 'activation_token', 'activation_token_expires_at', and 'email_verified' columns to users table if needed...");
   
   const addActivationToken = `
     ALTER TABLE users
     ADD COLUMN activation_token VARCHAR(255) DEFAULT NULL;
+  `;
+  const addActivationTokenExpiresAt = `
+    ALTER TABLE users
+    ADD COLUMN activation_token_expires_at VARCHAR(50) DEFAULT NULL;
   `;
   const addEmailVerified = `
     ALTER TABLE users
@@ -19,6 +23,17 @@ async function main() {
   } catch (err) {
     if (err.code === "ER_DUP_FIELDNAME") {
       console.log("Column 'activation_token' already exists, skipping add.");
+    } else {
+      throw err;
+    }
+  }
+
+  try {
+    await db.execute(sql.raw(addActivationTokenExpiresAt));
+    console.log("Column 'activation_token_expires_at' added.");
+  } catch (err) {
+    if (err.code === "ER_DUP_FIELDNAME") {
+      console.log("Column 'activation_token_expires_at' already exists, skipping add.");
     } else {
       throw err;
     }

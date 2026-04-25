@@ -4,6 +4,7 @@ import { useState, Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Lock, Eye, EyeOff, CheckCircle2, AlertCircle } from "lucide-react";
 import Link from "next/link";
+import { resolveActivationLinkState } from "@/lib/referral-activation.mjs";
 
 function AktivasiForm() {
   const router = useRouter();
@@ -14,7 +15,7 @@ function AktivasiForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [checkingToken, setCheckingToken] = useState(true);
-  const [tokenUsed, setTokenUsed] = useState(false);
+  const [linkState, setLinkState] = useState("valid");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
 
@@ -28,12 +29,22 @@ function AktivasiForm() {
     fetch(`/api/mitra/auth/activate?token=${token}`)
       .then((res) => res.json())
       .then((data) => {
-        if (!data.valid && data.used) {
-          setTokenUsed(true);
+        const nextState = resolveActivationLinkState(data);
+        setLinkState(nextState);
+
+        if (nextState === "expired") {
+          setError(data.error || "Link aktivasi sudah kadaluarsa.");
         }
+
+        if (nextState === "redirect_login") {
+          router.replace("/mitra/login?activation=done");
+          return;
+        }
+
         setCheckingToken(false);
       })
       .catch(() => {
+        setError("Terjadi kesalahan saat memverifikasi link aktivasi.");
         setCheckingToken(false);
       });
   }, [token]);
@@ -90,24 +101,21 @@ function AktivasiForm() {
     );
   }
 
-  if (tokenUsed) {
+  if (linkState === "expired") {
     return (
       <div className="rounded-2xl bg-white p-8 text-center shadow-2xl">
-        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-blue-100">
-          <AlertCircle size={32} className="text-blue-600" />
+        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-orange-100">
+          <AlertCircle size={32} className="text-orange-600" />
         </div>
-        <h2 className="mt-6 text-2xl font-black text-navy">Sudah Diverifikasi</h2>
+        <h2 className="mt-6 text-2xl font-black text-navy">Link Aktivasi Kedaluwarsa</h2>
         <p className="mt-2 text-sm text-gray-500">
-          Akun referral Anda sudah aktif dan password sudah dibuat sebelumnya.
-        </p>
-        <p className="mt-2 text-sm text-gray-500">
-          Silakan langsung login menggunakan Email dan Password yang telah Anda buat.
+          {error || "Link aktivasi sudah tidak berlaku. Silakan minta admin mengirim ulang link aktivasi."}
         </p>
         <Link
           href="/mitra/login"
           className="mt-8 flex w-full justify-center rounded-xl bg-navy px-4 py-3 text-sm font-bold text-white shadow-lg transition-colors hover:bg-navy/90"
         >
-          Masuk ke Portal Mitra
+          Ke Login Mitra
         </Link>
       </div>
     );

@@ -70,7 +70,7 @@ export async function sendWhatsAppNotification(phone, message) {
   const settings = await getWahaSettings();
   if (settings && boolFromSetting(settings.isActive, true) === false) {
     console.warn("⚠️ WAHA dinonaktifkan di Pengaturan Admin, skipping WhatsApp notification");
-    return;
+    return false;
   }
 
   const wahaUrl = settings?.apiUrl || process.env.WAHA_API_URL;
@@ -79,7 +79,7 @@ export async function sendWhatsAppNotification(phone, message) {
 
   if (!wahaUrl) {
     console.warn("⚠️ WAHA_API_URL not set, skipping WhatsApp notification");
-    return;
+    return false;
   }
 
   try {
@@ -101,12 +101,14 @@ export async function sendWhatsAppNotification(phone, message) {
 
     if (!res.ok) {
       console.error(`❌ WhatsApp API error: ${res.status} ${res.statusText}`);
-      return;
+      return false;
     }
 
     console.log(`✅ WhatsApp sent to ${phone}`);
+    return true;
   } catch (err) {
     console.error("❌ WhatsApp notification failed:", err.message);
+    return false;
   }
 }
 

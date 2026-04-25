@@ -2,6 +2,9 @@ import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import db from "@/db/index.js";
 import { users, downlineProfiles } from "@/db/schema.js";
+import {
+  evaluateReferralActivation,
+} from "@/lib/referral-activation.mjs";
 import { hashPassword } from "@/lib/password";
 
 export async function GET(request) {
@@ -14,17 +17,26 @@ export async function GET(request) {
     }
 
     const userRows = await db
-      .select({ id: users.id, emailVerified: users.emailVerified })
+      .select({
+        id: users.id,
+        activationToken: users.activationToken,
+        activationTokenExpiresAt: users.activationTokenExpiresAt,
+        emailVerified: users.emailVerified,
+      })
       .from(users)
       .where(eq(users.activationToken, token))
       .limit(1);
 
     if (userRows.length === 0) {
-      // If no token is found, it means it was either invalid or already used
-      return NextResponse.json({ valid: false, used: true });
+      return NextResponse.json({ valid: false, used: false, expired: false, error: "Token aktivasi tidak ditemukan." });
     }
 
-    return NextResponse.json({ valid: true });
+    const activationStatus = evaluateReferralActivation(userRows[0]);
+    if (activationStatus.isExpired) {
+      return NextResponse.json({ valid: false, used: false, expired: true, error: "Token aktivasi sudah kadaluarsa." });
+    }
+
+    return NextResponse.json({ valid: true, expired: false });
   } catch (error) {
     return NextResponse.json({ valid: false, error: "Server error" });
   }
@@ -45,7 +57,12 @@ export async function POST(request) {
     }
 
     const userRows = await db
-      .select()
+      .select({
+        id: users.id,
+        activationToken: users.activationToken,
+        activationTokenExpiresAt: users.activationTokenExpiresAt,
+        emailVerified: users.emailVerified,
+      })
       .from(users)
       .where(eq(users.activationToken, token))
       .limit(1);
@@ -53,7 +70,20 @@ export async function POST(request) {
     const user = userRows[0];
 
     if (!user) {
-      return NextResponse.json({ success: false, error: "Token aktivasi tidak valid atau sudah kadaluarsa." }, { status: 400 });
+      return NextResponse.json({ success: false, error: "Token aktivasi tidak valid atau tidak ditemukan." }, { status: 400 });
+    }
+
+    const activationStatus = evaluateReferralActivation(user);
+    if (activationStatus.isExpired) {
+      await db
+        .update(users)
+        .set({ activationToken: null, activationTokenExpiresAt: null })
+        .where(eq(users.id, user.id));
+
+      return NextResponse.json(
+        { success: false, error: "Token aktivasi sudah kadaluarsa. Silakan minta admin mengirim ulang aktivasi." },
+        { status: 400 }
+      );
     }
 
     // Verify they are actually a downline
@@ -70,6 +100,7 @@ export async function POST(request) {
     await db.update(users).set({
       passwordHash: hashPassword(password),
       activationToken: null,
+      activationTokenExpiresAt: null,
       emailVerified: true,
     }).where(eq(users.id, user.id));
 

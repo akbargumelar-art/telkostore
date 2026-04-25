@@ -1,7 +1,13 @@
 import crypto from "crypto";
+import { eq } from "drizzle-orm";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
+import db from "@/db/index.js";
+import { users } from "@/db/schema.js";
+import {
+  evaluateReferralActivation,
+} from "@/lib/referral-activation.mjs";
 import { getDownlineProfileByUserId } from "@/lib/referral";
 
 const TOKEN_EXPIRY_SECONDS = 7 * 24 * 60 * 60;
@@ -113,6 +119,21 @@ export async function getDownlineSession() {
   const tokenData = verifyDownlineToken(token);
 
   if (!tokenData?.sub) {
+    return null;
+  }
+
+  const [user] = await db
+    .select({
+      emailVerified: users.emailVerified,
+      activationToken: users.activationToken,
+      activationTokenExpiresAt: users.activationTokenExpiresAt,
+    })
+    .from(users)
+    .where(eq(users.id, tokenData.sub))
+    .limit(1);
+
+  const activationStatus = evaluateReferralActivation(user || {});
+  if (!activationStatus.canLogin) {
     return null;
   }
 

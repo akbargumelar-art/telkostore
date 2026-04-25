@@ -14,6 +14,11 @@ import {
 import {
   listDownlines,
 } from "@/lib/referral-service";
+import {
+  buildNotificationDeliverySummary,
+  createActivationExpiryIso,
+  isExistingUserRoleAllowedForReferral,
+} from "@/lib/referral-activation.mjs";
 import { normalizeRedirectPath } from "@/lib/referral-config";
 import { sendWhatsAppNotification } from "@/lib/whatsapp";
 import { sendEmail } from "@/lib/email";
@@ -165,6 +170,13 @@ export async function POST(request) {
     const existingUser = existingUserRows[0];
 
     if (existingUser) {
+      if (!isExistingUserRoleAllowedForReferral(existingUser.role)) {
+        return NextResponse.json(
+          { success: false, error: "Email ini sudah dipakai akun internal dengan role lain dan tidak bisa dijadikan referral." },
+          { status: 409 }
+        );
+      }
+
       // Check if already a downline
       const existingProfile = await db
         .select({ id: downlineProfiles.id })
@@ -187,6 +199,7 @@ export async function POST(request) {
     const slug = await generateUniqueCanonicalSlug(displayName);
     const now = new Date().toISOString();
     const activationToken = crypto.randomBytes(32).toString('hex');
+    const activationTokenExpiresAt = createActivationExpiryIso(now);
 
     await db.transaction(async (tx) => {
       if (!existingUser) {
@@ -199,6 +212,7 @@ export async function POST(request) {
           role: "downline",
           passwordHash: hashPassword(generatedPassword),
           activationToken: activationToken,
+          activationTokenExpiresAt,
           emailVerified: false,
           provider: "manual",
           providerId: null,
@@ -207,7 +221,10 @@ export async function POST(request) {
       } else {
         // Update existing user (set password if they don't have one, update role if they are just a "user")
         const updateData = {
+          name: displayName,
+          phone: phone || existingUser.phone || null,
           activationToken: activationToken,
+          activationTokenExpiresAt,
           emailVerified: false,
         };
         if (!existingUser.passwordHash) {
@@ -273,14 +290,10 @@ ${activationUrl}
 
 _(Link ini hanya untuk Anda, jangan bagikan ke siapapun)_`;
 
-    if (phone) {
-      // Background WA send
-      sendWhatsAppNotification(phone, waMessage).catch((err) => {
-        console.error("Gagal mengirim WA aktivasi:", err);
-      });
-    }
+    const whatsappSent = phone
+      ? await sendWhatsAppNotification(phone, waMessage)
+      : false;
 
-    // Send Activation Link via Email
     const safeDisplayName = escapeHtml(displayName);
     const safeEmail = escapeHtml(email);
     const safeReferralLink = escapeHtml(links.canonicalUrl);
@@ -361,27 +374,31 @@ _(Link ini hanya untuk Anda, jangan bagikan ke siapapun)_`;
       .filter(Boolean)
       .join("\n");
 
-    // Background Email send
-    sendEmail({
+    const emailSent = await sendEmail({
       to: email,
       subject: "Aktivasi Akun Mitra Referral Telko.Store",
       html: emailHtml,
       text: emailText,
       attachments: qrCodeAttachment ? [qrCodeAttachment] : [],
-    }).catch((err) => {
-      console.error("Gagal mengirim Email aktivasi:", err);
+    });
+
+    const notificationStatus = buildNotificationDeliverySummary({
+      emailSent,
+      whatsappSent,
+      hasPhone: Boolean(phone),
     });
 
     return NextResponse.json({
       success: true,
-      message: "Akun referral berhasil dibuat dan link aktivasi telah dikirim via WA & Email.",
+      message: `Akun referral berhasil dibuat. ${notificationStatus.message}.`,
       data: {
         userId,
         profileId,
         slug,
         email,
-        activationToken,
+        activationExpiresAt: activationTokenExpiresAt,
         links,
+        notificationStatus,
       },
     });
   } catch (error) {
