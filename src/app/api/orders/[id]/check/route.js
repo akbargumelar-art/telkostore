@@ -1,5 +1,5 @@
 // POST /api/orders/[id]/check — Check payment status & sync order
-// Supports Midtrans, Pakasir, and DOKU gateways
+// Supports Midtrans, Pakasir, DOKU, and Duitku gateways
 import { NextResponse } from "next/server";
 import db from "@/db/index.js";
 import { orders, payments, products } from "@/db/schema.js";
@@ -76,6 +76,8 @@ export async function POST(request, { params }) {
         return await checkPakasirStatus(order);
       } else if (gateway === "doku") {
         return await checkDokuStatus(order);
+      } else if (gateway === "duitku") {
+        return await checkDuitkuStatus(order);
       } else {
         return await checkMidtransStatus(order);
       }
@@ -253,6 +255,16 @@ async function checkDokuStatus(order) {
     success: true,
     data: order,
     message: "DOKU: status akan diperbarui otomatis via notifikasi",
+  });
+}
+
+// ===== Duitku Status Check =====
+// Duitku POP relies on callback/webhook updates.
+async function checkDuitkuStatus(order) {
+  return NextResponse.json({
+    success: true,
+    data: order,
+    message: "Duitku: status akan diperbarui otomatis via callback",
   });
 }
 

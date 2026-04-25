@@ -51,10 +51,15 @@ const statusMap = {
   },
 };
 
-function getPaymentStatus(statusCode, transactionStatus, customStatus, gateway) {
+function getPaymentStatus(statusCode, transactionStatus, customStatus, gateway, resultCode) {
   // Handle custom status from our redirect callbacks
   if (customStatus === "error") return "failed";
   if (customStatus === "unfinish") return "unfinish";
+
+  // Webhook-only gateways should rely on server-side order status, not redirect params
+  if (gateway === "doku" || gateway === "duitku") {
+    return "pending";
+  }
 
   // Midtrans status values
   if (transactionStatus === "settlement" || transactionStatus === "capture") return "success";
@@ -69,12 +74,16 @@ function getPaymentStatus(statusCode, transactionStatus, customStatus, gateway) 
   if (transactionStatus === "SUCCESS" || transactionStatus === "COMPLETED") return "success";
   if (["FAILED", "EXPIRED", "DENIED"].includes(transactionStatus)) return "failed";
 
+  // Duitku redirect can contain resultCode, but final status still comes from callback.
+  if (resultCode === "00") return "pending";
+  if (resultCode === "01") return "pending";
+
   // Fallback: check status code
   if (statusCode === "200") return "success";
   if (statusCode === "201") return "pending";
 
   // If coming from non-Midtrans redirect with no explicit status, check via API
-  if ((gateway === "pakasir" || gateway === "doku") && !transactionStatus && !customStatus) return "pending";
+  if ((gateway === "pakasir" || gateway === "doku" || gateway === "duitku") && !transactionStatus && !customStatus) return "pending";
 
   return "pending"; // Default to pending instead of failed for ambiguous cases
 }
@@ -83,8 +92,17 @@ function getGatewayLabel(gateway) {
   switch (gateway) {
     case "pakasir": return "Pakasir";
     case "doku": return "DOKU";
+    case "duitku": return "Duitku POP";
     default: return "Midtrans";
   }
+}
+
+function getOrderDisplayStatus(order) {
+  if (!order?.status) return null;
+  if (order.status === "paid" || order.status === "completed") return "success";
+  if (order.status === "failed") return "failed";
+  if (order.status === "pending" || order.status === "processing") return "pending";
+  return null;
 }
 
 export default function PaymentFinishPage({ searchParams }) {
@@ -102,6 +120,7 @@ export default function PaymentFinishPage({ searchParams }) {
   const token = getParam("token");
   const statusCode = getParam("status_code");
   const transactionStatus = getParam("transaction_status");
+  const resultCode = getParam("resultCode");
   const customStatus = getParam("status");
   const gateway = getParam("gateway") || "midtrans";
 
@@ -109,8 +128,14 @@ export default function PaymentFinishPage({ searchParams }) {
   const [orderData, setOrderData] = useState(null);
   const [checking, setChecking] = useState(false);
 
-  // Determine status from Midtrans params + custom status
-  const status = getPaymentStatus(statusCode, transactionStatus, customStatus, gateway);
+  const redirectStatus = getPaymentStatus(
+    statusCode,
+    transactionStatus,
+    customStatus,
+    gateway,
+    resultCode
+  );
+  const status = getOrderDisplayStatus(orderData) || redirectStatus;
   const config = statusMap[status] || statusMap.pending;
   const StatusIcon = config.icon;
 

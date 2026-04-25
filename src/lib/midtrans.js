@@ -125,3 +125,8 @@ export async function verifySignature(orderId, statusCode, grossAmount, signatur
     return false;
   }
 }
+
+export function clearMidtransCache() {
+  _midtransCache = null;
+  _midtransCacheTime = 0;
+}

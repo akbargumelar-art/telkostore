@@ -12,7 +12,7 @@ import { gatewaySettings } from "@/db/schema.js";
 /**
  * Determine the active payment gateway.
  * Priority: check which gateway has isActive=true AND has usable keys.
- * If multiple are active, pick the first one found in order: midtrans > pakasir > doku.
+ * If multiple are active, pick the first one found in order: midtrans > pakasir > doku > duitku.
  * If none is explicitly active, fallback to midtrans.
  */
 export async function getActiveGateway() {
@@ -20,12 +20,28 @@ export async function getActiveGateway() {
     const allSettings = await db.select().from(gatewaySettings);
 
     // Filter to payment gateways only (exclude waha etc.)
-    const paymentGateways = ["midtrans", "pakasir", "doku"];
+    const paymentGateways = ["midtrans", "pakasir", "doku", "duitku"];
     const gateways = allSettings.filter((s) => paymentGateways.includes(s.providerName));
+
+    function getGatewayLabel(name) {
+      if (name === "midtrans") return "Midtrans";
+      if (name === "pakasir") return "Pakasir";
+      if (name === "doku") return "DOKU";
+      if (name === "duitku") return "Duitku POP";
+      return "Midtrans";
+    }
 
     function hasUsableKey(value) {
       if (!value) return false;
-      return !["YOUR_SERVER_KEY", "YOUR_CLIENT_KEY", "YOUR_API_KEY", "YOUR_SECRET_KEY", "YOUR_CLIENT_ID"].includes(value) && !value.includes("XXXX");
+      return ![
+        "YOUR_SERVER_KEY",
+        "YOUR_CLIENT_KEY",
+        "YOUR_API_KEY",
+        "YOUR_SECRET_KEY",
+        "YOUR_CLIENT_ID",
+        "YOUR_DUITKU_API_KEY",
+        "YOUR_DUITKU_MERCHANT_CODE",
+      ].includes(value) && !value.includes("XXXX");
     }
 
     function isSettingActive(s) {
@@ -39,7 +55,7 @@ export async function getActiveGateway() {
       if (gw && isSettingActive(gw)) {
         return {
           activeGateway: name,
-          label: name === "midtrans" ? "Midtrans" : name === "pakasir" ? "Pakasir" : "DOKU",
+          label: getGatewayLabel(name),
         };
       }
     }

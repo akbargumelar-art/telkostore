@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import {
   Settings, Save, CheckCircle2, AlertCircle, Shield, MessageCircle,
-  CreditCard, ToggleLeft, ToggleRight, Users, HelpCircle, Wallet, Landmark,
+  CreditCard, ToggleLeft, ToggleRight, Users, HelpCircle, Wallet, Landmark, QrCode,
 } from "lucide-react";
 
 export default function AdminPengaturanPage() {
@@ -15,6 +15,7 @@ export default function AdminPengaturanPage() {
   const [midtrans, setMidtrans] = useState({ serverKey: "", clientKey: "", isProduction: false, isActive: true });
   const [pakasir, setPakasir] = useState({ serverKey: "", clientKey: "", apiUrl: "https://app.pakasir.com", isProduction: false, isActive: false });
   const [doku, setDoku] = useState({ serverKey: "", clientKey: "", isProduction: false, isActive: false });
+  const [duitku, setDuitku] = useState({ serverKey: "", clientKey: "", isProduction: false, isActive: false });
   const [waha, setWaha] = useState({ apiUrl: "", serverKey: "", clientKey: "", sessionName: "", isActive: true });
 
   const fetchSettings = async () => {
@@ -25,10 +26,12 @@ export default function AdminPengaturanPage() {
         const mt = data.data.find((s) => s.providerName === "midtrans");
         const pk = data.data.find((s) => s.providerName === "pakasir");
         const dk = data.data.find((s) => s.providerName === "doku");
+        const du = data.data.find((s) => s.providerName === "duitku");
         const wa = data.data.find((s) => s.providerName === "waha");
         if (mt) setMidtrans({ serverKey: mt.serverKey || "", clientKey: mt.clientKey || "", isProduction: mt.isProduction || false, isActive: mt.isActive ?? true });
         if (pk) setPakasir({ serverKey: pk.serverKey || "", clientKey: pk.clientKey || "", apiUrl: pk.apiUrl || "https://app.pakasir.com", isProduction: pk.isProduction || false, isActive: pk.isActive ?? false });
         if (dk) setDoku({ serverKey: dk.serverKey || "", clientKey: dk.clientKey || "", isProduction: dk.isProduction || false, isActive: dk.isActive ?? false });
+        if (du) setDuitku({ serverKey: du.serverKey || "", clientKey: du.clientKey || "", isProduction: du.isProduction || false, isActive: du.isActive ?? false });
         if (wa) setWaha({ apiUrl: wa.apiUrl || "", serverKey: wa.serverKey || "", clientKey: wa.clientKey || "", sessionName: wa.sessionName || "", isActive: wa.isActive ?? true });
       }
     } catch (err) { console.error(err); }
@@ -42,10 +45,25 @@ export default function AdminPengaturanPage() {
     setMidtrans(prev => ({ ...prev, isActive: name === "midtrans" }));
     setPakasir(prev => ({ ...prev, isActive: name === "pakasir" }));
     setDoku(prev => ({ ...prev, isActive: name === "doku" }));
+    setDuitku(prev => ({ ...prev, isActive: name === "duitku" }));
   };
 
-  const activeGw = midtrans.isActive ? "midtrans" : pakasir.isActive ? "pakasir" : doku.isActive ? "doku" : "midtrans";
-  const activeGwLabel = activeGw === "midtrans" ? "Midtrans" : activeGw === "pakasir" ? "Pakasir" : "DOKU";
+  const activeGw = midtrans.isActive
+    ? "midtrans"
+    : pakasir.isActive
+      ? "pakasir"
+      : doku.isActive
+        ? "doku"
+        : duitku.isActive
+          ? "duitku"
+          : "midtrans";
+  const activeGwLabel = activeGw === "midtrans"
+    ? "Midtrans"
+    : activeGw === "pakasir"
+      ? "Pakasir"
+      : activeGw === "doku"
+        ? "DOKU"
+        : "Duitku POP";
 
   const handleSave = async (providerName, data) => {
     setSaving(true); setError(""); setSuccess("");
@@ -61,25 +79,15 @@ export default function AdminPengaturanPage() {
     finally { setSaving(false); }
   };
 
-  // Save all 3 gateways when switching active (to persist mutual exclusivity)
-  const handleSaveWithExclusive = async (providerName, data) => {
+  const handleSavePaymentGateway = async (providerName, data) => {
     setSaving(true); setError(""); setSuccess("");
     try {
-      // Deactivate the other 2 gateways
-      const others = ["midtrans", "pakasir", "doku"].filter(n => n !== providerName);
-      for (const other of others) {
-        await fetch("/api/admin/settings", {
-          method: "PUT", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ providerName: other, isActive: false }),
-        });
-      }
-      // Save the active one
       const res = await fetch("/api/admin/settings", {
         method: "PUT", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ providerName, ...data }),
       });
       const result = await res.json();
-      if (result.success) { setSuccess(`${providerName} aktif & tersimpan`); setTimeout(() => setSuccess(""), 3000); }
+      if (result.success) { setSuccess(result.message || `${providerName} berhasil disimpan`); setTimeout(() => setSuccess(""), 3000); }
       else setError(result.error || "Gagal menyimpan");
     } catch { setError("Terjadi kesalahan"); }
     finally { setSaving(false); }
@@ -133,7 +141,7 @@ export default function AdminPengaturanPage() {
           <InputField label="Server Key" value={midtrans.serverKey} onChange={v => setMidtrans({...midtrans, serverKey: v})} placeholder="Mid-server-xxxxx" mono />
           <InputField label="Client Key" value={midtrans.clientKey} onChange={v => setMidtrans({...midtrans, clientKey: v})} placeholder="Mid-client-xxxxx" mono />
           <ProductionToggle checked={midtrans.isProduction} onChange={v => setMidtrans({...midtrans, isProduction: v})} />
-          <SaveButton label="Simpan Midtrans" saving={saving} onClick={() => handleSaveWithExclusive("midtrans", midtrans)} />
+          <SaveButton label="Simpan Midtrans" saving={saving} onClick={() => handleSavePaymentGateway("midtrans", midtrans)} />
         </GatewayCard>
 
         {/* ===== PAKASIR ===== */}
@@ -155,7 +163,7 @@ export default function AdminPengaturanPage() {
               {typeof window !== "undefined" ? window.location.origin : "https://telko.store"}/api/webhook/pakasir
             </code>
           </div>
-          <SaveButton label="Simpan Pakasir" saving={saving} onClick={() => handleSaveWithExclusive("pakasir", { serverKey: pakasir.serverKey, clientKey: pakasir.clientKey, apiUrl: pakasir.apiUrl, isProduction: pakasir.isProduction, isActive: pakasir.isActive })} />
+          <SaveButton label="Simpan Pakasir" saving={saving} onClick={() => handleSavePaymentGateway("pakasir", { serverKey: pakasir.serverKey, clientKey: pakasir.clientKey, apiUrl: pakasir.apiUrl, isProduction: pakasir.isProduction, isActive: pakasir.isActive })} />
         </GatewayCard>
 
         {/* ===== DOKU ===== */}
@@ -182,7 +190,33 @@ export default function AdminPengaturanPage() {
               Sandbox: <code className="text-navy bg-navy/5 px-1 rounded">api-sandbox.doku.com</code> | Production: <code className="text-navy bg-navy/5 px-1 rounded">api.doku.com</code>
             </p>
           </div>
-          <SaveButton label="Simpan DOKU" saving={saving} onClick={() => handleSaveWithExclusive("doku", { serverKey: doku.serverKey, clientKey: doku.clientKey, isProduction: doku.isProduction, isActive: doku.isActive })} />
+          <SaveButton label="Simpan DOKU" saving={saving} onClick={() => handleSavePaymentGateway("doku", { serverKey: doku.serverKey, clientKey: doku.clientKey, isProduction: doku.isProduction, isActive: doku.isActive })} />
+        </GatewayCard>
+
+        {/* ===== DUITKU ===== */}
+        <GatewayCard
+          icon={<QrCode size={20} className="text-emerald-600" />}
+          iconBg="bg-emerald-50"
+          title="Duitku POP"
+          subtitle={<>Konfigurasi payment gateway POP via <a href="https://docs.duitku.com/pop/id/" target="_blank" rel="noopener" className="text-emerald-600 underline">docs.duitku.com</a></>}
+          isActive={duitku.isActive}
+          onToggle={() => activateGateway("duitku")}
+        >
+          <InputField label="Merchant Code" value={duitku.clientKey} onChange={v => setDuitku({...duitku, clientKey: v})} placeholder="DXXXX" mono hint="Merchant Code dari project Duitku." />
+          <InputField label="API Key" value={duitku.serverKey} onChange={v => setDuitku({...duitku, serverKey: v})} placeholder="duitku-api-key" mono hint="API Key untuk header signature Create Invoice." />
+          <ProductionToggle checked={duitku.isProduction} onChange={v => setDuitku({...duitku, isProduction: v})} />
+          <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-3">
+            <p className="text-[11px] font-semibold text-emerald-700 mb-1">Callback URL (atur di dashboard Duitku)</p>
+            <code className="text-[11px] text-emerald-700 bg-white px-2 py-1 rounded block break-all">
+              {typeof window !== "undefined" ? window.location.origin : "https://telko.store"}/api/webhook/duitku
+            </code>
+          </div>
+          <div className="bg-emerald-50/60 border border-emerald-100 rounded-xl p-3">
+            <p className="text-[11px] text-emerald-800 leading-relaxed">
+              Duitku POP memakai callback server-to-server sebagai source of truth. Signature callback diverifikasi dengan formula MD5 dan redirect pelanggan hanya dipakai untuk landing UX.
+            </p>
+          </div>
+          <SaveButton label="Simpan Duitku POP" saving={saving} onClick={() => handleSavePaymentGateway("duitku", { serverKey: duitku.serverKey, clientKey: duitku.clientKey, isProduction: duitku.isProduction, isActive: duitku.isActive })} />
         </GatewayCard>
 
         {/* ===== WAHA ===== */}
@@ -230,7 +264,7 @@ export default function AdminPengaturanPage() {
             <div className="flex justify-between"><span className="text-gray-500">Environment</span><span className="font-medium text-gray-800">{process.env.NODE_ENV || "development"}</span></div>
             <div className="flex justify-between"><span className="text-gray-500">Database</span><span className="font-medium text-gray-800">MySQL (InnoDB)</span></div>
             <div className="flex justify-between"><span className="text-gray-500">Framework</span><span className="font-medium text-gray-800">Next.js 15</span></div>
-            <div className="flex justify-between"><span className="text-gray-500">Payment Gateways</span><span className="font-medium text-gray-800">Midtrans + Pakasir + DOKU</span></div>
+            <div className="flex justify-between"><span className="text-gray-500">Payment Gateways</span><span className="font-medium text-gray-800">Midtrans + Pakasir + DOKU + Duitku POP</span></div>
             <div className="flex justify-between"><span className="text-gray-500">Gateway Aktif</span><span className="font-bold text-green-600">{activeGwLabel}</span></div>
           </div>
         </div>

@@ -10,7 +10,6 @@ import {
   Package,
   RefreshCw,
   Shield,
-  Clock,
   Smartphone,
   Gamepad2,
   MessageCircle,
@@ -29,7 +28,7 @@ const faqCategories = [
       },
       {
         q: "Apakah saya harus membuat akun untuk membeli?",
-        a: "Tidak wajib! Kami menyediakan Express Checkout — kamu bisa langsung beli tanpa daftar akun. Namun jika ingin melihat riwayat pesanan, kamu bisa login dengan Google atau Facebook.",
+        a: "Tidak wajib. Kami menyediakan Express Checkout sehingga kamu bisa langsung beli tanpa daftar akun. Namun jika ingin melihat riwayat pesanan, kamu bisa login dengan Google atau Facebook.",
       },
       {
         q: "Operator apa saja yang didukung?",
@@ -49,19 +48,19 @@ const faqCategories = [
     items: [
       {
         q: "Metode pembayaran apa yang tersedia?",
-        a: "Kami mendukung berbagai metode pembayaran melalui Midtrans: QRIS (semua e-wallet), GoPay, OVO, DANA, ShopeePay, transfer bank (BCA, BNI, BRI, Mandiri), dan virtual account.",
+        a: "Metode pembayaran mengikuti gateway aktif yang sedang dipakai sistem. Umumnya tersedia kanal seperti QRIS, e-wallet, transfer bank atau virtual account, dan metode lain yang didukung Midtrans, DOKU, Duitku POP, atau provider aktif lainnya.",
       },
       {
         q: "Apakah pembayaran aman?",
-        a: "Ya! Semua pembayaran diproses melalui Midtrans yang sudah tersertifikasi PCI-DSS Level 1. Data kamu terenkripsi dan aman.",
+        a: "Ya. Pembayaran diproses melalui payment gateway aktif yang terintegrasi di Telkostore, dan data sensitif pembayaran tidak kami simpan langsung di aplikasi.",
       },
       {
         q: "Berapa lama batas waktu pembayaran?",
-        a: "Batas waktu pembayaran adalah 24 jam setelah pesanan dibuat. Jika melewati batas waktu, pesanan akan otomatis dibatalkan.",
+        a: "Batas waktu pembayaran mengikuti channel yang ditampilkan pada halaman gateway. Banyak metode mendukung hingga 24 jam, tetapi beberapa channel bisa memiliki expiry yang lebih singkat. Jika lewat dari batas waktu tersebut, pesanan akan otomatis dibatalkan.",
       },
       {
         q: "Saya sudah bayar tapi status masih pending, apa yang harus saya lakukan?",
-        a: "Klik tombol \"Sudah Bayar? Cek Status\" di halaman pesanan kamu. Sistem akan mencek langsung ke Midtrans. Jika status masih belum berubah setelah 5 menit, silakan hubungi customer service kami via WhatsApp.",
+        a: "Klik tombol \"Sudah Bayar? Cek Status\" di halaman pesanan kamu. Sistem akan mengecek status terbaru atau menunggu callback dari gateway aktif. Jika status masih belum berubah setelah beberapa menit, silakan hubungi customer service kami via WhatsApp.",
       },
     ],
   },
@@ -77,10 +76,10 @@ const faqCategories = [
       },
       {
         q: "Apa itu User ID dan Server ID di Mobile Legends?",
-        a: "User ID dan Server ID bisa kamu lihat di halaman profil game Mobile Legends. Klik avatar kamu → ID dan Zone ID akan tertera di bawah username.",
+        a: "User ID dan Server ID bisa kamu lihat di halaman profil game Mobile Legends. Klik avatar kamu lalu ID dan Zone ID akan tertera di bawah username.",
       },
       {
-        q: "Diamonds / UC tidak masuk ke akun game saya, kenapa?",
+        q: "Diamonds atau UC tidak masuk ke akun game saya, kenapa?",
         a: "Pastikan User ID dan Server ID yang kamu masukkan sudah benar. Jika data sudah benar tapi belum masuk setelah 15 menit, segera hubungi customer service kami.",
       },
     ],
@@ -92,7 +91,7 @@ const faqCategories = [
     bg: "bg-orange-50",
     items: [
       {
-        q: "Apakah bisa refund / pembatalan?",
+        q: "Apakah bisa refund atau pembatalan?",
         a: "Produk digital yang sudah dikirim tidak bisa dibatalkan. Namun jika produk belum terkirim atau terjadi error, silakan hubungi customer service kami dalam waktu 1x24 jam.",
       },
       {
@@ -101,7 +100,7 @@ const faqCategories = [
       },
       {
         q: "Pesanan saya gagal terus, apa yang harus saya lakukan?",
-        a: "Pastikan koneksi internet kamu stabil. Coba metode pembayaran yang berbeda. Jika masih gagal, hubungi kami melalui WhatsApp dengan menyertakan nomor invoice pesanan.",
+        a: "Pastikan koneksi internet kamu stabil. Coba metode pembayaran yang tersedia di halaman gateway. Jika masih gagal, hubungi kami melalui WhatsApp dengan menyertakan nomor invoice pesanan.",
       },
     ],
   },
@@ -113,11 +112,11 @@ const faqCategories = [
     items: [
       {
         q: "Apakah data pribadi saya aman?",
-        a: "Kami hanya menyimpan data yang diperlukan untuk memproses pesanan (nomor HP, game ID). Kami tidak pernah menyimpan data kartu kredit — semua pembayaran diproses langsung oleh Midtrans.",
+        a: "Kami hanya menyimpan data yang diperlukan untuk memproses pesanan, seperti nomor HP atau data akun game. Data kartu atau kredensial pembayaran diproses langsung di halaman gateway aktif dan tidak kami simpan di aplikasi.",
       },
       {
         q: "Mengapa perlu nomor HP saat checkout?",
-        a: "Nomor HP digunakan untuk mengirim notifikasi status pesanan via WhatsApp dan sebagai target pengiriman produk (pulsa/paket data). Untuk voucher game, nomor HP hanya digunakan untuk notifikasi.",
+        a: "Nomor HP digunakan untuk mengirim notifikasi status pesanan via WhatsApp dan sebagai target pengiriman produk (pulsa atau paket data). Untuk voucher game, nomor HP hanya digunakan untuk notifikasi.",
       },
     ],
   },
@@ -152,7 +151,6 @@ function FAQItem({ item }) {
 export default function FAQPage() {
   return (
     <div className="max-w-3xl mx-auto px-4 md:px-6 py-6 md:py-10">
-      {/* Header */}
       <div className="text-center mb-8">
         <div className="w-16 h-16 rounded-2xl gradient-red flex items-center justify-center text-white mx-auto mb-4 shadow-lg shadow-tred/20">
           <HelpCircle size={32} />
@@ -165,13 +163,11 @@ export default function FAQPage() {
         </p>
       </div>
 
-      {/* FAQ Categories */}
       <div className="space-y-6">
         {faqCategories.map((cat, ci) => {
           const Icon = cat.icon;
           return (
             <div key={ci} className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-              {/* Category Header */}
               <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-100">
                 <div className={`w-10 h-10 ${cat.bg} rounded-xl flex items-center justify-center`}>
                   <Icon size={20} className={cat.color} />
@@ -182,7 +178,6 @@ export default function FAQPage() {
                 </div>
               </div>
 
-              {/* Questions */}
               <div className="p-3 space-y-2">
                 {cat.items.map((item, qi) => (
                   <FAQItem key={qi} item={item} />
@@ -193,7 +188,6 @@ export default function FAQPage() {
         })}
       </div>
 
-      {/* Still have questions? */}
       <div className="mt-8 gradient-navy rounded-2xl p-6 md:p-8 text-center">
         <MessageCircle size={32} className="text-white mx-auto mb-3" />
         <h3 className="text-white font-bold text-lg mb-2">

@@ -333,6 +333,7 @@ async function seed() {
   const gateways = [
     { id: "gw-midtrans", providerName: "midtrans", serverKey: process.env.MIDTRANS_SERVER_KEY || "YOUR_SERVER_KEY", clientKey: process.env.MIDTRANS_CLIENT_KEY || "YOUR_CLIENT_KEY", apiUrl: "https://app.sandbox.midtrans.com", isProduction: false, isActive: true },
     { id: "gw-pakasir", providerName: "pakasir", serverKey: process.env.PAKASIR_API_KEY || "", clientKey: process.env.PAKASIR_PROJECT_SLUG || "", apiUrl: "https://app.pakasir.com", isProduction: false, isActive: false },
+    { id: "gw-duitku", providerName: "duitku", serverKey: process.env.DUITKU_API_KEY || "", clientKey: process.env.DUITKU_MERCHANT_CODE || "", apiUrl: "https://api-sandbox.duitku.com", isProduction: false, isActive: false },
     { id: "gw-waha", providerName: "waha", serverKey: "", clientKey: "", apiUrl: "http://localhost:3002", isProduction: false, isActive: true },
   ];
 

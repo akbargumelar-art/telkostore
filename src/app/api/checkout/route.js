@@ -1,6 +1,6 @@
 // POST /api/checkout — Create order + Payment (auto-route to active gateway)
 //
-// Admin controls which payment gateway is active (Midtrans, Pakasir, or DOKU).
+// Admin controls which payment gateway is active (Midtrans, Pakasir, DOKU, or Duitku POP).
 // Customers are automatically routed — no gateway selection on frontend.
 
 import { NextResponse } from "next/server";
@@ -23,6 +23,7 @@ import {
 import { createSnapClient } from "@/lib/midtrans";
 import { createPakasirTransaction } from "@/lib/pakasir";
 import { createDokuTransaction } from "@/lib/doku";
+import { createDuitkuInvoice } from "@/lib/duitku";
 import { getActiveGateway } from "@/app/api/gateway/status/route";
 import { checkoutLimiter } from "@/lib/rate-limit";
 import { scheduleNotification } from "@/lib/notification-scheduler";
@@ -262,6 +263,29 @@ export async function POST(request) {
       // Atomic stock decrease + order insert
       await db.transaction(async (tx) => {
         await createPendingOrder(tx, "doku", {
+          snapToken: null,
+          snapRedirectUrl: paymentResult.paymentUrl,
+        });
+      });
+
+    } else if (selectedGateway === "duitku") {
+      // ===== DUITKU POP FLOW =====
+      const customerPhoneDigits = phoneNumber.replace(/\D/g, "");
+      const callbackUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/api/webhook/duitku`;
+      const returnUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/payment/finish?order_id=${externalOrderId}&token=${guestToken}&gateway=duitku`;
+
+      paymentResult = await createDuitkuInvoice({
+        orderId: externalOrderId,
+        amount: product.price,
+        productName: product.name,
+        customerPhone: phoneNumber,
+        customerEmail: `guest-${customerPhoneDigits || guestToken.slice(0, 8)}@telko.store`,
+        callbackUrl,
+        returnUrl,
+      });
+
+      await db.transaction(async (tx) => {
+        await createPendingOrder(tx, "duitku", {
           snapToken: null,
           snapRedirectUrl: paymentResult.paymentUrl,
         });
