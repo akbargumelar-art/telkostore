@@ -17,7 +17,7 @@ import {
   buildGroupPaymentFailedMsg,
 } from "@/lib/whatsapp";
 import { cancelNotification } from "@/lib/notification-scheduler";
-import { isVoucherProduct } from "@/lib/voucher";
+import { isVoucherProduct, releaseVoucher } from "@/lib/voucher";
 import { ensurePostPaymentFulfillment } from "@/lib/order-fulfillment";
 import { syncReferralCommissionForOrder } from "@/lib/referral-commission";
 
@@ -363,6 +363,12 @@ async function applyStatusUpdate(order, newStatus, statusUpdates, paymentData) {
       );
     } catch (waErr) {
       console.error("WA group notification failed:", waErr.message);
+    }
+
+    try {
+      await releaseVoucher(order.id);
+    } catch (voucherErr) {
+      console.error("Voucher release failed:", voucherErr.message);
     }
   } else if (newStatus === "completed" || newStatus === "paid") {
     try {
